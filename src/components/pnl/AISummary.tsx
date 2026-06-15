@@ -1,14 +1,15 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
 import {
   Sparkles, RefreshCw, Brain, AlertTriangle, CheckCircle2, XCircle,
   Loader2, Building2, TrendingUp, Search, GitCompareArrows, FileText,
-  Zap, ChevronDown, ChevronUp, Copy, Check,
+  Zap, ChevronDown, ChevronUp, Copy, Check, Settings, Key, Info,
+  MessageSquare, Cpu,
 } from 'lucide-react';
 import { usePnLStore } from '@/lib/pnl-store';
 import { groupByCompany, formatNumber, formatPercentage, FINANCIAL_RATIOS, periodToArabic } from '@/lib/pnl-types';
@@ -21,6 +22,7 @@ const MODE_CONFIG: Record<AnalysisMode, {
   icon: React.ElementType;
   color: string;
   bgClass: string;
+  darkBgClass: string;
 }> = {
   executive: {
     label: 'تحليل تنفيذي',
@@ -28,6 +30,7 @@ const MODE_CONFIG: Record<AnalysisMode, {
     icon: FileText,
     color: 'text-teal-600',
     bgClass: 'from-teal-50 to-teal-100/50',
+    darkBgClass: 'dark:from-teal-950/30 dark:to-teal-900/10',
   },
   deep: {
     label: 'تحليل عميق',
@@ -35,6 +38,7 @@ const MODE_CONFIG: Record<AnalysisMode, {
     icon: Search,
     color: 'text-violet-600',
     bgClass: 'from-violet-50 to-violet-100/50',
+    darkBgClass: 'dark:from-violet-950/30 dark:to-violet-900/10',
   },
   forecast: {
     label: 'تحليل تنبؤي',
@@ -42,6 +46,7 @@ const MODE_CONFIG: Record<AnalysisMode, {
     icon: TrendingUp,
     color: 'text-amber-600',
     bgClass: 'from-amber-50 to-amber-100/50',
+    darkBgClass: 'dark:from-amber-950/30 dark:to-amber-900/10',
   },
   comparison: {
     label: 'تحليل مقارن',
@@ -49,8 +54,25 @@ const MODE_CONFIG: Record<AnalysisMode, {
     icon: GitCompareArrows,
     color: 'text-rose-600',
     bgClass: 'from-rose-50 to-rose-100/50',
+    darkBgClass: 'dark:from-rose-950/30 dark:to-rose-900/10',
   },
 };
+
+// Claude model options
+const CLAUDE_MODELS = [
+  { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', desc: 'أفضل توازن بين السرعة والجودة' },
+  { id: 'claude-opus-4-20250514', name: 'Claude Opus 4', desc: 'أعلى جودة تحليل — أبطأ قليلاً' },
+  { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', desc: 'سريع وفعال' },
+];
+
+interface AIResponse {
+  summary: string;
+  mode: string;
+  model: string;
+  tokensUsed: number;
+  inputTokens: number;
+  outputTokens: number;
+}
 
 export function AISummary() {
   const { getFiltered } = usePnLStore();
@@ -61,10 +83,73 @@ export function AISummary() {
   const [summaries, setSummaries] = useState<Record<AnalysisMode, string | null>>({
     executive: null, deep: null, forecast: null, comparison: null,
   });
+  const [aiResponses, setAiResponses] = useState<Record<AnalysisMode, AIResponse | null>>({
+    executive: null, deep: null, forecast: null, comparison: null,
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+
+  // API Key settings
+  const [showSettings, setShowSettings] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-20250514');
+  const [apiKeySaved, setApiKeySaved] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'connected' | 'error'>('unknown');
+
+  // Load saved API key from localStorage
+  useEffect(() => {
+    const savedKey = localStorage.getItem('anthropic_api_key');
+    const savedModel = localStorage.getItem('anthropic_model');
+    if (savedKey) {
+      setApiKey(savedKey);
+      setApiKeySaved(true);
+    }
+    if (savedModel) {
+      setSelectedModel(savedModel);
+    }
+  }, []);
+
+  const saveApiKey = useCallback(() => {
+    if (apiKey.trim()) {
+      localStorage.setItem('anthropic_api_key', apiKey.trim());
+      localStorage.setItem('anthropic_model', selectedModel);
+      setApiKeySaved(true);
+      setShowSettings(false);
+      setConnectionStatus('unknown');
+    }
+  }, [apiKey, selectedModel]);
+
+  const clearApiKey = useCallback(() => {
+    localStorage.removeItem('anthropic_api_key');
+    localStorage.removeItem('anthropic_model');
+    setApiKey('');
+    setApiKeySaved(false);
+    setConnectionStatus('unknown');
+  }, []);
+
+  const testConnection = useCallback(async () => {
+    if (!apiKey.trim()) return;
+    try {
+      const response = await fetch('/api/pnl/ai-summary', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-anthropic-api-key': apiKey.trim(),
+          'x-anthropic-model': selectedModel,
+        },
+        body: JSON.stringify({ prompt: 'اختبار اتصال — اكتب "متصل" فقط', mode: 'executive' }),
+      });
+      if (response.ok) {
+        setConnectionStatus('connected');
+      } else {
+        setConnectionStatus('error');
+      }
+    } catch {
+      setConnectionStatus('error');
+    }
+  }, [apiKey, selectedModel]);
 
   const buildPrompt = useCallback((mode: AnalysisMode) => {
     if (groups.length === 0) return '';
@@ -230,30 +315,53 @@ export function AISummary() {
     const prompt = buildPrompt(mode);
     if (!prompt.trim()) return;
 
+    // Check for client-side API key
+    const clientApiKey = localStorage.getItem('anthropic_api_key') || apiKey;
+    const clientModel = localStorage.getItem('anthropic_model') || selectedModel;
+
     setLoading(true);
     setError(null);
 
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      // Pass API key from client if available (allows user to set it from UI)
+      if (clientApiKey && clientApiKey !== 'your-api-key-here') {
+        headers['x-anthropic-api-key'] = clientApiKey;
+        headers['x-anthropic-model'] = clientModel;
+      }
+
       const response = await fetch('/api/pnl/ai-summary', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ prompt, mode }),
       });
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
+
+        // If API key error, show settings
+        if (response.status === 401) {
+          setShowSettings(true);
+          throw new Error(errData.details || errData.error || 'يرجى إضافة مفتاح API أولاً');
+        }
+
         throw new Error(errData.error || 'فشل في إنشاء التحليل');
       }
 
-      const data = await response.json();
+      const data: AIResponse = await response.json();
       setSummaries(prev => ({ ...prev, [mode]: data.summary }));
+      setAiResponses(prev => ({ ...prev, [mode]: data }));
+      setConnectionStatus('connected');
     } catch (err: any) {
-      console.error('AI Summary fetch error:', err);
+      console.error('Claude AI Summary fetch error:', err);
       setError(err.message || 'حدث خطأ أثناء إنشاء التحليل الذكي');
     } finally {
       setLoading(false);
     }
-  }, [buildPrompt]);
+  }, [buildPrompt, apiKey, selectedModel]);
 
   const copyToClipboard = useCallback(async (text: string) => {
     try {
@@ -344,40 +452,69 @@ export function AISummary() {
 
   const currentSummary = summaries[activeMode];
   const currentConfig = MODE_CONFIG[activeMode];
+  const currentResponse = aiResponses[activeMode];
 
   return (
     <div className="space-y-5">
       {/* Header Card */}
       <Card className="shadow-sm overflow-hidden">
-        <CardHeader className={`bg-gradient-to-l ${currentConfig.bgClass} pb-3`}>
+        <CardHeader className={`bg-gradient-to-l ${currentConfig.bgClass} ${currentConfig.darkBgClass} pb-3`}>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2 text-base">
-              <Zap className="h-5 w-5 text-amber-500" />
-              التحليل الذكي — AI Financial Analysis
+              <div className="flex items-center gap-1.5">
+                <Zap className="h-5 w-5 text-amber-500" />
+                <span>التحليل الذكي —</span>
+              </div>
+              <Badge variant="outline" className="gap-1 text-xs bg-white/50 dark:bg-slate-800/50">
+                <Cpu className="h-3 w-3" />
+                Claude AI
+              </Badge>
             </CardTitle>
-            <Button
-              onClick={() => generateSummary(activeMode)}
-              disabled={loading || groups.length === 0}
-              size="sm"
-              className="gap-1.5 bg-teal-600 hover:bg-teal-700 text-white"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  جارٍ التحليل...
-                </>
-              ) : currentSummary ? (
-                <>
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  إعادة التحليل
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-3.5 w-3.5" />
-                  إنشاء تحليل
-                </>
-              )}
-            </Button>
+            <div className="flex items-center gap-2">
+              {/* API Key Status */}
+              <Badge
+                variant="outline"
+                className={`gap-1 text-[10px] ${
+                  apiKeySaved
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400'
+                    : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400'
+                }`}
+              >
+                <Key className="h-3 w-3" />
+                {apiKeySaved ? 'متصل' : 'غير متصل'}
+              </Badge>
+              <Button
+                onClick={() => setShowSettings(!showSettings)}
+                variant="ghost"
+                size="sm"
+                className="gap-1 h-7 w-7 p-0"
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+              <Button
+                onClick={() => generateSummary(activeMode)}
+                disabled={loading || groups.length === 0}
+                size="sm"
+                className="gap-1.5 bg-teal-600 hover:bg-teal-700 text-white"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    جارٍ التحليل...
+                  </>
+                ) : currentSummary ? (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    إعادة التحليل
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-3.5 w-3.5" />
+                    إنشاء تحليل
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-4">
@@ -395,6 +532,114 @@ export function AISummary() {
           </div>
         </CardContent>
       </Card>
+
+      {/* API Key Settings Panel */}
+      {showSettings && (
+        <Card className="shadow-sm border-2 border-indigo-200 dark:border-indigo-800 overflow-hidden">
+          <CardHeader className="bg-indigo-50/50 dark:bg-indigo-950/30 pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Key className="h-4 w-4 text-indigo-600" />
+              إعدادات Claude AI — مفتاح API
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 space-y-4">
+            {/* Info about getting API key */}
+            <div className="rounded-lg bg-blue-50 dark:bg-blue-950/20 p-3 flex items-start gap-2">
+              <Info className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
+              <div className="text-xs text-blue-800 dark:text-blue-300 space-y-1">
+                <p className="font-bold">كيفية الحصول على مفتاح API:</p>
+                <p>1. اذهب إلى <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" className="underline font-bold">console.anthropic.com</a></p>
+                <p>2. سجل الدخول بحسابك المدفوع</p>
+                <p>3. أنشئ مفتاح API جديد وانسخه</p>
+                <p>4. الصقه هنا واضغط "حفظ"</p>
+              </div>
+            </div>
+
+            {/* Model Selection */}
+            <div className="space-y-2">
+              <label className="text-sm font-semibold">نموذج Claude</label>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                {CLAUDE_MODELS.map((model) => (
+                  <button
+                    key={model.id}
+                    onClick={() => setSelectedModel(model.id)}
+                    className={`rounded-lg border p-3 text-right transition-all ${
+                      selectedModel === model.id
+                        ? 'border-indigo-400 bg-indigo-50 dark:bg-indigo-950/30 ring-2 ring-indigo-300'
+                        : 'border-muted hover:border-indigo-200'
+                    }`}
+                  >
+                    <p className="text-sm font-bold">{model.name}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{model.desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* API Key Input */}
+            <div className="space-y-2">
+              <label className="text-sm font-semibold">مفتاح API</label>
+              <div className="flex gap-2">
+                <Input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => {
+                    setApiKey(e.target.value);
+                    setApiKeySaved(false);
+                  }}
+                  placeholder="sk-ant-api03-..."
+                  className="flex-1 text-sm font-mono"
+                  dir="ltr"
+                />
+                <Button onClick={saveApiKey} size="sm" className="gap-1 bg-indigo-600 hover:bg-indigo-700 text-white">
+                  <Check className="h-3.5 w-3.5" />
+                  حفظ
+                </Button>
+              </div>
+            </div>
+
+            {/* Connection Test & Clear */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={testConnection}
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 text-xs"
+                  disabled={!apiKey.trim()}
+                >
+                  <Zap className="h-3 w-3" />
+                  اختبار الاتصال
+                </Button>
+                {connectionStatus === 'connected' && (
+                  <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px]">
+                    <CheckCircle2 className="h-3 w-3 ml-1" />
+                    متصل بنجاح
+                  </Badge>
+                )}
+                {connectionStatus === 'error' && (
+                  <Badge className="bg-red-100 text-red-700 border-red-200 text-[10px]">
+                    <XCircle className="h-3 w-3 ml-1" />
+                    فشل الاتصال
+                  </Badge>
+                )}
+              </div>
+              {apiKeySaved && (
+                <Button onClick={clearApiKey} variant="ghost" size="sm" className="gap-1 text-xs text-red-500 hover:text-red-700">
+                  <XCircle className="h-3 w-3" />
+                  حذف المفتاح
+                </Button>
+              )}
+            </div>
+
+            {/* Security note */}
+            <div className="text-[10px] text-muted-foreground flex items-start gap-1.5">
+              <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+              <span>يُحفظ المفتاح محلياً في المتصفح فقط ولا يُرسل لأي خادم خارجي. يتم إرساله مباشرة إلى خوادم Anthropic عبر اتصال مشفر.</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Analysis Mode Selection */}
       <Card className="shadow-sm">
@@ -447,7 +692,7 @@ export function AISummary() {
               جارٍ التحليل بـ {currentConfig.label}
             </h3>
             <p className="text-sm text-muted-foreground text-center max-w-md">
-              يقوم الذكاء الاصطناعي بمراجعة البيانات المالية بالتفصيل لإنشاء تحليل شامل ومتعمق
+              يقوم Claude AI بمراجعة البيانات المالية بالتفصيل لإنشاء تحليل شامل ومتعمق
             </p>
             <div className="mt-4 flex gap-1.5">
               <div className="h-2 w-2 rounded-full bg-teal-400 animate-bounce" style={{ animationDelay: '0ms' }} />
@@ -467,10 +712,18 @@ export function AISummary() {
             </div>
             <h3 className="text-base font-semibold text-red-700 dark:text-red-400 mb-2">فشل في إنشاء التحليل</h3>
             <p className="text-sm text-muted-foreground max-w-md mb-4">{error}</p>
-            <Button onClick={() => generateSummary(activeMode)} variant="outline" size="sm" className="gap-1.5">
-              <RefreshCw className="h-3.5 w-3.5" />
-              إعادة المحاولة
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={() => generateSummary(activeMode)} variant="outline" size="sm" className="gap-1.5">
+                <RefreshCw className="h-3.5 w-3.5" />
+                إعادة المحاولة
+              </Button>
+              {!apiKeySaved && (
+                <Button onClick={() => setShowSettings(true)} variant="outline" size="sm" className="gap-1.5">
+                  <Key className="h-3.5 w-3.5" />
+                  إعداد مفتاح API
+                </Button>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
@@ -478,18 +731,53 @@ export function AISummary() {
       {/* AI Summary Results */}
       {currentSummary && !loading && !error && (
         <div className="space-y-4">
-          {/* Copy button */}
-          <div className="flex justify-end">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-1.5 text-xs h-7"
-              onClick={() => copyToClipboard(currentSummary)}
-            >
-              {copied ? <Check className="h-3.5 w-3.5 text-teal-500" /> : <Copy className="h-3.5 w-3.5" />}
-              {copied ? 'تم النسخ' : 'نسخ التحليل'}
-            </Button>
-          </div>
+          {/* Response metadata */}
+          {currentResponse && (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 flex-wrap">
+                <Badge variant="outline" className="gap-1 text-[10px] bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-400">
+                  <Cpu className="h-3 w-3" />
+                  {currentResponse.model}
+                </Badge>
+                <Badge variant="outline" className="gap-1 text-[10px] bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">
+                  <MessageSquare className="h-3 w-3" />
+                  {currentResponse.inputTokens?.toLocaleString()} توكن إدخال
+                </Badge>
+                <Badge variant="outline" className="gap-1 text-[10px] bg-teal-50 text-teal-700 dark:bg-teal-900/20 dark:text-teal-400">
+                  <Sparkles className="h-3 w-3" />
+                  {currentResponse.outputTokens?.toLocaleString()} توكن إخراج
+                </Badge>
+                <Badge variant="outline" className="gap-1 text-[10px] bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400">
+                  <Zap className="h-3 w-3" />
+                  {currentResponse.tokensUsed?.toLocaleString()} توكن إجمالي
+                </Badge>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 text-xs h-7"
+                onClick={() => copyToClipboard(currentSummary)}
+              >
+                {copied ? <Check className="h-3.5 w-3.5 text-teal-500" /> : <Copy className="h-3.5 w-3.5" />}
+                {copied ? 'تم النسخ' : 'نسخ التحليل'}
+              </Button>
+            </div>
+          )}
+
+          {/* Copy button when no metadata */}
+          {!currentResponse && (
+            <div className="flex justify-end">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 text-xs h-7"
+                onClick={() => copyToClipboard(currentSummary)}
+              >
+                {copied ? <Check className="h-3.5 w-3.5 text-teal-500" /> : <Copy className="h-3.5 w-3.5" />}
+                {copied ? 'تم النسخ' : 'نسخ التحليل'}
+              </Button>
+            </div>
+          )}
 
           {parseSections(currentSummary).map((section, idx) => {
             const isExpanded = expandedSections[section.title] !== false; // default expanded
@@ -561,7 +849,7 @@ export function AISummary() {
             <div className="flex items-start gap-2 text-[10px] text-muted-foreground">
               <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
               <div className="space-y-0.5">
-                <p>تم إنشاء هذا التحليل بواسطة الذكاء الاصطناعي — يُرجى مراجعته والتحقق من دقته قبل اتخاذ أي قرارات مالية</p>
+                <p>تم إنشاء هذا التحليل بواسطة Claude AI من Anthropic — يُرجى مراجعته والتحقق من دقته قبل اتخاذ أي قرارات مالية</p>
                 <p>التحليل مبني على البيانات المحددة في الفلاتر الحالية فقط — كلما زادت الفترات زادت دقة التحليل</p>
               </div>
             </div>
@@ -569,8 +857,27 @@ export function AISummary() {
         </div>
       )}
 
-      {/* Initial State */}
-      {!currentSummary && !loading && !error && (
+      {/* Initial State — no API key */}
+      {!currentSummary && !loading && !error && !apiKeySaved && (
+        <Card className="shadow-sm border-2 border-dashed border-indigo-200 dark:border-indigo-800">
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-900/30">
+              <Key className="h-7 w-7 text-indigo-500" />
+            </div>
+            <h3 className="text-base font-semibold mb-2">أضف مفتاح Claude API للبدء</h3>
+            <p className="text-sm text-muted-foreground max-w-md mb-4">
+              لاستخدام التحليل الذكي، تحتاج إلى مفتاح API من Anthropic. اضغط على زر الإعدادات أعلاه لإضافة المفتاح.
+            </p>
+            <Button onClick={() => setShowSettings(true)} className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white">
+              <Settings className="h-4 w-4" />
+              إعداد مفتاح API
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Initial State — has API key */}
+      {!currentSummary && !loading && !error && apiKeySaved && (
         <Card className="shadow-sm">
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-teal-50 dark:bg-teal-900/30">

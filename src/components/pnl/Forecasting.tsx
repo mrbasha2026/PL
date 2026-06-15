@@ -15,7 +15,7 @@ import {
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { TrendingUp, Building2, Info, AlertTriangle } from 'lucide-react';
+import { TrendingUp, Building2, Info, AlertTriangle, Brain } from 'lucide-react';
 import { usePnLStore } from '@/lib/pnl-store';
 import {
   PNL_LINE_ITEMS,
@@ -30,6 +30,7 @@ import {
   CompanyGroup,
 } from '@/lib/pnl-types';
 import { InfoTooltip } from '@/components/pnl/InfoTooltip';
+import { ClaudeInsight } from '@/components/pnl/ClaudeInsight';
 
 // ─── Linear Regression Helper ───────────────────────────────────────────────
 function linearRegression(points: { x: number; y: number }[]): { slope: number; intercept: number; rSquared: number } {
@@ -509,6 +510,36 @@ function CompanyForecastView({
         <p>القيود: لا يراعي الموسمية، التضخم، التغيرات الهيكلية، أو الأحداث الاستثنائية</p>
         <p>القيم المتوقعة قد تكون سالبة أو غير منطقية لبعض البنود — يرجى المراجعة قبل اتخاذ أي قرار</p>
       </div>
+
+      {/* Claude AI Forecast Insight */}
+      <ClaudeInsight
+        title={`تحليل Claude الذكي — تنبؤات ${group.name}`}
+        icon={<Brain className="h-4 w-4" />}
+        systemPrompt={`أنت محلل مالي متخصص في التنبؤ والتحليل التوقعي. أجب بالعربية فقط.
+بناءً على بيانات التنبؤات المالية المقدمة، قدم تحليلاً يتضمن:
+1. تقييم موثوقية التنبؤات بناءً على قيم R²
+2. أهم المخاطر التي قد تؤثر على دقة التنبؤات
+3. توقعاتك أنت بناءً على الأنماط المرئية في البيانات
+4. عوامل خارجية قد تغير مسار الأداء
+5. توصيات عملية لتحسين دقة التنبؤات المستقبلية`}
+        prompt={`بيانات التنبؤات المالية للشركة: ${group.name}
+العملة: ${currency}
+عدد الفترات التاريخية: ${forecast.historicalPeriods.length}
+عدد الفترات التنبؤية: ${forecast.forecastPeriods.length}
+متوسط R²: ${avgRSquared.toFixed(3)}
+مستوى الثقة الإجمالي: ${overallConfidence.label}
+
+أهم بنود التنبؤ:
+${forecast.results.filter(r => r.key === 'revenue' || r.key === 'net_income' || r.key === 'gross_profit' || r.key === 'operating_income_ebit').map(r => {
+  const dir = r.slope > 0 ? 'صاعد' : r.slope < 0 ? 'هابط' : 'ثابت';
+  return `${r.nameAr}: اتجاه ${dir}، R²=${r.rSquared.toFixed(3)}، القيمة التاريخية الأخيرة=${r.historical[r.historical.length-1]}، التنبؤ=${r.forecasted.join(', ')}`;
+}).join('\n')}
+
+الفترات التاريخية: ${forecast.historicalPeriods.join(' → ')}
+الفترات التنبؤية: ${forecast.forecastPeriods.join(' → ')}`}
+        maxTokens={2500}
+        temperature={0.5}
+      />
     </div>
   );
 }

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import ZAI from 'z-ai-web-dev-sdk';
+import Anthropic from '@anthropic-ai/sdk';
 
 // Analysis modes with tailored system prompts
-const ANALYSIS_MODES: Record<string, { systemPrompt: string; maxTokens: number }> = {
+const ANALYSIS_MODES: Record<string, { systemPrompt: string; maxTokens: number; temperature: number }> = {
   executive: {
     systemPrompt: `أنت محلل مالي محترف ومستشار تنفيذي. قم بتحليل البيانات المالية المقدمة وأجب بالعربية فقط.
 
@@ -15,17 +15,18 @@ const ANALYSIS_MODES: Record<string, { systemPrompt: string; maxTokens: number }
 - 3-5 توصيات عملية وقابلة للتنفيذ
 - رتبها حسب الأولوية
 
-## نقاط القوة ✅
+## نقاط القوة
 - حدد نقاط القوة لكل شركة مع أمثلة رقمية
 
-## المخاطر والتحديات ⚠️
+## المخاطر والتحديات
 - حدد المخاطر مع تقييم مستوى الخطورة (عالي/متوسط/منخفض)
 
 ## التوقعات قصيرة المدى
 - توقع الأداء للفترة القادمة بناءً على الاتجاهات الحالية
 
 استخدم أرقاماً محددة ونسباً مئوية في كل نقطة. كن دقيقاً ومهنياً. أضف تحليل DuPont إذا أمكن.`,
-    maxTokens: 3000,
+    maxTokens: 4096,
+    temperature: 0.7,
   },
 
   deep: {
@@ -59,7 +60,8 @@ const ANALYSIS_MODES: Record<string, { systemPrompt: string; maxTokens: number }
 - 5 توصيات محددة لتحسين الهوامش مع تقدير الأثر المالي
 
 كن دقيقاً جداً في الأرقام والنسب. استخدم لغة مهنية مع شرح المصطلحات.`,
-    maxTokens: 4000,
+    maxTokens: 6000,
+    temperature: 0.3,
   },
 
   forecast: {
@@ -93,7 +95,8 @@ const ANALYSIS_MODES: Record<string, { systemPrompt: string; maxTokens: number }
 - إجراءات استراتيجية (خلال سنة)
 
 قدم أرقاماً محددة في كل توقع مع توضيح الافتراضات.`,
-    maxTokens: 3500,
+    maxTokens: 5000,
+    temperature: 0.5,
   },
 
   comparison: {
@@ -123,7 +126,8 @@ const ANALYSIS_MODES: Record<string, { systemPrompt: string; maxTokens: number }
 - ما الذي يجب أن تركز عليه كل شركة للتحسين؟
 
 استخدم جداول مقارنة وأرقام محددة. كن موضوعياً ومتوازناً.`,
-    maxTokens: 3500,
+    maxTokens: 5000,
+    temperature: 0.5,
   },
 };
 
@@ -138,41 +142,63 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check for API key: first from client headers, then from environment variables
+    const clientApiKey = request.headers.get('x-anthropic-api-key');
+    const clientModel = request.headers.get('x-anthropic-model');
+    const envApiKey = process.env.ANTHROPIC_API_KEY;
+
+    const apiKey = (clientApiKey && clientApiKey !== 'your-api-key-here')
+      ? clientApiKey
+      : envApiKey;
+
+    if (!apiKey || apiKey === 'your-api-key-here') {
+      return NextResponse.json(
+        {
+          error: 'مفتاح API غير مضبوط',
+          details: 'يرجى إضافة مفتاح Anthropic API من إعدادات التحليل الذكي أو في ملف .env.local',
+          setupUrl: 'https://console.anthropic.com/settings/keys',
+        },
+        { status: 401 }
+      );
+    }
+
     const analysisConfig = ANALYSIS_MODES[mode] || ANALYSIS_MODES.executive;
+    const model = clientModel || process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514';
 
-    const zai = await ZAI.create();
+    // Initialize Anthropic client
+    const client = new Anthropic({ apiKey });
 
-    // Use thinking mode for deep analysis
+    // Use Claude Messages API with extended thinking for deep analysis
     const useThinking = mode === 'deep' || mode === 'forecast';
 
-    const completion = await zai.chat.completions.create({
+    const message = await client.messages.create({
+      model,
+      max_tokens: analysisConfig.maxTokens,
+      temperature: analysisConfig.temperature,
+      system: analysisConfig.systemPrompt,
       messages: [
-        {
-          role: 'system',
-          content: analysisConfig.systemPrompt,
-        },
         {
           role: 'user',
           content: prompt,
         }
       ],
-      temperature: mode === 'deep' ? 0.3 : mode === 'forecast' ? 0.5 : 0.7,
-      max_tokens: analysisConfig.maxTokens,
-      ...(useThinking ? { thinking: { type: 'enabled' } } : {}),
+      ...(useThinking ? {
+        thinking: {
+          type: 'enabled',
+          budget_tokens: Math.floor(analysisConfig.maxTokens * 0.4),
+        }
+      } : {}),
     });
 
-    // Extract the content - handle both regular and thinking responses
+    // Extract the content from Claude's response
     let content = '';
-    if (completion.choices && completion.choices[0]) {
-      const message = completion.choices[0].message;
-      // If thinking mode was used, the response might have a different structure
-      if (typeof message.content === 'string') {
-        content = message.content;
-      } else if (message.content) {
-        // Handle array content format
-        content = Array.isArray(message.content)
-          ? message.content.map((c: any) => c.text || c.content || '').join('')
-          : String(message.content);
+
+    if (message.content) {
+      for (const block of message.content) {
+        if (block.type === 'text') {
+          content += block.text;
+        }
+        // Skip thinking blocks in the output
       }
     }
 
@@ -183,12 +209,41 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       summary: content,
       mode,
-      tokensUsed: completion.usage?.total_tokens || 0,
+      model: message.model,
+      tokensUsed: (message.usage?.input_tokens || 0) + (message.usage?.output_tokens || 0),
+      inputTokens: message.usage?.input_tokens || 0,
+      outputTokens: message.usage?.output_tokens || 0,
     });
   } catch (error: any) {
-    console.error('AI Summary error:', error);
+    console.error('Claude AI Summary error:', error);
+
+    // Handle specific Anthropic errors
+    if (error.status === 401) {
+      return NextResponse.json(
+        {
+          error: 'مفتاح API غير صالح',
+          details: 'يرجى التحقق من مفتاح Anthropic API في ملف .env.local',
+        },
+        { status: 401 }
+      );
+    }
+
+    if (error.status === 429) {
+      return NextResponse.json(
+        { error: 'تم تجاوز حد الطلبات — يرجى الانتظار قليلاً ثم المحاولة مرة أخرى' },
+        { status: 429 }
+      );
+    }
+
+    if (error.status === 500) {
+      return NextResponse.json(
+        { error: 'خطأ في خادم Anthropic — يرجى المحاولة لاحقاً' },
+        { status: 502 }
+      );
+    }
+
     return NextResponse.json(
-      { error: 'فشل في إنشاء التحليل الذكي — يرجى المحاولة مرة أخرى' },
+      { error: `فشل في إنشاء التحليل الذكي: ${error.message || 'خطأ غير معروف'}` },
       { status: 500 }
     );
   }

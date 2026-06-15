@@ -13,7 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  ArrowUpRight, ArrowDownRight, Building2, Info, AlertTriangle,
+  ArrowUpRight, ArrowDownRight, Building2, Info, AlertTriangle, Brain,
 } from 'lucide-react';
 import { usePnLStore } from '@/lib/pnl-store';
 import {
@@ -27,6 +27,7 @@ import {
   CompanyGroup,
 } from '@/lib/pnl-types';
 import { InfoTooltip } from '@/components/pnl/InfoTooltip';
+import { ClaudeInsight } from '@/components/pnl/ClaudeInsight';
 
 // --- Statistical helpers ---
 
@@ -374,6 +375,37 @@ function VarianceTable({ group, color }: { group: CompanyGroup; color: string })
       </div>
 
       {methodologyNote}
+
+      {/* Claude AI Variance Insight */}
+      <ClaudeInsight
+        title={`تحليل Claude الذكي — انحرافات ${group.name}`}
+        icon={<Brain className="h-4 w-4" />}
+        systemPrompt={`أنت محلل مالي متخصص في تحليل الانحرافات والإحصاء المالي. أجب بالعربية فقط.
+بناءً على بيانات تحليل الانحرافات المقدمة، قدم تحليلاً يتضمن:
+1. تفسير الحالات الشاذة والانحرافات المكتشفة
+2. الأسباب المحتملة لكل انحراف كبير
+3. هل الانحرافات تشير لمشكلة هيكلية أم ظرف مؤقت؟
+4. توصيات للتعامل مع الحالات الشاذة
+5. مؤشرات يجب مراقبتها في الفترات القادمة`}
+        prompt={`بيانات تحليل الانحرافات للشركة: ${group.name}
+العملة: ${currency}
+عدد الفترات: ${datasets.length}
+
+الحالات الشاذة والانحرافات المكتشفة:
+${anomalies.length > 0 ? anomalies.map(a => `- ${a.explanation}`).join('\n') : 'لا توجد انحرافات كبيرة'}
+
+أهم التغيرات الشهرية:
+${analysis.filter(a => a.isLargeChange && a.momChange !== null).map(a => `- ${a.nameAr}: تغير ${a.momChange!.toFixed(1)}%`).join('\n') || 'لا توجد تغيرات حادة'}
+
+ملخص إحصائي:
+- إجمالي البنود: ${analysis.length}
+- بنود طبيعية: ${analysis.filter(a => a.status === 'normal').length}
+- انحرافات: ${analysis.filter(a => a.status === 'deviation').length}
+- حالات شاذة: ${analysis.filter(a => a.status === 'anomaly').length}
+- تغيرات حادة (>20%): ${analysis.filter(a => a.isLargeChange).length}`}
+        maxTokens={2500}
+        temperature={0.5}
+      />
     </div>
   );
 }

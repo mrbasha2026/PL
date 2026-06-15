@@ -53,3 +53,34 @@ Stage Summary:
 - Thinking mode enabled for deep analysis
 - Much richer prompt data sent to AI (full P&L, trends, margin changes, cross-company tables)
 - AISummary component has mode selection, collapsible sections, copy feature
+---
+Task ID: 1
+Agent: Main Agent
+Task: Integrate Claude AI (Anthropic) into P&L Dashboard
+
+Work Log:
+- Installed @anthropic-ai/sdk package
+- Rewrote /api/pnl/ai-summary/route.ts to use Anthropic Messages API instead of z-ai-web-dev-sdk
+- Added support for client-side API key via x-anthropic-api-key header (allows user to set key from UI)
+- Added support for model selection via x-anthropic-model header
+- Added extended thinking (budget_tokens) for deep and forecast analysis modes
+- Enhanced AISummary.tsx with:
+  - API Key settings panel with model selection (Claude Sonnet 4, Opus 4, 3.5 Sonnet)
+  - Connection test button
+  - localStorage persistence for API key and model
+  - Token usage display (input/output/total tokens)
+  - Model badge showing which Claude model was used
+  - Better error handling for 401, 429, 500 errors
+  - Security note about key storage
+- Created ClaudeInsight.tsx reusable component for inline AI analysis
+- Added ClaudeInsight to Forecasting.tsx (forecast-specific analysis with R² evaluation)
+- Added ClaudeInsight to VarianceAnalysis.tsx (anomaly explanation and recommendations)
+- Created .env.local with ANTHROPIC_API_KEY and ANTHROPIC_MODEL variables
+- Build succeeded with no errors
+
+Stage Summary:
+- Claude AI integration complete across all AI-powered components
+- User can set API key from the UI (localStorage) or via .env.local
+- Three Claude models available: Sonnet 4 (default), Opus 4, 3.5 Sonnet
+- Token usage tracking displayed for each analysis
+- Forecasting and VarianceAnalysis now have inline Claude-powered insights
