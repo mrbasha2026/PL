@@ -169,6 +169,49 @@ export function formatRatio(value: number | null): string {
   return value.toFixed(2) + 'x';
 }
 
+// Chronological period sort — parses "Jan 2026", "Q1 2024", etc.
+const MONTH_ORDER: Record<string, number> = {
+  'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+  'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
+  'q1': 1, 'q2': 4, 'q3': 7, 'q4': 10,
+  'h1': 1, 'h2': 7,
+};
+
+export function parsePeriod(period: string): { year: number; month: number } | null {
+  const parts = period.trim().split(/[\s\-]+/);
+  if (parts.length < 2) return null;
+  const prefix = parts[0].toLowerCase();
+  const year = parseInt(parts[parts.length - 1], 10);
+  if (isNaN(year)) return null;
+  const month = MONTH_ORDER[prefix];
+  if (month === undefined) return null;
+  return { year, month };
+}
+
+export function sortPeriods(periods: string[]): string[] {
+  return [...periods].sort((a, b) => {
+    const pa = parsePeriod(a);
+    const pb = parsePeriod(b);
+    if (!pa && !pb) return a.localeCompare(b);
+    if (!pa) return 1;
+    if (!pb) return -1;
+    if (pa.year !== pb.year) return pa.year - pb.year;
+    return pa.month - pb.month;
+  });
+}
+
+export function sortDatasetsByPeriod(datasets: CompanyPnL[]): CompanyPnL[] {
+  return [...datasets].sort((a, b) => {
+    const pa = parsePeriod(a.period);
+    const pb = parsePeriod(b.period);
+    if (!pa && !pb) return a.period.localeCompare(b.period);
+    if (!pa) return 1;
+    if (!pb) return -1;
+    if (pa.year !== pb.year) return pa.year - pb.year;
+    return pa.month - pb.month;
+  });
+}
+
 // Group datasets by company name
 export function groupByCompany(datasets: CompanyPnL[]): CompanyGroup[] {
   const map = new Map<string, CompanyPnL[]>();
@@ -178,10 +221,37 @@ export function groupByCompany(datasets: CompanyPnL[]): CompanyGroup[] {
     map.set(ds.companyName, existing);
   });
 
-  return Array.from(map.entries()).map(([name, datasets]) => ({
-    name,
-    periods: datasets.map((d) => d.period),
-    datasets: datasets.sort((a, b) => a.period.localeCompare(b.period)),
+  return Array.from(map.entries()).map(([name, datasets]) => {
+    const sorted = sortDatasetsByPeriod(datasets);
+    return {
+      name,
+      periods: sorted.map((d) => d.period),
+      datasets: sorted,
+    };
+  });
+}
+
+// Group datasets by period — all companies within the same month side by side
+export interface PeriodGroup {
+  period: string;
+  periodAr: string;
+  datasets: CompanyPnL[]; // one dataset per company for this period
+}
+
+export function groupByPeriod(datasets: CompanyPnL[]): PeriodGroup[] {
+  const map = new Map<string, CompanyPnL[]>();
+  datasets.forEach((ds) => {
+    const existing = map.get(ds.period) || [];
+    existing.push(ds);
+    map.set(ds.period, existing);
+  });
+
+  const periods = sortPeriods(Array.from(map.keys()));
+
+  return periods.map((period) => ({
+    period,
+    periodAr: periodToArabic(period),
+    datasets: map.get(period) || [],
   }));
 }
 

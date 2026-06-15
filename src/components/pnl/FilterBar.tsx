@@ -15,7 +15,7 @@ import {
   ChevronDown, RotateCcw,
 } from 'lucide-react';
 import { usePnLStore } from '@/lib/pnl-store';
-import { COMPANY_COLORS, groupByCompany, periodToArabic } from '@/lib/pnl-types';
+import { COMPANY_COLORS, groupByCompany, periodToArabic, sortPeriods } from '@/lib/pnl-types';
 
 export function FilterBar() {
   const {
@@ -39,7 +39,7 @@ export function FilterBar() {
 
   const groups = groupByCompany(companies);
   const allCompanyNames = [...new Set(companies.map((c) => c.companyName))];
-  const allPeriods = [...new Set(companies.map((c) => c.period))].sort();
+  const allPeriods = sortPeriods([...new Set(companies.map((c) => c.period))]);
 
   const isCompanyFiltered = selectedCompanyNames.length < allCompanyNames.length;
   const isPeriodFiltered = selectedPeriods.length < allPeriods.length;

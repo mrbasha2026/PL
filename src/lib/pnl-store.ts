@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { CompanyPnL, PnLLineItem, PNL_LINE_ITEMS, aggregatePeriods, periodToArabic } from './pnl-types';
+import { CompanyPnL, PnLLineItem, PNL_LINE_ITEMS, aggregatePeriods, periodToArabic, sortPeriods, parsePeriod } from './pnl-types';
 
 interface AggregatedCompany {
   companyName: string;
@@ -58,7 +58,7 @@ export const usePnLStore = create<PnLStore>()(
           return {
             companies: allCompanies,
             selectedCompanyNames: [...new Set([...state.selectedCompanyNames, ...newCompanyNames])],
-            selectedPeriods: [...new Set([...state.selectedPeriods, ...newPeriods])].sort(),
+            selectedPeriods: [...new Set([...state.selectedPeriods, ...newPeriods])],
             lastUpdated: new Date().toISOString(),
           };
         }),
@@ -100,7 +100,7 @@ export const usePnLStore = create<PnLStore>()(
         set((state) => ({
           selectedPeriods: state.selectedPeriods.includes(period)
             ? state.selectedPeriods.filter((p) => p !== period)
-            : [...state.selectedPeriods, period].sort(),
+            : sortPeriods([...state.selectedPeriods, period]),
         })),
 
       selectAllCompanies: () =>
@@ -109,7 +109,7 @@ export const usePnLStore = create<PnLStore>()(
       deselectAllCompanies: () => set({ selectedCompanyNames: [] }),
 
       selectAllPeriods: () =>
-        set((state) => ({ selectedPeriods: [...new Set(state.companies.map((c) => c.period))].sort() })),
+        set((state) => ({ selectedPeriods: sortPeriods([...new Set(state.companies.map((c) => c.period))]) })),
 
       deselectAllPeriods: () => set({ selectedPeriods: [] }),
 
@@ -140,7 +140,7 @@ export const usePnLStore = create<PnLStore>()(
           companyMap.set(ds.companyName, existing);
         });
 
-        const allPeriods = [...new Set(filtered.map((c) => c.period))].sort();
+        const allPeriods = sortPeriods([...new Set(filtered.map((c) => c.period))]);
 
         return Array.from(companyMap.entries()).map(([companyName, datasets]) => {
           let datasetsInRange = datasets;
@@ -166,8 +166,8 @@ export const usePnLStore = create<PnLStore>()(
           if (state.dateRangeStart && state.dateRangeEnd) {
             periodLabel = `${periodToArabic(state.dateRangeStart)} - ${periodToArabic(state.dateRangeEnd)}`;
           } else if (datasetsInRange.length > 1) {
-            const sorted = [...datasetsInRange].sort((a, b) => a.period.localeCompare(b.period));
-            periodLabel = `${periodToArabic(sorted[0].period)} - ${periodToArabic(sorted[sorted.length - 1].period)}`;
+            const sortedPeriods = sortPeriods(datasetsInRange.map(d => d.period));
+            periodLabel = `${periodToArabic(sortedPeriods[0])} - ${periodToArabic(sortedPeriods[sortedPeriods.length - 1])}`;
           } else if (datasetsInRange.length === 1) {
             periodLabel = periodToArabic(datasetsInRange[0].period);
           } else {

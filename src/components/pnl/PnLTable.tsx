@@ -16,15 +16,16 @@ import {
   PNL_LINE_ITEMS,
   getLineItemKey,
   COMPANY_COLORS,
-  groupByCompany,
+  groupByPeriod,
   formatNumber,
+  periodToArabic,
+  PeriodGroup,
 } from '@/lib/pnl-types';
 import { InfoTooltip } from '@/components/pnl/InfoTooltip';
 
 export function PnLTable() {
   const { getFiltered, getAggregatedFiltered, dateRangeStart, dateRangeEnd } = usePnLStore();
   const selected = getFiltered();
-  const groups = groupByCompany(selected);
   const aggregated = getAggregatedFiltered();
   const isAggregated = !!(dateRangeStart && dateRangeEnd);
 
@@ -141,53 +142,69 @@ export function PnLTable() {
     );
   }
 
-  // Standard (non-aggregated) view
+  // Standard (non-aggregated) view — grouped by PERIOD, all companies side by side per month
+  const periodGroups = groupByPeriod(selected);
+
+  // Build a company index map for consistent color assignment
+  const allCompanyNames = [...new Set(selected.map((c) => c.companyName))];
+  const companyColorMap = new Map<string, string>();
+  allCompanyNames.forEach((name, idx) => {
+    companyColorMap.set(name, COMPANY_COLORS[idx % COMPANY_COLORS.length]);
+  });
+
   return (
     <Card className="overflow-hidden shadow-sm">
       <CardHeader className="bg-gradient-to-l from-muted/60 to-muted/30 pb-3">
-        <CardTitle className="text-base font-bold">قائمة الأرباح والخسائر — مقارنة متعددة الفترات</CardTitle>
+        <CardTitle className="text-base font-bold">قائمة الأرباح والخسائر — مقارنة شهرية بين الشركات</CardTitle>
       </CardHeader>
       <CardContent className="p-0">
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
-              {/* Company Name Row */}
+              {/* Period/Month Row — each period spans (numCompanies * 2) columns */}
               <TableRow className="bg-muted/20">
                 <TableHead className="min-w-[260px] font-bold bg-muted/30" rowSpan={2}>
                   البند المالي
                 </TableHead>
-                {groups.map((group, gIdx) => {
-                  const color = COMPANY_COLORS[gIdx % COMPANY_COLORS.length];
-                  return (
-                    <TableHead
-                      key={group.name}
-                      colSpan={group.datasets.length * 2}
-                      className="text-center font-bold border-b"
-                      style={{ color, backgroundColor: `${color}10` }}
-                    >
-                      <div className="flex items-center justify-center gap-2">
-                        <span className="h-2.5 w-2.5 rounded-full inline-block" style={{ backgroundColor: color }} />
-                        {group.name}
-                      </div>
-                    </TableHead>
-                  );
-                })}
+                {periodGroups.map((pg) => (
+                  <TableHead
+                    key={pg.period}
+                    colSpan={pg.datasets.length * 2}
+                    className="text-center font-bold border-b text-sm"
+                    style={{ backgroundColor: '#f0fdf4' }}
+                  >
+                    <span className="inline-flex items-center gap-1.5">
+                      📅 {pg.periodAr}
+                    </span>
+                  </TableHead>
+                ))}
               </TableRow>
-              {/* Period Row */}
+              {/* Company Row — within each period, show each company */}
               <TableRow className="bg-muted/10">
-                {groups.map((group) =>
-                  group.datasets.map((ds) => (
-                    <React.Fragment key={ds.id}>
-                      <TableHead className="min-w-[130px] text-center text-xs font-medium">
-                        {ds.period}
-                        <br />
-                        <span className="opacity-60">{ds.currency}</span>
-                      </TableHead>
-                      <TableHead className="min-w-[60px] text-center text-[10px] font-medium bg-muted/5">
-                        النسبة %
-                      </TableHead>
-                    </React.Fragment>
-                  ))
+                {periodGroups.map((pg) =>
+                  pg.datasets.map((ds) => {
+                    const color = companyColorMap.get(ds.companyName) || COMPANY_COLORS[0];
+                    return (
+                      <React.Fragment key={ds.id}>
+                        <TableHead
+                          className="min-w-[130px] text-center text-xs font-medium"
+                          style={{ color, backgroundColor: `${color}10` }}
+                        >
+                          <div className="flex items-center justify-center gap-1">
+                            <span className="h-2 w-2 rounded-full inline-block" style={{ backgroundColor: color }} />
+                            {ds.companyName}
+                          </div>
+                          <span className="opacity-60 text-[10px]">{ds.currency}</span>
+                        </TableHead>
+                        <TableHead
+                          className="min-w-[60px] text-center text-[10px] font-medium bg-muted/5"
+                          style={{ backgroundColor: `${color}05` }}
+                        >
+                          النسبة %
+                        </TableHead>
+                      </React.Fragment>
+                    );
+                  })
                 )}
               </TableRow>
             </TableHeader>
@@ -210,8 +227,8 @@ export function PnLTable() {
                         {item.description && <InfoTooltip text={item.description} side="left" />}
                       </span>
                     </TableCell>
-                    {groups.map((group) =>
-                      group.datasets.map((ds) => {
+                    {periodGroups.map((pg) =>
+                      pg.datasets.map((ds) => {
                         const value = ds.data[key] || 0;
                         const revenue = ds.data['revenue'] || 0;
                         const pct = key === 'revenue'
@@ -245,6 +262,7 @@ export function PnLTable() {
           <div className="flex items-start gap-2 text-[10px] text-muted-foreground">
             <Info className="h-3 w-3 mt-0.5 shrink-0" />
             <div className="space-y-1">
+              <p>الجدول مجمّع حسب الشهر — كل شهر يعرض جميع الشركات جنباً إلى جنب للمقارنة المباشرة</p>
               <p>النسبة % = قيمة البند ÷ الإيرادات × 100 — القيم السلبية باللون الأحمر</p>
               <p>القيم المعروضة بالشكل المضغوط: K = ألف، M = مليون، B = مليار</p>
             </div>
