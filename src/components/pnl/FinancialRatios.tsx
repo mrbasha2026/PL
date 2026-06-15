@@ -24,8 +24,8 @@ import {
 } from '@/lib/pnl-types';
 
 export function FinancialRatios() {
-  const { companies, selectedIds } = usePnLStore();
-  const selected = companies.filter((c) => selectedIds.includes(c.id));
+  const { getFiltered } = usePnLStore();
+  const selected = getFiltered();
   const groups = groupByCompany(selected);
 
   if (selected.length === 0) {

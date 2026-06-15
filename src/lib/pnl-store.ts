@@ -7,19 +7,21 @@ import { CompanyPnL, PnLLineItem, PNL_LINE_ITEMS } from './pnl-types';
 interface PnLStore {
   companies: CompanyPnL[];
   lineItems: PnLLineItem[];
-  selectedIds: string[];
-  viewMode: 'summary' | 'table' | 'ratios' | 'comparison' | 'charts' | 'trends';
+  selectedCompanyNames: string[];
+  selectedPeriods: string[];
   lastUpdated: string | null;
 
   addCompanies: (newCompanies: CompanyPnL[]) => void;
   removeDataset: (id: string) => void;
   removeCompanyGroup: (companyName: string) => void;
-  toggleSelection: (id: string) => void;
-  selectAll: () => void;
-  deselectAll: () => void;
-  setViewMode: (mode: PnLStore['viewMode']) => void;
+  toggleCompanyName: (name: string) => void;
+  togglePeriod: (period: string) => void;
+  selectAllCompanies: () => void;
+  deselectAllCompanies: () => void;
+  selectAllPeriods: () => void;
+  deselectAllPeriods: () => void;
   clearAll: () => void;
-  getSelected: () => CompanyPnL[];
+  getFiltered: () => CompanyPnL[];
 }
 
 export const usePnLStore = create<PnLStore>()(
@@ -27,67 +29,92 @@ export const usePnLStore = create<PnLStore>()(
     (set, get) => ({
       companies: [],
       lineItems: PNL_LINE_ITEMS,
-      selectedIds: [],
-      viewMode: 'summary',
+      selectedCompanyNames: [],
+      selectedPeriods: [],
       lastUpdated: null,
 
       addCompanies: (newCompanies) =>
         set((state) => {
-          const existingIds = new Set(state.companies.map((c) => c.id));
-          const fresh = newCompanies.filter((c) => !existingIds.has(c.id));
+          const existingKeys = new Set(state.companies.map((c) => `${c.companyName}::${c.period}`));
+          const fresh = newCompanies.filter((c) => !existingKeys.has(`${c.companyName}::${c.period}`));
+          const allCompanies = [...state.companies, ...fresh];
+          // Auto-select new companies and periods
+          const newCompanyNames = [...new Set(fresh.map((c) => c.companyName))];
+          const newPeriods = [...new Set(fresh.map((c) => c.period))];
           return {
-            companies: [...state.companies, ...fresh],
-            selectedIds: [...state.selectedIds, ...fresh.map((c) => c.id)],
+            companies: allCompanies,
+            selectedCompanyNames: [...new Set([...state.selectedCompanyNames, ...newCompanyNames])],
+            selectedPeriods: [...new Set([...state.selectedPeriods, ...newPeriods])].sort(),
             lastUpdated: new Date().toISOString(),
           };
         }),
 
       removeDataset: (id) =>
-        set((state) => ({
-          companies: state.companies.filter((c) => c.id !== id),
-          selectedIds: state.selectedIds.filter((sid) => sid !== id),
-          lastUpdated: new Date().toISOString(),
-        })),
-
-      removeCompanyGroup: (companyName) =>
         set((state) => {
-          const toRemove = new Set(
-            state.companies.filter((c) => c.companyName === companyName).map((c) => c.id)
-          );
+          const remaining = state.companies.filter((c) => c.id !== id);
+          // Clean up orphaned selections
+          const remainingNames = new Set(remaining.map((c) => c.companyName));
+          const remainingPeriods = new Set(remaining.map((c) => c.period));
           return {
-            companies: state.companies.filter((c) => c.companyName !== companyName),
-            selectedIds: state.selectedIds.filter((id) => !toRemove.has(id)),
+            companies: remaining,
+            selectedCompanyNames: state.selectedCompanyNames.filter((n) => remainingNames.has(n)),
+            selectedPeriods: state.selectedPeriods.filter((p) => remainingPeriods.has(p)),
             lastUpdated: new Date().toISOString(),
           };
         }),
 
-      toggleSelection: (id) =>
+      removeCompanyGroup: (companyName) =>
+        set((state) => {
+          const remaining = state.companies.filter((c) => c.companyName !== companyName);
+          const remainingPeriods = new Set(remaining.map((c) => c.period));
+          return {
+            companies: remaining,
+            selectedCompanyNames: state.selectedCompanyNames.filter((n) => n !== companyName),
+            selectedPeriods: state.selectedPeriods.filter((p) => remainingPeriods.has(p)),
+            lastUpdated: new Date().toISOString(),
+          };
+        }),
+
+      toggleCompanyName: (name) =>
         set((state) => ({
-          selectedIds: state.selectedIds.includes(id)
-            ? state.selectedIds.filter((sid) => sid !== id)
-            : [...state.selectedIds, id],
+          selectedCompanyNames: state.selectedCompanyNames.includes(name)
+            ? state.selectedCompanyNames.filter((n) => n !== name)
+            : [...state.selectedCompanyNames, name],
         })),
 
-      selectAll: () =>
-        set((state) => ({ selectedIds: state.companies.map((c) => c.id) })),
+      togglePeriod: (period) =>
+        set((state) => ({
+          selectedPeriods: state.selectedPeriods.includes(period)
+            ? state.selectedPeriods.filter((p) => p !== period)
+            : [...state.selectedPeriods, period].sort(),
+        })),
 
-      deselectAll: () => set({ selectedIds: [] }),
+      selectAllCompanies: () =>
+        set((state) => ({ selectedCompanyNames: [...new Set(state.companies.map((c) => c.companyName))] })),
 
-      setViewMode: (mode) => set({ viewMode: mode }),
+      deselectAllCompanies: () => set({ selectedCompanyNames: [] }),
+
+      selectAllPeriods: () =>
+        set((state) => ({ selectedPeriods: [...new Set(state.companies.map((c) => c.period))].sort() })),
+
+      deselectAllPeriods: () => set({ selectedPeriods: [] }),
 
       clearAll: () =>
-        set({ companies: [], selectedIds: [], lastUpdated: null }),
+        set({ companies: [], selectedCompanyNames: [], selectedPeriods: [], lastUpdated: null }),
 
-      getSelected: () => {
+      getFiltered: () => {
         const state = get();
-        return state.companies.filter((c) => state.selectedIds.includes(c.id));
+        return state.companies.filter(
+          (c) => state.selectedCompanyNames.includes(c.companyName) && state.selectedPeriods.includes(c.period)
+        );
       },
     }),
     {
-      name: 'pnl-dashboard-storage', // localStorage key
+      name: 'pnl-dashboard-storage-v2',
       partialize: (state) => ({
         companies: state.companies,
-        selectedIds: state.selectedIds,
+        selectedCompanyNames: state.selectedCompanyNames,
+        selectedPeriods: state.selectedPeriods,
         lastUpdated: state.lastUpdated,
       }),
     }

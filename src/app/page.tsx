@@ -8,22 +8,19 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { usePnLStore } from '@/lib/pnl-store';
 import { PnLUpload } from '@/components/pnl/PnLUpload';
+import { FilterBar } from '@/components/pnl/FilterBar';
 import { PnLTable } from '@/components/pnl/PnLTable';
 import { PnLCharts } from '@/components/pnl/PnLCharts';
 import { PnLComparison } from '@/components/pnl/PnLComparison';
 import { ExecutiveSummary } from '@/components/pnl/ExecutiveSummary';
 import { FinancialRatios } from '@/components/pnl/FinancialRatios';
-import { groupByCompany } from '@/lib/pnl-types';
 
 export default function Home() {
-  const { companies, selectedIds, clearAll, lastUpdated } = usePnLStore();
-
-  const selected = companies.filter((c) => selectedIds.includes(c.id));
-  const groups = groupByCompany(selected);
+  const { companies, selectedCompanyNames, selectedPeriods, clearAll, lastUpdated } = usePnLStore();
+  const hasData = companies.length > 0;
   const companyCount = new Set(companies.map((c) => c.companyName)).size;
   const periodCount = new Set(companies.map((c) => c.period)).size;
 
@@ -47,16 +44,16 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-3">
-            {companies.length > 0 && (
+            {hasData && (
               <>
                 <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
                   <Database className="h-3.5 w-3.5" />
-                  <Badge variant="secondary" className="gap-1 text-xs font-medium">
+                  <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-semibold text-teal-800">
                     {companyCount} {companyCount === 1 ? 'شركة' : 'شركات'}
-                  </Badge>
-                  <Badge variant="outline" className="text-xs">
+                  </span>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
                     {periodCount} {periodCount === 1 ? 'فترة' : 'فترات'}
-                  </Badge>
+                  </span>
                   {lastUpdated && (
                     <span className="flex items-center gap-1 text-[10px] opacity-60">
                       <Clock className="h-3 w-3" />
@@ -81,9 +78,10 @@ export default function Home() {
 
       {/* Main */}
       <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-6 sm:px-6 lg:px-8">
-        {/* Upload Section — shown always but compact when data exists */}
-        <div className={companies.length > 0 ? 'mb-6' : 'mb-10'}>
-          {companies.length === 0 && (
+
+        {/* === EMPTY STATE: Upload + Steps === */}
+        {!hasData && (
+          <div className="mb-10">
             <div className="mb-8 text-center">
               <div className="mb-4 inline-flex items-center gap-1.5 rounded-full bg-teal-100 px-4 py-1.5 text-xs font-semibold text-teal-800">
                 <Sparkles className="h-3.5 w-3.5" />
@@ -93,92 +91,83 @@ export default function Home() {
                 قم برفع ومقارنة بيانات الأرباح والخسائر
               </h2>
               <p className="mx-auto max-w-2xl text-muted-foreground leading-relaxed">
-                ارفع ملف Excel يحتوي على بيانات P&L لشركة واحدة أو أكثر عبر فترات مالية متعددة،
+                ارفع ملف Excel يحتوي على بيانات P&L لشركة واحدة أو أكثر عبر فترات شهرية متعددة،
                 ثم حلّل وقارن بينها باستخدام تقارير تفاعلية احترافية
               </p>
             </div>
-          )}
 
-          <div className={companies.length === 0 ? 'mx-auto max-w-2xl' : ''}>
-            <PnLUpload />
+            <div className="mx-auto max-w-2xl">
+              <PnLUpload />
+            </div>
+
+            <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-3">
+              {[
+                { step: 1, title: 'حمّل القالب', desc: 'نزّل قالب Excel المقترح واملأ بيانات الشركات والفترات الشهرية', color: 'bg-teal-100', numColor: 'text-teal-700' },
+                { step: 2, title: 'ارفع الملف', desc: 'ارفع ملف Excel — كل ورقة تمثل شركة وكل عمود يمثل شهر', color: 'bg-amber-100', numColor: 'text-amber-700' },
+                { step: 3, title: 'حلّل وقارن', desc: 'استخدم الملخص التنفيذي والجداول والرسوم البيانية والنسب المالية', color: 'bg-violet-100', numColor: 'text-violet-700' },
+              ].map((item) => (
+                <Card key={item.step} className="border-dashed hover:border-solid transition-all">
+                  <CardContent className="flex flex-col items-center p-8 text-center">
+                    <div className={`mb-4 flex h-14 w-14 items-center justify-center rounded-2xl ${item.color}`}>
+                      <span className={`text-2xl font-bold ${item.numColor}`}>{item.step}</span>
+                    </div>
+                    <h3 className="mb-2 text-base font-bold">{item.title}</h3>
+                    <p className="text-sm leading-relaxed text-muted-foreground">{item.desc}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           </div>
-        </div>
-
-        {/* Reports Section */}
-        {companies.length > 0 && (
-          <Tabs defaultValue="summary" className="w-full">
-            <TabsList className="mb-5 grid h-auto w-full grid-cols-3 gap-1 rounded-xl bg-muted/50 p-1 sm:grid-cols-6">
-              <TabsTrigger value="summary" className="gap-1.5 rounded-lg text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                <FileText className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">الملخص التنفيذي</span>
-                <span className="sm:hidden">ملخص</span>
-              </TabsTrigger>
-              <TabsTrigger value="table" className="gap-1.5 rounded-lg text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                <Table2 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">الجدول المفصل</span>
-                <span className="sm:hidden">جدول</span>
-              </TabsTrigger>
-              <TabsTrigger value="ratios" className="gap-1.5 rounded-lg text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                <Calculator className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">النسب المالية</span>
-                <span className="sm:hidden">نسب</span>
-              </TabsTrigger>
-              <TabsTrigger value="comparison" className="gap-1.5 rounded-lg text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                <GitCompareArrows className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">المقارنة</span>
-                <span className="sm:hidden">مقارنة</span>
-              </TabsTrigger>
-              <TabsTrigger value="charts" className="gap-1.5 rounded-lg text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                <BarChart3 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">الرسوم البيانية</span>
-                <span className="sm:hidden">رسوم</span>
-              </TabsTrigger>
-              <TabsTrigger value="trends" className="gap-1.5 rounded-lg text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                <TrendingUp className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">التحليل الترندي</span>
-                <span className="sm:hidden">ترند</span>
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="summary">
-              <ExecutiveSummary />
-            </TabsContent>
-            <TabsContent value="table">
-              <PnLTable />
-            </TabsContent>
-            <TabsContent value="ratios">
-              <FinancialRatios />
-            </TabsContent>
-            <TabsContent value="comparison">
-              <PnLComparison />
-            </TabsContent>
-            <TabsContent value="charts">
-              <PnLCharts />
-            </TabsContent>
-            <TabsContent value="trends">
-              <PnLCharts forceTrends />
-            </TabsContent>
-          </Tabs>
         )}
 
-        {/* Empty state */}
-        {companies.length === 0 && (
-          <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-3">
-            {[
-              { step: 1, title: 'حمّل القالب', desc: 'نزّل قالب Excel المقترح واملأ بيانات الشركات والفترات المالية', color: 'bg-teal-100', numColor: 'text-teal-700' },
-              { step: 2, title: 'ارفع الملف', desc: 'ارفع ملف Excel — كل ورقة تمثل شركة وكل عمود يمثل فترة مالية', color: 'bg-amber-100', numColor: 'text-amber-700' },
-              { step: 3, title: 'حلّل وقارن', desc: 'استخدم الملخص التنفيذي والجداول والرسوم البيانية والنسب المالية', color: 'bg-violet-100', numColor: 'text-violet-700' },
-            ].map((item) => (
-              <Card key={item.step} className="border-dashed hover:border-solid transition-all">
-                <CardContent className="flex flex-col items-center p-8 text-center">
-                  <div className={`mb-4 flex h-14 w-14 items-center justify-center rounded-2xl ${item.color}`}>
-                    <span className={`text-2xl font-bold ${item.numColor}`}>{item.step}</span>
-                  </div>
-                  <h3 className="mb-2 text-base font-bold">{item.title}</h3>
-                  <p className="text-sm leading-relaxed text-muted-foreground">{item.desc}</p>
-                </CardContent>
-              </Card>
-            ))}
+        {/* === DATA LOADED: Filters + Reports === */}
+        {hasData && (
+          <div className="space-y-5">
+            {/* Unified Filter Bar */}
+            <FilterBar />
+
+            {/* Report Tabs */}
+            <Tabs defaultValue="summary" className="w-full">
+              <TabsList className="mb-5 grid h-auto w-full grid-cols-3 gap-1 rounded-xl bg-muted/50 p-1 sm:grid-cols-6">
+                <TabsTrigger value="summary" className="gap-1.5 rounded-lg text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                  <FileText className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">الملخص التنفيذي</span>
+                  <span className="sm:hidden">ملخص</span>
+                </TabsTrigger>
+                <TabsTrigger value="table" className="gap-1.5 rounded-lg text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                  <Table2 className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">الجدول المفصل</span>
+                  <span className="sm:hidden">جدول</span>
+                </TabsTrigger>
+                <TabsTrigger value="ratios" className="gap-1.5 rounded-lg text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                  <Calculator className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">النسب المالية</span>
+                  <span className="sm:hidden">نسب</span>
+                </TabsTrigger>
+                <TabsTrigger value="comparison" className="gap-1.5 rounded-lg text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                  <GitCompareArrows className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">المقارنة</span>
+                  <span className="sm:hidden">مقارنة</span>
+                </TabsTrigger>
+                <TabsTrigger value="charts" className="gap-1.5 rounded-lg text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                  <BarChart3 className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">الرسوم البيانية</span>
+                  <span className="sm:hidden">رسوم</span>
+                </TabsTrigger>
+                <TabsTrigger value="trends" className="gap-1.5 rounded-lg text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                  <TrendingUp className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">التحليل الترندي</span>
+                  <span className="sm:hidden">ترند</span>
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="summary"><ExecutiveSummary /></TabsContent>
+              <TabsContent value="table"><PnLTable /></TabsContent>
+              <TabsContent value="ratios"><FinancialRatios /></TabsContent>
+              <TabsContent value="comparison"><PnLComparison /></TabsContent>
+              <TabsContent value="charts"><PnLCharts /></TabsContent>
+              <TabsContent value="trends"><PnLCharts forceTrends /></TabsContent>
+            </Tabs>
           </div>
         )}
       </main>

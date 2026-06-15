@@ -246,8 +246,8 @@ function TrendChart({ groups }: { groups: ReturnType<typeof groupByCompany> }) {
 }
 
 export function PnLCharts({ forceTrends }: { forceTrends?: boolean } = {}) {
-  const { companies, selectedIds } = usePnLStore();
-  const selected = companies.filter((c) => selectedIds.includes(c.id));
+  const { getFiltered } = usePnLStore();
+  const selected = getFiltered();
   const groups = groupByCompany(selected);
 
   if (selected.length === 0) {
