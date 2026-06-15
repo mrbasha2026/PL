@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import ZAI from 'z-ai-web-dev-sdk';
-import fs from 'fs';
-import path from 'path';
 
 // ─── AI Engine Types ──────────────────────────────────────────────────────────
 type AIEngine = 'chatgpt' | 'claude';
@@ -157,27 +155,18 @@ const MODEL_FALLBACKS: Record<string, string[]> = {
   'claude-3-haiku-20240307': [],
 };
 
-// ─── Load Z-AI Config (bypass file-based config) ────────────────────────────
-function loadZAIConfig(): { baseUrl: string; apiKey: string; chatId?: string; token?: string; userId?: string } | null {
-  const configPaths = [
-    path.join(process.cwd(), '.z-ai-config'),
-    path.join(require('os').homedir(), '.z-ai-config'),
-    '/etc/.z-ai-config',
-  ];
-
-  for (const filePath of configPaths) {
-    try {
-      const configStr = fs.readFileSync(filePath, 'utf-8');
-      const config = JSON.parse(configStr);
-      if (config.baseUrl && config.apiKey) {
-        console.log('[Z-AI] Config loaded from:', filePath);
-        return config;
-      }
-    } catch {
-      // continue to next path
-    }
-  }
-  return null;
+// ─── Build Z-AI Config from env vars ───────────────────────────────────────
+function getZAIConfig() {
+  const baseUrl = process.env.ZAI_BASE_URL;
+  const apiKey = process.env.ZAI_API_KEY;
+  if (!baseUrl || !apiKey) return null;
+  return {
+    baseUrl,
+    apiKey,
+    chatId: process.env.ZAI_CHAT_ID || '',
+    token: process.env.ZAI_TOKEN || '',
+    userId: process.env.ZAI_USER_ID || '',
+  };
 }
 
 // ─── ChatGPT Free Engine (GLM-4 Plus) ────────────────────────────────────────
@@ -188,9 +177,9 @@ async function analyzeWithChatGPT(
 ): Promise<AIResponse> {
   console.log('[ChatGPT] Using z-ai-web-dev-sdk (GLM-4 Plus) — Free');
 
-  const config = loadZAIConfig();
+  const config = getZAIConfig();
   if (!config) {
-    throw new Error('لم يتم العثور على إعدادات المحرك المجاني. تأكد من وجود ملف .z-ai-config');
+    throw new Error('إعدادات المحرك المجاني غير متوفرة. تأكد من إضافة ZAI_BASE_URL و ZAI_API_KEY في ملف .env.local');
   }
 
   const zai = new ZAI(config);
