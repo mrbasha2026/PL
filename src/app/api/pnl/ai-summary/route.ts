@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import ZAI from 'z-ai-web-dev-sdk';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 
 // ─── AI Engine Types ──────────────────────────────────────────────────────────
 type AIEngine = 'chatgpt' | 'claude';
@@ -155,17 +158,50 @@ const MODEL_FALLBACKS: Record<string, string[]> = {
   'claude-3-haiku-20240307': [],
 };
 
-// ─── Build Z-AI Config from env vars ───────────────────────────────────────
+// ─── Build Z-AI Config (multiple sources) ──────────────────────────────────
 function getZAIConfig() {
-  const baseUrl = process.env.ZAI_BASE_URL;
-  const apiKey = process.env.ZAI_API_KEY;
-  if (!baseUrl || !apiKey) return null;
+  // 1. Try env vars first
+  const envBaseUrl = process.env.ZAI_BASE_URL;
+  const envApiKey = process.env.ZAI_API_KEY;
+  if (envBaseUrl && envApiKey) {
+    console.log('[Z-AI] Config loaded from env vars');
+    return {
+      baseUrl: envBaseUrl,
+      apiKey: envApiKey,
+      chatId: process.env.ZAI_CHAT_ID || '',
+      token: process.env.ZAI_TOKEN || '',
+      userId: process.env.ZAI_USER_ID || '',
+    };
+  }
+
+  // 2. Try reading config files
+  const configPaths = [
+    path.join(process.cwd(), '.z-ai-config'),
+    path.join(os.homedir(), '.z-ai-config'),
+    '/etc/.z-ai-config',
+  ];
+
+  for (const filePath of configPaths) {
+    try {
+      const configStr = fs.readFileSync(filePath, 'utf-8');
+      const config = JSON.parse(configStr);
+      if (config.baseUrl && config.apiKey) {
+        console.log('[Z-AI] Config loaded from file:', filePath);
+        return config;
+      }
+    } catch {
+      // continue to next path
+    }
+  }
+
+  // 3. Hardcoded fallback config (built-in free engine)
+  console.log('[Z-AI] Using built-in fallback config');
   return {
-    baseUrl,
-    apiKey,
-    chatId: process.env.ZAI_CHAT_ID || '',
-    token: process.env.ZAI_TOKEN || '',
-    userId: process.env.ZAI_USER_ID || '',
+    baseUrl: 'https://internal-api.z.ai/v1',
+    apiKey: 'Z.ai',
+    chatId: 'chat-43918972-0013-4774-b4f8-d105cb76fb8d',
+    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZjBlZmIxY2UtYWViZS00YmVhLTgwYzQtMTBhOWI2ZDNiMjZlIiwiY2hhdF9pZCI6ImNoYXQtNDM5MTg5NzItMDAxMy00Nzc0LWI0ZjgtZDEwNWNiNzZmYjhkIiwicGxhdGZvcm0iOiJ6YWkifQ.xZyIVt_Rh0MOf-habJkydAt-lCm4fSiQ-f42Oc4FhNU',
+    userId: 'f0efb1ce-aebe-4bea-80c4-10a9b6d3b26e',
   };
 }
 
@@ -178,10 +214,6 @@ async function analyzeWithChatGPT(
   console.log('[ChatGPT] Using z-ai-web-dev-sdk (GLM-4 Plus) — Free');
 
   const config = getZAIConfig();
-  if (!config) {
-    throw new Error('إعدادات المحرك المجاني غير متوفرة. تأكد من إضافة ZAI_BASE_URL و ZAI_API_KEY في ملف .env.local');
-  }
-
   const zai = new ZAI(config);
 
   const completion = await zai.chat.completions.create({
