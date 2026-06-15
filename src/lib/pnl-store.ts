@@ -1,69 +1,95 @@
 'use client';
 
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { CompanyPnL, PnLLineItem, PNL_LINE_ITEMS } from './pnl-types';
 
 interface PnLStore {
   companies: CompanyPnL[];
   lineItems: PnLLineItem[];
-  selectedCompanyIds: string[];
-  viewMode: 'table' | 'comparison' | 'charts';
+  selectedIds: string[];
+  viewMode: 'summary' | 'table' | 'ratios' | 'comparison' | 'charts' | 'trends';
+  lastUpdated: string | null;
 
-  addCompany: (company: CompanyPnL) => void;
-  removeCompany: (id: string) => void;
-  updateCompany: (id: string, data: Partial<CompanyPnL>) => void;
-  setSelectedCompanyIds: (ids: string[]) => void;
-  toggleCompanySelection: (id: string) => void;
-  setViewMode: (mode: 'table' | 'comparison' | 'charts') => void;
+  addCompanies: (newCompanies: CompanyPnL[]) => void;
+  removeDataset: (id: string) => void;
+  removeCompanyGroup: (companyName: string) => void;
+  toggleSelection: (id: string) => void;
+  selectAll: () => void;
+  deselectAll: () => void;
+  setViewMode: (mode: PnLStore['viewMode']) => void;
   clearAll: () => void;
-  getSelectedCompanies: () => CompanyPnL[];
+  getSelected: () => CompanyPnL[];
 }
 
-export const usePnLStore = create<PnLStore>((set, get) => ({
-  companies: [],
-  lineItems: PNL_LINE_ITEMS,
-  selectedCompanyIds: [],
-  viewMode: 'table',
+export const usePnLStore = create<PnLStore>()(
+  persist(
+    (set, get) => ({
+      companies: [],
+      lineItems: PNL_LINE_ITEMS,
+      selectedIds: [],
+      viewMode: 'summary',
+      lastUpdated: null,
 
-  addCompany: (company) =>
-    set((state) => ({
-      companies: [...state.companies, company],
-      selectedCompanyIds: [...state.selectedCompanyIds, company.id],
-    })),
+      addCompanies: (newCompanies) =>
+        set((state) => {
+          const existingIds = new Set(state.companies.map((c) => c.id));
+          const fresh = newCompanies.filter((c) => !existingIds.has(c.id));
+          return {
+            companies: [...state.companies, ...fresh],
+            selectedIds: [...state.selectedIds, ...fresh.map((c) => c.id)],
+            lastUpdated: new Date().toISOString(),
+          };
+        }),
 
-  removeCompany: (id) =>
-    set((state) => ({
-      companies: state.companies.filter((c) => c.id !== id),
-      selectedCompanyIds: state.selectedCompanyIds.filter((cid) => cid !== id),
-    })),
+      removeDataset: (id) =>
+        set((state) => ({
+          companies: state.companies.filter((c) => c.id !== id),
+          selectedIds: state.selectedIds.filter((sid) => sid !== id),
+          lastUpdated: new Date().toISOString(),
+        })),
 
-  updateCompany: (id, data) =>
-    set((state) => ({
-      companies: state.companies.map((c) =>
-        c.id === id ? { ...c, ...data } : c
-      ),
-    })),
+      removeCompanyGroup: (companyName) =>
+        set((state) => {
+          const toRemove = new Set(
+            state.companies.filter((c) => c.companyName === companyName).map((c) => c.id)
+          );
+          return {
+            companies: state.companies.filter((c) => c.companyName !== companyName),
+            selectedIds: state.selectedIds.filter((id) => !toRemove.has(id)),
+            lastUpdated: new Date().toISOString(),
+          };
+        }),
 
-  setSelectedCompanyIds: (ids) => set({ selectedCompanyIds: ids }),
+      toggleSelection: (id) =>
+        set((state) => ({
+          selectedIds: state.selectedIds.includes(id)
+            ? state.selectedIds.filter((sid) => sid !== id)
+            : [...state.selectedIds, id],
+        })),
 
-  toggleCompanySelection: (id) =>
-    set((state) => {
-      const isSelected = state.selectedCompanyIds.includes(id);
-      return {
-        selectedCompanyIds: isSelected
-          ? state.selectedCompanyIds.filter((cid) => cid !== id)
-          : [...state.selectedCompanyIds, id],
-      };
+      selectAll: () =>
+        set((state) => ({ selectedIds: state.companies.map((c) => c.id) })),
+
+      deselectAll: () => set({ selectedIds: [] }),
+
+      setViewMode: (mode) => set({ viewMode: mode }),
+
+      clearAll: () =>
+        set({ companies: [], selectedIds: [], lastUpdated: null }),
+
+      getSelected: () => {
+        const state = get();
+        return state.companies.filter((c) => state.selectedIds.includes(c.id));
+      },
     }),
-
-  setViewMode: (mode) => set({ viewMode: mode }),
-
-  clearAll: () => set({ companies: [], selectedCompanyIds: [] }),
-
-  getSelectedCompanies: () => {
-    const state = get();
-    return state.companies.filter((c) =>
-      state.selectedCompanyIds.includes(c.id)
-    );
-  },
-}));
+    {
+      name: 'pnl-dashboard-storage', // localStorage key
+      partialize: (state) => ({
+        companies: state.companies,
+        selectedIds: state.selectedIds,
+        lastUpdated: state.lastUpdated,
+      }),
+    }
+  )
+);

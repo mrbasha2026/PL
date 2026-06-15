@@ -1,4 +1,4 @@
-// P&L Data Types
+// P&L Data Types — Professional Grade
 
 export interface PnLLineItem {
   name: string;
@@ -9,17 +9,20 @@ export interface PnLLineItem {
   indent?: number;
 }
 
+// Each dataset represents ONE company in ONE period
 export interface CompanyPnL {
   id: string;
-  name: string;
-  period: string; // e.g. "Q1 2024", "FY 2024"
+  companyName: string;  // e.g. "الراجحي"
+  period: string;       // e.g. "Q1 2024"
   currency: string;
   data: Record<string, number>; // line item key -> value
 }
 
-export interface PnLComparison {
-  companies: CompanyPnL[];
-  lineItems: PnLLineItem[];
+// Derived: unique company with multiple periods
+export interface CompanyGroup {
+  name: string;
+  periods: string[];
+  datasets: CompanyPnL[];
 }
 
 // Standard P&L line items template
@@ -40,24 +43,143 @@ export const PNL_LINE_ITEMS: PnLLineItem[] = [
   { name: 'Net Income', nameAr: 'صافي الدخل', category: 'profit', isTotal: true, indent: 0 },
 ];
 
-// Map English line item names to keys
 export function getLineItemKey(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
 }
 
-// Generate line item keys
 export const PNL_KEYS = PNL_LINE_ITEMS.map(item => getLineItemKey(item.name));
 
-// Color palette for companies
+// Professional color palette (accessible, print-friendly)
 export const COMPANY_COLORS = [
-  '#10b981', // emerald
-  '#f59e0b', // amber
-  '#ef4444', // red
-  '#8b5cf6', // violet
-  '#06b6d4', // cyan
-  '#f97316', // orange
-  '#ec4899', // pink
-  '#14b8a6', // teal
-  '#6366f1', // indigo
-  '#84cc16', // lime
+  '#0d9488', // teal-600
+  '#d97706', // amber-600
+  '#dc2626', // red-600
+  '#7c3aed', // violet-600
+  '#0891b2', // cyan-600
+  '#ea580c', // orange-600
+  '#db2777', // pink-600
+  '#059669', // emerald-600
+  '#4f46e5', // indigo-600
+  '#65a30d', // lime-600
 ];
+
+// Financial Ratios
+export interface FinancialRatio {
+  key: string;
+  nameAr: string;
+  nameEn: string;
+  formula: (data: Record<string, number>) => number | null;
+  format: 'percentage' | 'ratio' | 'number';
+}
+
+export const FINANCIAL_RATIOS: FinancialRatio[] = [
+  {
+    key: 'gross_margin',
+    nameAr: 'هامش الربح الإجمالي',
+    nameEn: 'Gross Margin',
+    formula: (d) => d['revenue'] ? (d['gross_profit'] / d['revenue']) * 100 : null,
+    format: 'percentage',
+  },
+  {
+    key: 'operating_margin',
+    nameAr: 'هامش التشغيلي',
+    nameEn: 'Operating Margin',
+    formula: (d) => d['revenue'] ? (d['operating_income_ebit'] / d['revenue']) * 100 : null,
+    format: 'percentage',
+  },
+  {
+    key: 'net_margin',
+    nameAr: 'هامش صافي الربح',
+    nameEn: 'Net Margin',
+    formula: (d) => d['revenue'] ? (d['net_income'] / d['revenue']) * 100 : null,
+    format: 'percentage',
+  },
+  {
+    key: 'cogs_ratio',
+    nameAr: 'نسبة تكلفة المبيعات',
+    nameEn: 'COGS Ratio',
+    formula: (d) => d['revenue'] ? (d['cost_of_goods_sold'] / d['revenue']) * 100 : null,
+    format: 'percentage',
+  },
+  {
+    key: 'opex_ratio',
+    nameAr: 'نسبة المصروفات التشغيلية',
+    nameEn: 'OpEx Ratio',
+    formula: (d) => d['revenue'] ? (d['operating_expenses'] / d['revenue']) * 100 : null,
+    format: 'percentage',
+  },
+  {
+    key: 'tax_rate',
+    nameAr: 'معدل الضريبة الفعلي',
+    nameEn: 'Effective Tax Rate',
+    formula: (d) => d['income_before_tax'] ? (d['income_tax_expense'] / d['income_before_tax']) * 100 : null,
+    format: 'percentage',
+  },
+  {
+    key: 'interest_coverage',
+    nameAr: 'نسبة تغطية الفوائد',
+    nameEn: 'Interest Coverage',
+    formula: (d) => d['interest_expense'] ? d['operating_income_ebit'] / d['interest_expense'] : null,
+    format: 'ratio',
+  },
+];
+
+// Helper: format numbers professionally
+export function formatNumber(value: number, currency: string = 'SAR', compact: boolean = true): string {
+  if (value === 0) return '-';
+  const absVal = Math.abs(value);
+  const sign = value < 0 ? '-' : '';
+
+  if (compact) {
+    if (absVal >= 1_000_000_000) return `${sign}${(absVal / 1_000_000_000).toFixed(1)}B ${currency}`;
+    if (absVal >= 1_000_000) return `${sign}${(absVal / 1_000_000).toFixed(1)}M ${currency}`;
+    if (absVal >= 1_000) return `${sign}${(absVal / 1_000).toFixed(1)}K ${currency}`;
+    return `${sign}${absVal.toFixed(0)} ${currency}`;
+  }
+
+  // Full format with commas
+  return `${sign}${absVal.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} ${currency}`;
+}
+
+export function formatCompact(value: number): string {
+  const absVal = Math.abs(value);
+  const sign = value < 0 ? '-' : '';
+  if (absVal >= 1_000_000_000) return `${sign}${(absVal / 1_000_000_000).toFixed(1)}B`;
+  if (absVal >= 1_000_000) return `${sign}${(absVal / 1_000_000).toFixed(1)}M`;
+  if (absVal >= 1_000) return `${sign}${(absVal / 1_000).toFixed(1)}K`;
+  return `${sign}${absVal.toFixed(0)}`;
+}
+
+export function formatPercentage(value: number | null): string {
+  if (value === null || value === undefined) return '—';
+  return `${value >= 0 ? '' : ''}${value.toFixed(1)}%`;
+}
+
+export function formatRatio(value: number | null): string {
+  if (value === null || value === undefined) return '—';
+  return value.toFixed(2) + 'x';
+}
+
+// Group datasets by company name
+export function groupByCompany(datasets: CompanyPnL[]): CompanyGroup[] {
+  const map = new Map<string, CompanyPnL[]>();
+  datasets.forEach((ds) => {
+    const existing = map.get(ds.companyName) || [];
+    existing.push(ds);
+    map.set(ds.companyName, existing);
+  });
+
+  return Array.from(map.entries()).map(([name, datasets]) => ({
+    name,
+    periods: datasets.map((d) => d.period),
+    datasets: datasets.sort((a, b) => a.period.localeCompare(b.period)),
+  }));
+}
+
+// Calculate growth between two datasets
+export function calcGrowth(current: Record<string, number>, previous: Record<string, number>, key: string): number | null {
+  const curr = current[key];
+  const prev = previous[key];
+  if (!curr || !prev || prev === 0) return null;
+  return ((curr - prev) / Math.abs(prev)) * 100;
+}

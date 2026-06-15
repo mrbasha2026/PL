@@ -2,40 +2,17 @@
 
 import React from 'react';
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  Radar,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, PieChart, Pie, Cell, RadarChart, PolarGrid,
+  PolarAngleAxis, PolarRadiusAxis, Radar, LineChart, Line,
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePnLStore } from '@/lib/pnl-store';
 import {
-  PNL_LINE_ITEMS,
-  getLineItemKey,
-  COMPANY_COLORS,
-  CompanyPnL,
+  COMPANY_COLORS, CompanyPnL, groupByCompany, formatCompact,
+  formatPercentage,
 } from '@/lib/pnl-types';
-
-function formatCompact(value: number): string {
-  const absVal = Math.abs(value);
-  if (absVal >= 1_000_000_000) return (value / 1_000_000_000).toFixed(1) + 'B';
-  if (absVal >= 1_000_000) return (value / 1_000_000).toFixed(1) + 'M';
-  if (absVal >= 1_000) return (value / 1_000).toFixed(1) + 'K';
-  return value.toFixed(0);
-}
 
 const KEY_METRICS = [
   { key: 'revenue', labelAr: 'الإيرادات', labelEn: 'Revenue' },
@@ -54,76 +31,31 @@ const EXPENSE_BREAKDOWN = [
   { key: 'income_tax_expense', labelAr: 'الضرائب', labelEn: 'Tax' },
 ];
 
-function MarginGauge({ companies }: { companies: CompanyPnL[] }) {
-  const data = companies.map((company, idx) => {
-    const revenue = company.data['revenue'] || 0;
-    const grossProfit = company.data['gross_profit'] || 0;
-    const netIncome = company.data['net_income'] || 0;
-    const ebit = company.data['operating_income_ebit'] || 0;
+const PIE_COLORS = ['#0d9488', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#ea580c'];
 
-    return {
-      name: company.name,
-      grossMargin: revenue ? +((grossProfit / revenue) * 100).toFixed(1) : 0,
-      operatingMargin: revenue ? +((ebit / revenue) * 100).toFixed(1) : 0,
-      netMargin: revenue ? +((netIncome / revenue) * 100).toFixed(1) : 0,
-      color: COMPANY_COLORS[idx % COMPANY_COLORS.length],
-    };
-  });
-
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">هوامش الربحية (%)</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={data} layout="vertical" margin={{ right: 40 }}>
-            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-            <XAxis type="number" domain={[0, 'auto']} tickFormatter={(v) => `${v}%`} />
-            <YAxis dataKey="name" type="category" width={100} />
-            <Tooltip formatter={(value: number) => `${value}%`} />
-            <Legend />
-            <Bar dataKey="grossMargin" name="هامش الربح الإجمالي" fill="#10b981" radius={[0, 4, 4, 0]} />
-            <Bar dataKey="operatingMargin" name="هامش التشغيلي" fill="#f59e0b" radius={[0, 4, 4, 0]} />
-            <Bar dataKey="netMargin" name="هامش صافي الربح" fill="#ef4444" radius={[0, 4, 4, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </CardContent>
-    </Card>
-  );
-}
-
-function KeyMetricsChart({ companies }: { companies: CompanyPnL[] }) {
+function KeyMetricsChart({ groups }: { groups: ReturnType<typeof groupByCompany> }) {
   const data = KEY_METRICS.map((metric) => {
-    const item: Record<string, string | number> = {
-      name: metric.labelAr,
-    };
-    companies.forEach((company, idx) => {
-      item[company.name] = company.data[metric.key] || 0;
+    const item: Record<string, string | number> = { name: metric.labelAr };
+    groups.forEach((group) => {
+      const latest = group.datasets[group.datasets.length - 1];
+      if (latest) item[group.name] = latest.data[metric.key] || 0;
     });
     return item;
   });
 
   return (
     <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">المؤشرات المالية الرئيسية</CardTitle>
-      </CardHeader>
+      <CardHeader className="pb-2"><CardTitle className="text-base">المؤشرات المالية الرئيسية</CardTitle></CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={350}>
+        <ResponsiveContainer width="100%" height={380}>
           <BarChart data={data} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
-            <YAxis tickFormatter={formatCompact} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+            <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+            <YAxis tickFormatter={formatCompact} tick={{ fontSize: 11 }} />
             <Tooltip formatter={(value: number) => formatCompact(value)} />
             <Legend />
-            {companies.map((company, idx) => (
-              <Bar
-                key={company.id}
-                dataKey={company.name}
-                fill={COMPANY_COLORS[idx % COMPANY_COLORS.length]}
-                radius={[4, 4, 0, 0]}
-              />
+            {groups.map((group, idx) => (
+              <Bar key={group.name} dataKey={group.name} fill={COMPANY_COLORS[idx % COMPANY_COLORS.length]} radius={[4, 4, 0, 0]} />
             ))}
           </BarChart>
         </ResponsiveContainer>
@@ -132,60 +64,66 @@ function KeyMetricsChart({ companies }: { companies: CompanyPnL[] }) {
   );
 }
 
-function ExpenseBreakdownChart({ companies }: { companies: CompanyPnL[] }) {
-  if (companies.length === 0) return null;
+function MarginChart({ groups }: { groups: ReturnType<typeof groupByCompany> }) {
+  const data = groups.map((group, idx) => {
+    const latest = group.datasets[group.datasets.length - 1];
+    const rev = latest?.data['revenue'] || 0;
+    return {
+      name: group.name,
+      grossMargin: rev ? +(((latest?.data['gross_profit'] || 0) / rev) * 100).toFixed(1) : 0,
+      operatingMargin: rev ? +(((latest?.data['operating_income_ebit'] || 0) / rev) * 100).toFixed(1) : 0,
+      netMargin: rev ? +(((latest?.data['net_income'] || 0) / rev) * 100).toFixed(1) : 0,
+    };
+  });
 
-  // Show expense breakdown as pie charts for each company
   return (
     <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">توزيع المصروفات</CardTitle>
-      </CardHeader>
+      <CardHeader className="pb-2"><CardTitle className="text-base">هوامش الربحية (%)</CardTitle></CardHeader>
+      <CardContent>
+        <ResponsiveContainer width="100%" height={320}>
+          <BarChart data={data} layout="vertical" margin={{ right: 50 }}>
+            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e5e7eb" />
+            <XAxis type="number" domain={[0, 'auto']} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} />
+            <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} />
+            <Tooltip formatter={(value: number) => `${value}%`} />
+            <Legend />
+            <Bar dataKey="grossMargin" name="هامش الربح الإجمالي" fill="#059669" radius={[0, 4, 4, 0]} />
+            <Bar dataKey="operatingMargin" name="هامش التشغيلي" fill="#d97706" radius={[0, 4, 4, 0]} />
+            <Bar dataKey="netMargin" name="هامش صافي الربح" fill="#0d9488" radius={[0, 4, 4, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ExpenseChart({ groups }: { groups: ReturnType<typeof groupByCompany> }) {
+  return (
+    <Card>
+      <CardHeader className="pb-2"><CardTitle className="text-base">توزيع المصروفات</CardTitle></CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {companies.map((company, idx) => {
+          {groups.map((group, idx) => {
+            const latest = group.datasets[group.datasets.length - 1];
+            if (!latest) return null;
             const pieData = EXPENSE_BREAKDOWN.map((exp) => ({
               name: exp.labelAr,
-              value: Math.abs(company.data[exp.key] || 0),
+              value: Math.abs(latest.data[exp.key] || 0),
             })).filter((d) => d.value > 0);
 
             return (
-              <div key={company.id} className="text-center">
-                <h4 className="mb-2 text-sm font-semibold" style={{ color: COMPANY_COLORS[idx % COMPANY_COLORS.length] }}>
-                  {company.name}
+              <div key={group.name} className="text-center">
+                <h4 className="mb-2 text-sm font-bold" style={{ color: COMPANY_COLORS[idx % COMPANY_COLORS.length] }}>
+                  {group.name}
+                  <span className="font-normal opacity-60 mr-1">({latest.period})</span>
                 </h4>
-                <ResponsiveContainer width="100%" height={200}>
+                <ResponsiveContainer width="100%" height={220}>
                   <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={40}
-                      outerRadius={70}
-                      paddingAngle={2}
-                      dataKey="value"
-                      label={({ name, percent }) =>
-                        `${name} ${(percent * 100).toFixed(0)}%`
-                      }
-                      labelLine={false}
-                    >
-                      {pieData.map((_, index) => (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={
-                            [
-                              '#ef4444',
-                              '#f59e0b',
-                              '#10b981',
-                              '#8b5cf6',
-                              '#06b6d4',
-                              '#ec4899',
-                            ][index % 6]
-                          }
-                        />
-                      ))}
+                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={45} outerRadius={80} paddingAngle={2} dataKey="value"
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                      {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                     </Pie>
-                    <Tooltip formatter={(value: number) => formatCompact(value)} />
+                    <Tooltip formatter={(v: number) => formatCompact(v)} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -197,46 +135,39 @@ function ExpenseBreakdownChart({ companies }: { companies: CompanyPnL[] }) {
   );
 }
 
-function RadarComparison({ companies }: { companies: CompanyPnL[] }) {
-  if (companies.length < 2) return null;
+function RadarView({ groups }: { groups: ReturnType<typeof groupByCompany> }) {
+  if (groups.length < 2) return (
+    <Card>
+      <CardContent className="flex items-center justify-center py-16 text-muted-foreground">
+        تحتاج شركتان على الأقل لعرض مقارنة الرادار
+      </CardContent>
+    </Card>
+  );
 
   const radarData = KEY_METRICS.map((metric) => {
-    const item: Record<string, string | number> = {
-      metric: metric.labelAr,
-    };
-    // Normalize values to 0-100 scale based on max value
-    const maxVal = Math.max(
-      ...companies.map((c) => Math.abs(c.data[metric.key] || 0)),
-      1
-    );
-    companies.forEach((company) => {
-      const val = company.data[metric.key] || 0;
-      item[company.name] = +((Math.abs(val) / maxVal) * 100).toFixed(1);
+    const item: Record<string, string | number> = { metric: metric.labelAr };
+    const maxVal = Math.max(...groups.map((g) => Math.abs(g.datasets[g.datasets.length - 1]?.data[metric.key] || 0)), 1);
+    groups.forEach((group) => {
+      const latest = group.datasets[group.datasets.length - 1];
+      const val = latest?.data[metric.key] || 0;
+      item[group.name] = +((Math.abs(val) / maxVal) * 100).toFixed(1);
     });
     return item;
   });
 
   return (
     <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">مقارنة شاملة (رادار)</CardTitle>
-      </CardHeader>
+      <CardHeader className="pb-2"><CardTitle className="text-base">مقارنة شاملة (رادار)</CardTitle></CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={400}>
+        <ResponsiveContainer width="100%" height={420}>
           <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
-            <PolarGrid />
-            <PolarAngleAxis dataKey="metric" className="text-xs" />
-            <PolarRadiusAxis angle={90} domain={[0, 100]} />
-            {companies.map((company, idx) => (
-              <Radar
-                key={company.id}
-                name={company.name}
-                dataKey={company.name}
+            <PolarGrid stroke="#e5e7eb" />
+            <PolarAngleAxis dataKey="metric" tick={{ fontSize: 11 }} />
+            <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fontSize: 10 }} />
+            {groups.map((group, idx) => (
+              <Radar key={group.name} name={group.name} dataKey={group.name}
                 stroke={COMPANY_COLORS[idx % COMPANY_COLORS.length]}
-                fill={COMPANY_COLORS[idx % COMPANY_COLORS.length]}
-                fillOpacity={0.15}
-                strokeWidth={2}
-              />
+                fill={COMPANY_COLORS[idx % COMPANY_COLORS.length]} fillOpacity={0.12} strokeWidth={2} />
             ))}
             <Legend />
             <Tooltip />
@@ -247,47 +178,107 @@ function RadarComparison({ companies }: { companies: CompanyPnL[] }) {
   );
 }
 
-export function PnLCharts() {
-  const { companies, selectedCompanyIds } = usePnLStore();
+function TrendChart({ groups }: { groups: ReturnType<typeof groupByCompany> }) {
+  const groupsWithMultiple = groups.filter((g) => g.datasets.length > 1);
 
-  const selectedCompanies = companies.filter((c) =>
-    selectedCompanyIds.includes(c.id)
+  if (groupsWithMultiple.length === 0) return (
+    <Card>
+      <CardContent className="flex items-center justify-center py-16 text-muted-foreground">
+        تحتاج فترتان على الأقل لكل شركة لعرض التحليل الترندي
+      </CardContent>
+    </Card>
   );
 
-  if (selectedCompanies.length === 0) {
+  const trendData = groupsWithMultiple[0]?.datasets.map((ds, idx) => {
+    const item: Record<string, string | number> = { period: ds.period };
+    groupsWithMultiple.forEach((group) => {
+      if (group.datasets[idx]) {
+        item[group.name] = group.datasets[idx].data['revenue'] || 0;
+        item[`${group.name}_net`] = group.datasets[idx].data['net_income'] || 0;
+      }
+    });
+    return item;
+  }) || [];
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-base">تطور الإيرادات عبر الفترات</CardTitle></CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={320}>
+            <LineChart data={trendData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="period" tick={{ fontSize: 12 }} />
+              <YAxis tickFormatter={formatCompact} tick={{ fontSize: 11 }} />
+              <Tooltip formatter={(value: number) => formatCompact(value)} />
+              <Legend />
+              {groupsWithMultiple.map((group, idx) => (
+                <Line key={group.name} type="monotone" dataKey={group.name} name={`${group.name} - إيرادات`}
+                  stroke={COMPANY_COLORS[idx % COMPANY_COLORS.length]} strokeWidth={2.5}
+                  dot={{ r: 4, fill: COMPANY_COLORS[idx % COMPANY_COLORS.length] }} />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-base">تطور صافي الدخل عبر الفترات</CardTitle></CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={320}>
+            <LineChart data={trendData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="period" tick={{ fontSize: 12 }} />
+              <YAxis tickFormatter={formatCompact} tick={{ fontSize: 11 }} />
+              <Tooltip formatter={(value: number) => formatCompact(value)} />
+              <Legend />
+              {groupsWithMultiple.map((group, idx) => (
+                <Line key={`${group.name}_net`} type="monotone" dataKey={`${group.name}_net`} name={`${group.name} - صافي الدخل`}
+                  stroke={COMPANY_COLORS[idx % COMPANY_COLORS.length]} strokeWidth={2.5} strokeDasharray="5 5"
+                  dot={{ r: 4, fill: COMPANY_COLORS[idx % COMPANY_COLORS.length] }} />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export function PnLCharts({ forceTrends }: { forceTrends?: boolean } = {}) {
+  const { companies, selectedIds } = usePnLStore();
+  const selected = companies.filter((c) => selectedIds.includes(c.id));
+  const groups = groupByCompany(selected);
+
+  if (selected.length === 0) {
     return (
       <Card>
-        <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-          <h3 className="text-lg font-semibold text-muted-foreground">
-            اختر شركة واحدة على الأقل لعرض الرسوم البيانية
-          </h3>
+        <CardContent className="flex flex-col items-center justify-center py-20 text-center">
+          <h3 className="text-lg font-semibold text-muted-foreground">اختر بيانات لعرض الرسوم البيانية</h3>
         </CardContent>
       </Card>
     );
   }
 
+  // If forceTrends, directly render trend charts
+  if (forceTrends) {
+    return <TrendChart groups={groups} />;
+  }
+
   return (
-    <div className="space-y-4">
-      <Tabs defaultValue="metrics" dir="rtl">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="metrics">المؤشرات الرئيسية</TabsTrigger>
-          <TabsTrigger value="margins">الهوامش</TabsTrigger>
-          <TabsTrigger value="expenses">المصروفات</TabsTrigger>
-          <TabsTrigger value="radar">مقارنة رادار</TabsTrigger>
-        </TabsList>
-        <TabsContent value="metrics">
-          <KeyMetricsChart companies={selectedCompanies} />
-        </TabsContent>
-        <TabsContent value="margins">
-          <MarginGauge companies={selectedCompanies} />
-        </TabsContent>
-        <TabsContent value="expenses">
-          <ExpenseBreakdownChart companies={selectedCompanies} />
-        </TabsContent>
-        <TabsContent value="radar">
-          <RadarComparison companies={selectedCompanies} />
-        </TabsContent>
-      </Tabs>
-    </div>
+    <Tabs defaultValue="metrics">
+      <TabsList className="mb-4 grid w-full grid-cols-5">
+        <TabsTrigger value="metrics">المؤشرات</TabsTrigger>
+        <TabsTrigger value="margins">الهوامش</TabsTrigger>
+        <TabsTrigger value="expenses">المصروفات</TabsTrigger>
+        <TabsTrigger value="radar">رادار</TabsTrigger>
+        <TabsTrigger value="trends">ترند</TabsTrigger>
+      </TabsList>
+      <TabsContent value="metrics"><KeyMetricsChart groups={groups} /></TabsContent>
+      <TabsContent value="margins"><MarginChart groups={groups} /></TabsContent>
+      <TabsContent value="expenses"><ExpenseChart groups={groups} /></TabsContent>
+      <TabsContent value="radar"><RadarView groups={groups} /></TabsContent>
+      <TabsContent value="trends"><TrendChart groups={groups} /></TabsContent>
+    </Tabs>
   );
 }
