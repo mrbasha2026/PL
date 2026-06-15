@@ -13,7 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  ArrowUpRight, ArrowDownRight, Minus, TrendingUp, Building2,
+  ArrowUpRight, ArrowDownRight, Minus, TrendingUp, Building2, Info,
 } from 'lucide-react';
 import { usePnLStore } from '@/lib/pnl-store';
 import {
@@ -25,6 +25,7 @@ import {
   periodToArabic,
   CompanyGroup,
 } from '@/lib/pnl-types';
+import { InfoTooltip } from '@/components/pnl/InfoTooltip';
 
 function CompanyMoMTable({ group, color }: { group: CompanyGroup; color: string }) {
   const datasets = group.datasets;
@@ -36,6 +37,20 @@ function CompanyMoMTable({ group, color }: { group: CompanyGroup; color: string 
       </div>
     );
   }
+
+  // Methodology note footer
+  const methodologyNote = (
+    <div className="border-t px-4 py-3 bg-muted/10">
+      <div className="flex items-start gap-2 text-[10px] text-muted-foreground">
+        <Info className="h-3 w-3 mt-0.5 shrink-0" />
+        <div className="space-y-0.5">
+          <p>التغير % = ((قيمة الشهر الحالي - الشهر السابق) ÷ |الشهر السابق|) × 100</p>
+          <p>🟢 ارتفاع إيجابي — 🔴 انخفاض سلبي — القيم السالبة بالأحمر</p>
+          <p>النسبة % = قيمة البند ÷ الإيرادات × 100</p>
+        </div>
+      </div>
+    </div>
+  );
 
   if (datasets.length === 1) {
     return (
@@ -73,6 +88,7 @@ function CompanyMoMTable({ group, color }: { group: CompanyGroup; color: string 
                     <TableCell className={`text-sm ${isSummary ? 'font-bold' : 'text-muted-foreground'}`}>
                       <span style={{ paddingRight: `${(item.indent || 0) * 20}px` }}>
                         {item.nameAr}
+                        {item.description && <InfoTooltip text={item.description} side="left" />}
                       </span>
                     </TableCell>
                     <TableCell className={`text-center tabular-nums text-sm ${value < 0 ? 'text-red-600' : isSummary ? 'font-bold' : ''}`}>
@@ -85,6 +101,7 @@ function CompanyMoMTable({ group, color }: { group: CompanyGroup; color: string 
             </TableBody>
           </Table>
         </div>
+        {methodologyNote}
       </div>
     );
   }
@@ -94,7 +111,15 @@ function CompanyMoMTable({ group, color }: { group: CompanyGroup; color: string 
   // Where Δ% = change from previous month
 
   return (
-    <div className="overflow-x-auto">
+    <div>
+      {/* Column explanation */}
+      <div className="px-4 py-2 bg-muted/5 border-b text-[10px] text-muted-foreground flex items-center gap-3 flex-wrap">
+        <span>📋 البند المالي = اسم البند بالعربية والإنجليزية</span>
+        <span>💰 القيمة = المبلغ بالعملة</span>
+        <span>📊 النسبة % = البند ÷ الإيرادات × 100</span>
+        <span>📈 التغير % = التغير عن الشهر السابق</span>
+      </div>
+      <div className="overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow className="bg-muted/10">
@@ -135,6 +160,7 @@ function CompanyMoMTable({ group, color }: { group: CompanyGroup; color: string 
                 <TableCell className={`text-sm sticky right-0 bg-background z-10 border-l ${isSummary ? 'font-bold' : 'text-muted-foreground'}`}>
                   <span style={{ paddingRight: `${(item.indent || 0) * 20}px` }}>
                     {item.nameAr}
+                    {item.description && <InfoTooltip text={item.description} side="left" />}
                   </span>
                 </TableCell>
                 {/* First period value */}
@@ -182,6 +208,8 @@ function CompanyMoMTable({ group, color }: { group: CompanyGroup; color: string 
           })}
         </TableBody>
       </Table>
+      </div>
+      {methodologyNote}
     </div>
   );
 }

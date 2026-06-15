@@ -7,6 +7,7 @@ export interface PnLLineItem {
   isSubtotal?: boolean;
   isTotal?: boolean;
   indent?: number;
+  description?: string;
 }
 
 // Each dataset represents ONE company in ONE period
@@ -27,20 +28,20 @@ export interface CompanyGroup {
 
 // Standard P&L line items template
 export const PNL_LINE_ITEMS: PnLLineItem[] = [
-  { name: 'Revenue', nameAr: 'الإيرادات', category: 'revenue', isTotal: true, indent: 0 },
-  { name: 'Cost of Goods Sold', nameAr: 'تكلفة البضاعة المباعة', category: 'expense', indent: 1 },
-  { name: 'Gross Profit', nameAr: 'إجمالي الربح', category: 'profit', isSubtotal: true, indent: 0 },
-  { name: 'Operating Expenses', nameAr: 'المصروفات التشغيلية', category: 'expense', isTotal: true, indent: 0 },
-  { name: 'Selling Expenses', nameAr: 'مصروفات البيع', category: 'expense', indent: 1 },
-  { name: 'General & Administrative', nameAr: 'مصروفات إدارية وعمومية', category: 'expense', indent: 1 },
-  { name: 'Depreciation & Amortization', nameAr: 'الإهلاك والاستنفاد', category: 'expense', indent: 1 },
-  { name: 'Operating Income (EBIT)', nameAr: 'الدخل التشغيلي', category: 'profit', isSubtotal: true, indent: 0 },
-  { name: 'Interest Income', nameAr: 'إيرادات الفوائد', category: 'revenue', indent: 1 },
-  { name: 'Interest Expense', nameAr: 'مصروفات الفوائد', category: 'expense', indent: 1 },
-  { name: 'Other Income/Expense', nameAr: 'إيرادات/مصروفات أخرى', category: 'revenue', indent: 1 },
-  { name: 'Income Before Tax', nameAr: 'الدخل قبل الضريبة', category: 'profit', isSubtotal: true, indent: 0 },
-  { name: 'Income Tax Expense', nameAr: 'مصروف ضريبة الدخل', category: 'expense', indent: 1 },
-  { name: 'Net Income', nameAr: 'صافي الدخل', category: 'profit', isTotal: true, indent: 0 },
+  { name: 'Revenue', nameAr: 'الإيرادات', category: 'revenue', isTotal: true, indent: 0, description: 'إجمالي المبالغ المحصلة من المبيعات والخدمات قبل خصم أي تكاليف — Total revenue from sales and services before any deductions' },
+  { name: 'Cost of Goods Sold', nameAr: 'تكلفة البضاعة المباعة', category: 'expense', indent: 1, description: 'التكلفة المباشرة للمنتجات أو الخدمات المباعة — Direct cost of products or services sold' },
+  { name: 'Gross Profit', nameAr: 'إجمالي الربح', category: 'profit', isSubtotal: true, indent: 0, description: 'الإيرادات ناقص تكلفة البضاعة المباعة — Revenue minus COGS. يشير إلى كفاءة الإنتاج' },
+  { name: 'Operating Expenses', nameAr: 'المصروفات التشغيلية', category: 'expense', isTotal: true, indent: 0, description: 'إجمالي المصروفات التشغيلية包括 البيع والإدارة والإهلاك — Total operating costs including selling, G&A, and depreciation' },
+  { name: 'Selling Expenses', nameAr: 'مصروفات البيع', category: 'expense', indent: 1, description: 'تكاليف التسويق والمبيعات والترويج — Marketing, sales, and promotion costs' },
+  { name: 'General & Administrative', nameAr: 'مصروفات إدارية وعمومية', category: 'expense', indent: 1, description: 'رواتب الإدارة والإيجار والمصروفات العمومية — Management salaries, rent, and general costs' },
+  { name: 'Depreciation & Amortization', nameAr: 'الإهلاك والاستنفاد', category: 'expense', indent: 1, description: 'توزيع تكلفة الأصول الثابتة والشهرة على عمرها — Allocating asset costs over their useful life' },
+  { name: 'Operating Income (EBIT)', nameAr: 'الدخل التشغيلي', category: 'profit', isSubtotal: true, indent: 0, description: 'الربح من العمليات التشغيلية قبل الفوائد والضرائب — Profit from operations before interest and taxes' },
+  { name: 'Interest Income', nameAr: 'إيرادات الفوائد', category: 'revenue', indent: 1, description: 'العوائد من الاستثمارات والقروض — Returns from investments and loans' },
+  { name: 'Interest Expense', nameAr: 'مصروفات الفوائد', category: 'expense', indent: 1, description: 'تكلفة القروض والديون — Cost of borrowing and debt' },
+  { name: 'Other Income/Expense', nameAr: 'إيرادات/مصروفات أخرى', category: 'revenue', indent: 1, description: 'بنود غير تشغيلية مثل أرباح الاستثمار أو خسائر الاستبعاد — Non-operating items like investment gains or impairment losses' },
+  { name: 'Income Before Tax', nameAr: 'الدخل قبل الضريبة', category: 'profit', isSubtotal: true, indent: 0, description: 'الربح قبل خصم ضرائب الدخل — Profit before deducting income tax' },
+  { name: 'Income Tax Expense', nameAr: 'مصروف ضريبة الدخل', category: 'expense', indent: 1, description: 'الضريبة المستحقة على الأرباح — Tax owed on profits' },
+  { name: 'Net Income', nameAr: 'صافي الدخل', category: 'profit', isTotal: true, indent: 0, description: 'الربح النهائي بعد خصم جميع التكاليف والضرائب — Final profit after all costs and taxes. المعروف أيضاً بالنتيجة الصافية' },
 ];
 
 export function getLineItemKey(name: string): string {
@@ -70,6 +71,7 @@ export interface FinancialRatio {
   nameEn: string;
   formula: (data: Record<string, number>) => number | null;
   format: 'percentage' | 'ratio' | 'number';
+  description?: string;
 }
 
 export const FINANCIAL_RATIOS: FinancialRatio[] = [
@@ -79,6 +81,7 @@ export const FINANCIAL_RATIOS: FinancialRatio[] = [
     nameEn: 'Gross Margin',
     formula: (d) => d['revenue'] ? (d['gross_profit'] / d['revenue']) * 100 : null,
     format: 'percentage',
+    description: 'نسبة الربح الإجمالي إلى الإيرادات — indicates production efficiency. كلما ارتفعت كان أفضل',
   },
   {
     key: 'operating_margin',
@@ -86,6 +89,7 @@ export const FINANCIAL_RATIOS: FinancialRatio[] = [
     nameEn: 'Operating Margin',
     formula: (d) => d['revenue'] ? (d['operating_income_ebit'] / d['revenue']) * 100 : null,
     format: 'percentage',
+    description: 'نسبة الدخل التشغيلي إلى الإيرادات — measures operational efficiency. أعلى = أكثر كفاءة',
   },
   {
     key: 'net_margin',
@@ -93,6 +97,7 @@ export const FINANCIAL_RATIOS: FinancialRatio[] = [
     nameEn: 'Net Margin',
     formula: (d) => d['revenue'] ? (d['net_income'] / d['revenue']) * 100 : null,
     format: 'percentage',
+    description: 'نسبة صافي الدخل إلى الإيرادات — the bottom line. النسبة المئوية من كل ريال تحقق كربح صافٍ',
   },
   {
     key: 'cogs_ratio',
@@ -100,6 +105,7 @@ export const FINANCIAL_RATIOS: FinancialRatio[] = [
     nameEn: 'COGS Ratio',
     formula: (d) => d['revenue'] ? (d['cost_of_goods_sold'] / d['revenue']) * 100 : null,
     format: 'percentage',
+    description: 'نسبة تكلفة المبيعات إلى الإيرادات — lower is better. أقل = هوامش أعلى',
   },
   {
     key: 'opex_ratio',
@@ -107,6 +113,7 @@ export const FINANCIAL_RATIOS: FinancialRatio[] = [
     nameEn: 'OpEx Ratio',
     formula: (d) => d['revenue'] ? (d['operating_expenses'] / d['revenue']) * 100 : null,
     format: 'percentage',
+    description: 'نسبة المصروفات التشغيلية إلى الإيرادات — measures cost control. أقل = تحكم أفضل في التكاليف',
   },
   {
     key: 'tax_rate',
@@ -114,6 +121,7 @@ export const FINANCIAL_RATIOS: FinancialRatio[] = [
     nameEn: 'Effective Tax Rate',
     formula: (d) => d['income_before_tax'] ? (d['income_tax_expense'] / d['income_before_tax']) * 100 : null,
     format: 'percentage',
+    description: 'معدل الضريبة الفعلي المدفوع — actual tax rate paid on pre-tax income',
   },
   {
     key: 'interest_coverage',
@@ -121,6 +129,7 @@ export const FINANCIAL_RATIOS: FinancialRatio[] = [
     nameEn: 'Interest Coverage',
     formula: (d) => d['interest_expense'] ? d['operating_income_ebit'] / d['interest_expense'] : null,
     format: 'ratio',
+    description: 'عدد مرات تغطية الدخل التشغيلي لمصروفات الفوائد — higher = safer. أعلى من 3x يعتبر آمن',
   },
 ];
 

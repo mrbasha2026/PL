@@ -7,7 +7,7 @@ import { Separator } from '@/components/ui/separator';
 import {
   TrendingUp, TrendingDown, DollarSign, Percent,
   BarChart3, ArrowUpRight, ArrowDownRight, Minus,
-  Building2, Calendar, Shield
+  Building2, Calendar, Shield, Info
 } from 'lucide-react';
 import { usePnLStore } from '@/lib/pnl-store';
 import {
@@ -20,12 +20,14 @@ import {
   getLineItemKey,
   FINANCIAL_RATIOS,
 } from '@/lib/pnl-types';
+import { InfoTooltip } from '@/components/pnl/InfoTooltip';
 
 function KPICard({
   title,
   titleEn,
   value,
   subtitle,
+  tooltipText,
   trend,
   icon: Icon,
   color,
@@ -34,6 +36,7 @@ function KPICard({
   titleEn: string;
   value: string;
   subtitle?: string;
+  tooltipText?: string;
   trend?: number | null;
   icon: React.ElementType;
   color: string;
@@ -47,6 +50,7 @@ function KPICard({
             <p className="text-xs font-medium text-muted-foreground">
               {title}
               <span className="opacity-50 mr-1">({titleEn})</span>
+              {tooltipText && <InfoTooltip text={tooltipText} side="bottom" />}
             </p>
             <p className="text-xl font-bold tabular-nums" style={{ color }}>
               {value}
@@ -135,6 +139,7 @@ export function ExecutiveSummary() {
                 title="الإيرادات"
                 titleEn="Revenue"
                 value={formatNumber(revenue, latest.currency)}
+                tooltipText="إجمالي المبيعات والخدمات — Total sales and services revenue"
                 trend={revGrowth}
                 icon={DollarSign}
                 color={color}
@@ -144,6 +149,7 @@ export function ExecutiveSummary() {
                 titleEn="Gross Profit"
                 value={formatNumber(grossProfit, latest.currency)}
                 subtitle={`هامش ${grossMargin.toFixed(1)}%`}
+                tooltipText="الإيرادات - تكلفة المبيعات — Revenue minus cost of goods sold"
                 icon={TrendingUp}
                 color="#059669"
               />
@@ -152,6 +158,7 @@ export function ExecutiveSummary() {
                 titleEn="Net Income"
                 value={formatNumber(netIncome, latest.currency)}
                 subtitle={`هامش ${netMargin.toFixed(1)}%`}
+                tooltipText="الربح النهائي بعد جميع الخصومات — Final profit after all deductions"
                 trend={netGrowth}
                 icon={TrendingUp}
                 color="#0d9488"
@@ -160,6 +167,7 @@ export function ExecutiveSummary() {
                 title="الدخل التشغيلي"
                 titleEn="EBIT"
                 value={formatNumber(ebit, latest.currency)}
+                tooltipText="الدخل من العمليات قبل الفوائد والضرائب — Operating profit before interest and taxes"
                 icon={BarChart3}
                 color="#d97706"
               />
@@ -174,7 +182,10 @@ export function ExecutiveSummary() {
 
                 return (
                   <div key={ratio.key} className="rounded-lg border bg-muted/20 p-2.5 text-center">
-                    <p className="text-[10px] font-medium text-muted-foreground mb-0.5">{ratio.nameAr}</p>
+                    <p className="text-[10px] font-medium text-muted-foreground mb-0.5">
+                      {ratio.nameAr}
+                      {ratio.description && <InfoTooltip text={ratio.description} side="bottom" />}
+                    </p>
                     <p className="text-sm font-bold tabular-nums">
                       {ratio.format === 'percentage' ? formatPercentage(val) : val !== null ? val.toFixed(2) : '—'}
                     </p>
@@ -266,6 +277,18 @@ export function ExecutiveSummary() {
           </Card>
         </>
       )}
+
+      {/* Methodology footnote */}
+      <div className="rounded-lg border bg-muted/10 p-3">
+        <div className="flex items-start gap-2 text-[10px] text-muted-foreground">
+          <Info className="h-3 w-3 mt-0.5 shrink-0" />
+          <div className="space-y-0.5">
+            <p>الأسهم 🟢 تشير للتحسن عن الفترة السابقة — 🔴 تشير للتراجع</p>
+            <p>الهوامش محسوبة: هامش الربح = (الربح ÷ الإيرادات) × 100</p>
+            <p>النسبة المئوية للتغير = ((القيمة الحالية - السابقة) ÷ |القيمة السابقة|) × 100</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

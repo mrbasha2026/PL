@@ -94,3 +94,22 @@ Work Log:
 - Added "Reset All" button to clear all filters at once
 - Green (#4CAF50) accent on active filters matching Dealz Tree brand
 - Build passes successfully, no lint errors
+
+---
+Task ID: 4
+Agent: Main Agent
+Task: Add explanatory notes and annotations throughout the dashboard
+
+Work Log:
+- Added `description` field to PnLLineItem and FinancialRatio interfaces in pnl-types.ts
+- Added bilingual Arabic+English descriptions for all 14 P&L line items and 7 financial ratios
+- Created InfoTooltip.tsx reusable component (small info icon with hover tooltip)
+- Created Tooltip UI component at components/ui/tooltip.tsx (shadcn/ui pattern with @radix-ui/react-tooltip)
+- Updated PnLTable.tsx: InfoTooltip next to each line item name + footnotes at bottom
+- Updated ExecutiveSummary.tsx: InfoTooltip on KPI cards, ratio names + methodology footnote
+- Updated FinancialRatios.tsx: InfoTooltip on each ratio name + methodology notes
+- Updated CompanyMoM.tsx: InfoTooltip on line items + column explanation + methodology footnotes
+- Updated PnLComparison.tsx: InfoTooltip on metrics + methodology footnote
+- Created Glossary.tsx: comprehensive glossary with P&L Terms, Financial Ratios, Calculation Methodology
+- Updated page.tsx: added 8th tab "دليل المصطلحات" with BookOpen icon
+- Build passes successfully, no lint errors

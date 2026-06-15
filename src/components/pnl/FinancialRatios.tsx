@@ -12,7 +12,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  Calculator, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Minus,
+  Calculator, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Minus, Info,
 } from 'lucide-react';
 import { usePnLStore } from '@/lib/pnl-store';
 import {
@@ -22,6 +22,7 @@ import {
   formatPercentage,
   calcGrowth,
 } from '@/lib/pnl-types';
+import { InfoTooltip } from '@/components/pnl/InfoTooltip';
 
 export function FinancialRatios() {
   const { getFiltered } = usePnLStore();
@@ -74,6 +75,7 @@ export function FinancialRatios() {
                   <TableCell className="font-medium">
                     {ratio.nameAr}
                     <span className="mr-1 text-xs text-muted-foreground">({ratio.nameEn})</span>
+                    {ratio.description && <InfoTooltip text={ratio.description} side="left" />}
                   </TableCell>
                   {groups.map((group, gIdx) => {
                     const latest = group.datasets[group.datasets.length - 1];
@@ -136,6 +138,7 @@ export function FinancialRatios() {
                   <TableCell className="font-medium">
                     {ratio.nameAr}
                     <span className="mr-1 text-xs text-muted-foreground">({ratio.nameEn})</span>
+                    {ratio.description && <InfoTooltip text={ratio.description} side="left" />}
                   </TableCell>
                   {groups.map((group) => {
                     const latest = group.datasets[group.datasets.length - 1];
@@ -217,6 +220,18 @@ export function FinancialRatios() {
           </CardContent>
         </Card>
       )}
+
+      {/* Methodology note */}
+      <div className="rounded-lg border bg-muted/10 p-3">
+        <div className="flex items-start gap-2 text-[10px] text-muted-foreground">
+          <Info className="h-3 w-3 mt-0.5 shrink-0" />
+          <div className="space-y-0.5">
+            <p>جميع النسب محسوبة من بيانات الفترة الأحدث المحددة في الفلاتر</p>
+            <p>السهم الأخضر = تحسن عن الفترة السابقة — السهم الأحمر = تراجع</p>
+            <p>النسب المئوية: (البند ÷ الإيرادات) × 100 | نسب التغطية: الدخل التشغيلي ÷ الفوائد</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

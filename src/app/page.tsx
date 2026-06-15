@@ -5,7 +5,7 @@ import Image from 'next/image';
 import {
   Table2, BarChart3, GitCompareArrows,
   Sparkles, Calculator, FileText, TrendingUp, Database, Clock,
-  CalendarDays,
+  CalendarDays, BookOpen,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,7 @@ import { PnLComparison } from '@/components/pnl/PnLComparison';
 import { ExecutiveSummary } from '@/components/pnl/ExecutiveSummary';
 import { FinancialRatios } from '@/components/pnl/FinancialRatios';
 import { CompanyMoM } from '@/components/pnl/CompanyMoM';
+import { Glossary } from '@/components/pnl/Glossary';
 
 export default function Home() {
   const { companies, selectedCompanyNames, selectedPeriods, clearAll, lastUpdated } = usePnLStore();
@@ -139,7 +140,7 @@ export default function Home() {
 
             {/* Report Tabs */}
             <Tabs defaultValue="summary" className="w-full">
-              <TabsList className="mb-5 grid h-auto w-full grid-cols-4 gap-1 rounded-xl bg-muted/50 p-1 sm:grid-cols-7">
+              <TabsList className="mb-5 grid h-auto w-full grid-cols-4 gap-1 rounded-xl bg-muted/50 p-1 sm:grid-cols-8">
                 <TabsTrigger value="summary" className="gap-1.5 rounded-lg text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm">
                   <FileText className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">الملخص التنفيذي</span>
@@ -175,6 +176,11 @@ export default function Home() {
                   <span className="hidden sm:inline">التحليل الترندي</span>
                   <span className="sm:hidden">ترند</span>
                 </TabsTrigger>
+                <TabsTrigger value="glossary" className="gap-1.5 rounded-lg text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                  <BookOpen className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">دليل المصطلحات</span>
+                  <span className="sm:hidden">مصطلحات</span>
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="summary"><ExecutiveSummary /></TabsContent>
@@ -184,6 +190,7 @@ export default function Home() {
               <TabsContent value="mom"><CompanyMoM /></TabsContent>
               <TabsContent value="charts"><PnLCharts /></TabsContent>
               <TabsContent value="trends"><PnLCharts forceTrends /></TabsContent>
+              <TabsContent value="glossary"><Glossary /></TabsContent>
             </Tabs>
           </div>
         )}

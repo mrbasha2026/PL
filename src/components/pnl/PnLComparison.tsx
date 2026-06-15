@@ -4,12 +4,13 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { TrendingUp, TrendingDown, Minus, ArrowUpRight, ArrowDownRight, GitCompareArrows } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, ArrowUpRight, ArrowDownRight, GitCompareArrows, Info } from 'lucide-react';
 import { usePnLStore } from '@/lib/pnl-store';
 import { COMPANY_COLORS, groupByCompany, formatNumber, CompanyPnL } from '@/lib/pnl-types';
+import { InfoTooltip } from '@/components/pnl/InfoTooltip';
 
-function MetricCard({ label, labelEn, value, currency, color, isBest }: {
-  label: string; labelEn: string; value: number; currency: string; color: string; isBest?: boolean;
+function MetricCard({ label, labelEn, value, currency, color, isBest, tooltipText }: {
+  label: string; labelEn: string; value: number; currency: string; color: string; isBest?: boolean; tooltipText?: string;
 }) {
   const absVal = Math.abs(value);
   let formatted: string;
@@ -21,7 +22,9 @@ function MetricCard({ label, labelEn, value, currency, color, isBest }: {
   return (
     <div className={`rounded-xl border p-4 transition-all ${isBest ? 'ring-2 shadow-md' : 'hover:shadow-sm'}`}
       style={{ borderColor: isBest ? color : undefined }}>
-      <div className="mb-1 text-xs text-muted-foreground">{label} <span className="opacity-50">({labelEn})</span></div>
+      <div className="mb-1 text-xs text-muted-foreground">{label} <span className="opacity-50">({labelEn})</span>
+        {tooltipText && <InfoTooltip text={tooltipText} side="bottom" />}
+      </div>
       <div className="text-xl font-bold tabular-nums" style={{ color }}>{formatted} {currency}</div>
     </div>
   );
@@ -44,10 +47,10 @@ export function PnLComparison() {
   }
 
   const metrics = [
-    { key: 'revenue', labelAr: 'الإيرادات', labelEn: 'Revenue', higher: true },
-    { key: 'gross_profit', labelAr: 'إجمالي الربح', labelEn: 'Gross Profit', higher: true },
-    { key: 'operating_income_ebit', labelAr: 'الدخل التشغيلي', labelEn: 'EBIT', higher: true },
-    { key: 'net_income', labelAr: 'صافي الدخل', labelEn: 'Net Income', higher: true },
+    { key: 'revenue', labelAr: 'الإيرادات', labelEn: 'Revenue', higher: true, tooltip: 'إجمالي المبيعات والخدمات — Total sales and services revenue' },
+    { key: 'gross_profit', labelAr: 'إجمالي الربح', labelEn: 'Gross Profit', higher: true, tooltip: 'الإيرادات - تكلفة المبيعات — Revenue minus cost of goods sold' },
+    { key: 'operating_income_ebit', labelAr: 'الدخل التشغيلي', labelEn: 'EBIT', higher: true, tooltip: 'الدخل من العمليات قبل الفوائد والضرائب — Operating profit before interest and taxes' },
+    { key: 'net_income', labelAr: 'صافي الدخل', labelEn: 'Net Income', higher: true, tooltip: 'الربح النهائي بعد جميع الخصومات — Final profit after all deductions' },
   ];
 
   return (
@@ -82,6 +85,7 @@ export function PnLComparison() {
                       currency={latest.currency}
                       color={COMPANY_COLORS[gIdx % COMPANY_COLORS.length]}
                       isBest={isBest}
+                      tooltipText={metric.tooltip}
                     />
                   );
                 })}
@@ -119,6 +123,18 @@ export function PnLComparison() {
           </Card>
         );
       })}
+
+      {/* Methodology note */}
+      <div className="rounded-lg border bg-muted/10 p-3">
+        <div className="flex items-start gap-2 text-[10px] text-muted-foreground">
+          <Info className="h-3 w-3 mt-0.5 shrink-0" />
+          <div className="space-y-0.5">
+            <p>الحلقة الملونة تشير لأعلى قيمة بين الشركات — Ring indicates best value</p>
+            <p>الفرق % = ((قيمة الشركة المقارنة - الشركة المرجعية) ÷ |الشركة المرجعية|) × 100</p>
+            <p>الفرق المطلق = القيمة المطلقة للفرق بين الشركتين</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

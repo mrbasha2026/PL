@@ -10,7 +10,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Building2 } from 'lucide-react';
+import { Building2, Info } from 'lucide-react';
 import { usePnLStore } from '@/lib/pnl-store';
 import {
   PNL_LINE_ITEMS,
@@ -19,6 +19,7 @@ import {
   groupByCompany,
   formatNumber,
 } from '@/lib/pnl-types';
+import { InfoTooltip } from '@/components/pnl/InfoTooltip';
 
 export function PnLTable() {
   const { getFiltered, getAggregatedFiltered, dateRangeStart, dateRangeEnd } = usePnLStore();
@@ -94,6 +95,7 @@ export function PnLTable() {
                         <span style={{ paddingRight: `${(item.indent || 0) * 24}px` }}>
                           {item.nameAr}
                           <span className="mr-1.5 text-xs opacity-50">({item.name})</span>
+                          {item.description && <InfoTooltip text={item.description} side="left" />}
                         </span>
                       </TableCell>
                       {aggregated.map((agg) => {
@@ -124,6 +126,15 @@ export function PnLTable() {
                 })}
               </TableBody>
             </Table>
+          </div>
+          <div className="border-t px-4 py-3 bg-muted/10">
+            <div className="flex items-start gap-2 text-[10px] text-muted-foreground">
+              <Info className="h-3 w-3 mt-0.5 shrink-0" />
+              <div className="space-y-1">
+                <p>النسبة % = قيمة البند ÷ الإيرادات × 100 — القيم السلبية باللون الأحمر</p>
+                <p>القيم المعروضة بالشكل المضغوط: K = ألف، M = مليون، B = مليار</p>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -196,6 +207,7 @@ export function PnLTable() {
                       <span style={{ paddingRight: `${(item.indent || 0) * 24}px` }}>
                         {item.nameAr}
                         <span className="mr-1.5 text-xs opacity-50">({item.name})</span>
+                        {item.description && <InfoTooltip text={item.description} side="left" />}
                       </span>
                     </TableCell>
                     {groups.map((group) =>
@@ -228,6 +240,15 @@ export function PnLTable() {
               })}
             </TableBody>
           </Table>
+        </div>
+        <div className="border-t px-4 py-3 bg-muted/10">
+          <div className="flex items-start gap-2 text-[10px] text-muted-foreground">
+            <Info className="h-3 w-3 mt-0.5 shrink-0" />
+            <div className="space-y-1">
+              <p>النسبة % = قيمة البند ÷ الإيرادات × 100 — القيم السلبية باللون الأحمر</p>
+              <p>القيم المعروضة بالشكل المضغوط: K = ألف، M = مليون، B = مليار</p>
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>
