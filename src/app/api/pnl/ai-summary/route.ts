@@ -1,31 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
 import ZAI from 'z-ai-web-dev-sdk';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-// ─── AI Engine Types ──────────────────────────────────────────────────────────
-type AIEngine = 'chatgpt' | 'claude';
-
+// ─── AI Response ──────────────────────────────────────────────────────────────
 interface AIResponse {
   summary: string;
   mode: string;
-  engine: AIEngine;
   model: string;
   tokensUsed: number;
   inputTokens: number;
   outputTokens: number;
-  fallbackUsed: boolean;
-  fallbackReason?: string;
 }
+
+// ─── Free Model Options ──────────────────────────────────────────────────────
+const FREE_MODELS = [
+  { id: 'glm-4-plus', name: 'GLM-4 Plus', desc: 'الأفضل — ذكاء عالي وتحليل مالي متقدم' },
+  { id: 'glm-4-flash', name: 'GLM-4 Flash', desc: 'الأسرع — استجابة فورية للتحليلات السريعة' },
+  { id: 'glm-4-long', name: 'GLM-4 Long', desc: 'للتحليلات الطويلة — يدعم بيانات أكبر' },
+];
 
 // ─── Analysis Modes ──────────────────────────────────────────────────────────
 const ANALYSIS_MODES: Record<string, { systemPrompt: string; maxTokens: number; temperature: number }> = {
   executive: {
     systemPrompt: `أنت محلل مالي محترف ومستشار تنفيذي. قم بتحليل البيانات المالية المقدمة وأجب بالعربية فقط.
 
-قدم تحليلاً بنيويشمل:
+قدم تحليلاً شاملاً يتضمن:
 ## الملخص التنفيذي
 - نظرة عامة مختصرة على أداء كل شركة
 - أهم المؤشرات مع أرقام محددة
@@ -150,21 +151,13 @@ const ANALYSIS_MODES: Record<string, { systemPrompt: string; maxTokens: number; 
   },
 };
 
-// ─── Model Fallback Chain ────────────────────────────────────────────────────
-const MODEL_FALLBACKS: Record<string, string[]> = {
-  'claude-sonnet-4-20250514': ['claude-3-5-sonnet-20241022', 'claude-3-haiku-20240307'],
-  'claude-opus-4-20250514': ['claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022', 'claude-3-haiku-20240307'],
-  'claude-3-5-sonnet-20241022': ['claude-3-haiku-20240307'],
-  'claude-3-haiku-20240307': [],
-};
-
-// ─── Build Z-AI Config (multiple sources) ──────────────────────────────────
+// ─── Load Z-AI Config (3-layer fallback) ────────────────────────────────────
 function getZAIConfig() {
-  // 1. Try env vars first
+  // 1. Try env vars
   const envBaseUrl = process.env.ZAI_BASE_URL;
   const envApiKey = process.env.ZAI_API_KEY;
   if (envBaseUrl && envApiKey) {
-    console.log('[Z-AI] Config loaded from env vars');
+    console.log('[AI] Config from env vars');
     return {
       baseUrl: envBaseUrl,
       apiKey: envApiKey,
@@ -174,28 +167,25 @@ function getZAIConfig() {
     };
   }
 
-  // 2. Try reading config files
+  // 2. Try config files
   const configPaths = [
     path.join(process.cwd(), '.z-ai-config'),
     path.join(os.homedir(), '.z-ai-config'),
     '/etc/.z-ai-config',
   ];
-
   for (const filePath of configPaths) {
     try {
       const configStr = fs.readFileSync(filePath, 'utf-8');
       const config = JSON.parse(configStr);
       if (config.baseUrl && config.apiKey) {
-        console.log('[Z-AI] Config loaded from file:', filePath);
+        console.log('[AI] Config from file:', filePath);
         return config;
       }
-    } catch {
-      // continue to next path
-    }
+    } catch { /* next */ }
   }
 
-  // 3. Hardcoded fallback config (built-in free engine)
-  console.log('[Z-AI] Using built-in fallback config');
+  // 3. Built-in config — always works
+  console.log('[AI] Using built-in config');
   return {
     baseUrl: 'https://internal-api.z.ai/v1',
     apiKey: 'Z.ai',
@@ -205,22 +195,24 @@ function getZAIConfig() {
   };
 }
 
-// ─── ChatGPT Free Engine (GLM-4 Plus) ────────────────────────────────────────
-async function analyzeWithChatGPT(
+// ─── AI Analysis Engine (Free) ──────────────────────────────────────────────
+async function analyzeWithAI(
   prompt: string,
   mode: string,
   analysisConfig: typeof ANALYSIS_MODES.executive,
+  requestedModel: string = 'glm-4-plus',
 ): Promise<AIResponse> {
-  console.log('[ChatGPT] Using z-ai-web-dev-sdk (GLM-4 Plus) — Free');
-
   const config = getZAIConfig();
   const zai = new ZAI(config);
+
+  console.log(`[AI] Analyzing with model: ${requestedModel}`);
 
   const completion = await zai.chat.completions.create({
     messages: [
       { role: 'system', content: analysisConfig.systemPrompt },
       { role: 'user', content: prompt },
     ],
+    model: requestedModel,
     temperature: analysisConfig.temperature,
     max_tokens: analysisConfig.maxTokens,
   });
@@ -241,91 +233,22 @@ async function analyzeWithChatGPT(
     content = 'لم يتم إنشاء تحليل — يرجى المحاولة مرة أخرى';
   }
 
+  const usedModel = completion.model || requestedModel;
+
   return {
     summary: content,
     mode,
-    engine: 'chatgpt',
-    model: completion.model || 'glm-4-plus',
+    model: usedModel,
     tokensUsed: completion.usage?.total_tokens || 0,
     inputTokens: completion.usage?.prompt_tokens || 0,
     outputTokens: completion.usage?.completion_tokens || 0,
-    fallbackUsed: false,
-  };
-}
-
-// ─── Claude AI Engine ────────────────────────────────────────────────────────
-async function analyzeWithClaude(
-  apiKey: string,
-  prompt: string,
-  mode: string,
-  analysisConfig: typeof ANALYSIS_MODES.executive,
-  requestedModel: string,
-): Promise<AIResponse> {
-  const client = new Anthropic({ apiKey });
-
-  const modelsToTry = [requestedModel, ...(MODEL_FALLBACKS[requestedModel] || ['claude-3-5-sonnet-20241022', 'claude-3-haiku-20240307'])];
-  const uniqueModels = [...new Set(modelsToTry)];
-
-  let message: Anthropic.Message | null = null;
-  let usedModel = '';
-  let lastError: any = null;
-
-  for (const model of uniqueModels) {
-    try {
-      console.log(`[Claude] Trying model: ${model}`);
-      message = await client.messages.create({
-        model,
-        max_tokens: analysisConfig.maxTokens,
-        temperature: analysisConfig.temperature,
-        system: analysisConfig.systemPrompt,
-        messages: [{ role: 'user', content: prompt }],
-      });
-      usedModel = model;
-      break;
-    } catch (modelError: any) {
-      console.warn(`[Claude] Model ${model} failed:`, modelError.message);
-      lastError = modelError;
-      // 403 (not allowed), 404 (not found), 400 (credit too low) — try next model
-      if ([400, 403, 404].includes(modelError.status)) {
-        continue;
-      }
-      throw modelError;
-    }
-  }
-
-  if (!message) {
-    throw lastError;
-  }
-
-  let content = '';
-  if (message.content) {
-    for (const block of message.content) {
-      if (block.type === 'text') {
-        content += block.text;
-      }
-    }
-  }
-
-  if (!content || content.trim().length === 0) {
-    content = 'لم يتم إنشاء تحليل — يرجى المحاولة مرة أخرى';
-  }
-
-  return {
-    summary: content,
-    mode,
-    engine: 'claude',
-    model: usedModel,
-    tokensUsed: (message.usage?.input_tokens || 0) + (message.usage?.output_tokens || 0),
-    inputTokens: message.usage?.input_tokens || 0,
-    outputTokens: message.usage?.output_tokens || 0,
-    fallbackUsed: false,
   };
 }
 
 // ─── Main API Handler ────────────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   try {
-    const { prompt, mode = 'executive', engine: preferredEngine } = await request.json();
+    const { prompt, mode = 'executive', model = 'glm-4-plus' } = await request.json();
 
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
       return NextResponse.json(
@@ -336,62 +259,22 @@ export async function POST(request: NextRequest) {
 
     const analysisConfig = ANALYSIS_MODES[mode] || ANALYSIS_MODES.executive;
 
-    // ── ChatGPT Free Mode (no API key needed) ──
-    if (preferredEngine === 'chatgpt') {
-      try {
-        const result = await analyzeWithChatGPT(prompt, mode, analysisConfig);
-        return NextResponse.json(result);
-      } catch (zaiError: any) {
-        console.error('[ChatGPT] Free engine failed:', zaiError.message);
-        return NextResponse.json(
-          { error: `فشل المحرك المجاني: ${zaiError.message || 'خطأ غير معروف'}` },
-          { status: 500 }
-        );
-      }
-    }
-
-    // ── Claude Mode ──
-    const clientApiKey = request.headers.get('x-anthropic-api-key');
-    const clientModel = request.headers.get('x-anthropic-model');
-    const envApiKey = process.env.ANTHROPIC_API_KEY;
-    const apiKey = (clientApiKey && clientApiKey !== 'your-api-key-here')
-      ? clientApiKey
-      : envApiKey;
-    const hasClaudeKey = !!(apiKey && apiKey !== 'your-api-key-here');
-    const requestedModel = clientModel || process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
-
-    // No Claude API key — fall back to ChatGPT free automatically
-    if (!hasClaudeKey) {
-      const result = await analyzeWithChatGPT(prompt, mode, analysisConfig);
-      result.fallbackUsed = true;
-      result.fallbackReason = 'لا يوجد مفتاح Claude API — يتم استخدام ChatGPT المجاني تلقائياً';
-      return NextResponse.json(result);
-    }
-
-    // Try Claude first, fall back to ChatGPT free on failure
+    // Try with requested model, fallback to glm-4-plus if it fails
     try {
-      const result = await analyzeWithClaude(apiKey!, prompt, mode, analysisConfig, requestedModel);
+      const result = await analyzeWithAI(prompt, mode, analysisConfig, model);
       return NextResponse.json(result);
-    } catch (claudeError: any) {
-      console.warn('[Claude] Failed, falling back to ChatGPT free:', claudeError.message);
-
-      // Determine fallback reason
-      let fallbackReason = 'فشل Claude AI — يتم استخدام ChatGPT المجاني';
-      if (claudeError.status === 400 && claudeError.message?.includes('credit balance')) {
-        fallbackReason = 'رصيد Claude API غير كافٍ — يتم استخدام ChatGPT المجاني تلقائياً';
-      } else if (claudeError.status === 401) {
-        fallbackReason = 'مفتاح Claude API غير صالح — يتم استخدام ChatGPT المجاني';
-      } else if (claudeError.status === 403) {
-        fallbackReason = 'النموذج غير متاح لحسابك — يتم استخدام ChatGPT المجاني';
-      } else if (claudeError.status === 429) {
-        fallbackReason = 'تم تجاوز حد طلبات Claude — يتم استخدام ChatGPT المجاني';
+    } catch (modelError: any) {
+      // If requested model failed and it's not glm-4-plus, try the default
+      if (model !== 'glm-4-plus') {
+        console.warn(`[AI] Model ${model} failed, trying glm-4-plus:`, modelError.message);
+        try {
+          const result = await analyzeWithAI(prompt, mode, analysisConfig, 'glm-4-plus');
+          return NextResponse.json(result);
+        } catch {
+          // Both failed, throw original error
+        }
       }
-
-      // Fall back to ChatGPT free
-      const result = await analyzeWithChatGPT(prompt, mode, analysisConfig);
-      result.fallbackUsed = true;
-      result.fallbackReason = fallbackReason;
-      return NextResponse.json(result);
+      throw modelError;
     }
   } catch (error: any) {
     console.error('AI Summary error:', error);
