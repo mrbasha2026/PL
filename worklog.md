@@ -74,3 +74,23 @@ Stage Summary:
 - Month-over-Month comparison tab with per-company period-to-period analysis
 - Excel template now uses 2026 months (Jan-Jun 2026)
 - All features compile and lint successfully
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Redesign CompanyMoM and FilterBar
+
+Work Log:
+- Redesigned CompanyMoM.tsx: each company now has its own tab (inner tabs), not stacked vertically
+- Redesigned CompanyMoM.tsx: all months displayed as columns horizontally with MoM change columns between each pair
+- Each month column shows value, followed by a green-highlighted Δ% change column vs the previous month
+- Single-period companies show a simple table without MoM columns
+- Sticky first column (line item names) for horizontal scrolling with many months
+- Completely redesigned FilterBar.tsx: replaced bulky card layout with compact single-line toolbar
+- Company filter uses Popover with checkbox list (instead of inline buttons)
+- Period filter uses Popover with grid checkbox layout (2 columns)
+- Date range uses native select dropdowns (lighter than shadcn Select)
+- Added "active filter tags" row showing hidden companies/periods as clickable chips to re-add them
+- Added "Reset All" button to clear all filters at once
+- Green (#4CAF50) accent on active filters matching Dealz Tree brand
+- Build passes successfully, no lint errors
