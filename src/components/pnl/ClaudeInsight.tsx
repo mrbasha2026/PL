@@ -10,9 +10,9 @@ import {
 } from 'lucide-react';
 
 interface ClaudeInsightProps {
-  /** The prompt to send to Claude — should contain the financial context */
+  /** The prompt to send to AI — should contain the financial context */
   prompt: string;
-  /** System prompt to guide Claude's analysis */
+  /** System prompt to guide AI's analysis */
   systemPrompt: string;
   /** Title displayed on the card */
   title: string;
@@ -36,32 +36,34 @@ export function ClaudeInsight({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(true);
-  const [tokens, setTokens] = useState<{ input: number; output: number; model: string } | null>(null);
+  const [tokens, setTokens] = useState<{ input: number; output: number; model: string; engine: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
   const generateInsight = useCallback(async () => {
     if (!prompt.trim()) return;
 
+    const savedEngine = localStorage.getItem('ai_engine') || 'chatgpt';
     const clientApiKey = localStorage.getItem('anthropic_api_key');
     const clientModel = localStorage.getItem('anthropic_model') || 'claude-3-5-sonnet-20241022';
-
-    if (!clientApiKey || clientApiKey === 'your-api-key-here') {
-      setError('يرجى إضافة مفتاح Claude API من تبويب التحليل الذكي أولاً');
-      return;
-    }
 
     setLoading(true);
     setError(null);
 
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      // Pass API key only if using Claude engine
+      if (savedEngine === 'claude' && clientApiKey && clientApiKey !== 'your-api-key-here') {
+        headers['x-anthropic-api-key'] = clientApiKey;
+        headers['x-anthropic-model'] = clientModel;
+      }
+
       const response = await fetch('/api/pnl/ai-summary', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-anthropic-api-key': clientApiKey,
-          'x-anthropic-model': clientModel,
-        },
-        body: JSON.stringify({ prompt, mode: 'executive' }),
+        headers,
+        body: JSON.stringify({ prompt, mode: 'executive', engine: savedEngine }),
       });
 
       if (!response.ok) {
@@ -74,10 +76,11 @@ export function ClaudeInsight({
       setTokens({
         input: data.inputTokens || 0,
         output: data.outputTokens || 0,
-        model: data.model || clientModel,
+        model: data.model || (savedEngine === 'chatgpt' ? 'glm-4-plus' : clientModel),
+        engine: data.engine || savedEngine,
       });
     } catch (err: any) {
-      console.error('Claude Insight error:', err);
+      console.error('AI Insight error:', err);
       setError(err.message || 'حدث خطأ أثناء إنشاء التحليل');
     } finally {
       setLoading(false);
@@ -101,19 +104,25 @@ export function ClaudeInsight({
     }
   }, []);
 
+  const engineName = tokens?.engine === 'chatgpt' ? 'ChatGPT' : 'Claude';
+  const engineColor = tokens?.engine === 'chatgpt' ? 'text-emerald-700 dark:text-emerald-400' : 'text-indigo-700 dark:text-indigo-400';
+  const engineBadgeColor = tokens?.engine === 'chatgpt'
+    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400'
+    : 'bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-400';
+
   return (
     <Card className="shadow-sm overflow-hidden border-2 border-indigo-100 dark:border-indigo-900/50">
       <CardHeader
         className="bg-gradient-to-l from-indigo-50 to-indigo-100/50 dark:from-indigo-950/30 dark:to-indigo-900/10 pb-2 cursor-pointer"
         onClick={() => setExpanded(!expanded)}
       >
-        <CardTitle className="flex items-center justify-between text-sm text-indigo-700 dark:text-indigo-400">
+        <CardTitle className={`flex items-center justify-between text-sm ${engineColor}`}>
           <div className="flex items-center gap-2">
             {icon || <Brain className="h-4 w-4" />}
             {title}
             <Badge variant="outline" className="gap-1 text-[9px] bg-white/50 dark:bg-slate-800/50">
-              <Cpu className="h-2.5 w-2.5" />
-              Claude AI
+              {tokens?.engine === 'chatgpt' ? <Zap className="h-2.5 w-2.5" /> : <Cpu className="h-2.5 w-2.5" />}
+              {tokens?.engine === 'chatgpt' ? 'ChatGPT' : 'Claude AI'}
             </Badge>
           </div>
           <div className="flex items-center gap-2">
@@ -131,11 +140,11 @@ export function ClaudeInsight({
                 <Sparkles className="h-6 w-6 text-indigo-500" />
               </div>
               <p className="text-sm text-muted-foreground mb-3 max-w-md">
-                اضغط لإنشاء تحليل ذكي متعمق باستخدام Claude AI
+                اضغط لإنشاء تحليل ذكي متعمق باستخدام الذكاء الاصطناعي
               </p>
               <Button onClick={generateInsight} className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white">
                 <Sparkles className="h-4 w-4" />
-                إنشاء تحليل Claude
+                إنشاء تحليل AI
               </Button>
             </div>
           )}
@@ -155,7 +164,7 @@ export function ClaudeInsight({
                 جارٍ التحليل بالذكاء الاصطناعي...
               </p>
               <p className="text-xs text-muted-foreground">
-                Claude يراجع البيانات وينشئ تحليلاً مخصصاً
+                AI يراجع البيانات وينشئ تحليلاً مخصصاً
               </p>
             </div>
           )}
@@ -178,8 +187,8 @@ export function ClaudeInsight({
               {/* Token info */}
               {tokens && (
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant="outline" className="gap-1 text-[9px] bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-400">
-                    <Cpu className="h-2.5 w-2.5" />
+                  <Badge variant="outline" className={`gap-1 text-[9px] ${engineBadgeColor}`}>
+                    {tokens.engine === 'chatgpt' ? <Zap className="h-2.5 w-2.5" /> : <Cpu className="h-2.5 w-2.5" />}
                     {tokens.model}
                   </Badge>
                   <Badge variant="outline" className="gap-1 text-[9px] bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">

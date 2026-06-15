@@ -69,11 +69,13 @@ const CLAUDE_MODELS = [
 interface AIResponse {
   summary: string;
   mode: string;
-  engine: 'claude';
+  engine: 'chatgpt' | 'claude';
   model: string;
   tokensUsed: number;
   inputTokens: number;
   outputTokens: number;
+  fallbackUsed?: boolean;
+  fallbackReason?: string;
 }
 
 export function AISummary() {
@@ -94,7 +96,7 @@ export function AISummary() {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
 
   // AI Engine selection
-  const [aiEngine, setAiEngine] = useState<'claude'>('claude');
+  const [aiEngine, setAiEngine] = useState<'chatgpt' | 'claude'>('chatgpt');
 
   // API Key settings
   const [showSettings, setShowSettings] = useState(false);
@@ -103,10 +105,11 @@ export function AISummary() {
   const [apiKeySaved, setApiKeySaved] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'connected' | 'error'>('unknown');
 
-  // Load saved API key from localStorage
+  // Load saved settings from localStorage
   useEffect(() => {
     const savedKey = localStorage.getItem('anthropic_api_key');
     const savedModel = localStorage.getItem('anthropic_model');
+    const savedEngine = localStorage.getItem('ai_engine');
     if (savedKey) {
       setApiKey(savedKey);
       setApiKeySaved(true);
@@ -114,17 +117,21 @@ export function AISummary() {
     if (savedModel) {
       setSelectedModel(savedModel);
     }
+    if (savedEngine === 'chatgpt' || savedEngine === 'claude') {
+      setAiEngine(savedEngine);
+    }
   }, []);
 
   const saveApiKey = useCallback(() => {
     if (apiKey.trim()) {
       localStorage.setItem('anthropic_api_key', apiKey.trim());
       localStorage.setItem('anthropic_model', selectedModel);
+      localStorage.setItem('ai_engine', aiEngine);
       setApiKeySaved(true);
       setShowSettings(false);
       setConnectionStatus('unknown');
     }
-  }, [apiKey, selectedModel]);
+  }, [apiKey, selectedModel, aiEngine]);
 
   const clearApiKey = useCallback(() => {
     localStorage.removeItem('anthropic_api_key');
@@ -332,8 +339,8 @@ export function AISummary() {
         'Content-Type': 'application/json',
       };
 
-      // Pass API key from client if available
-      if (clientApiKey && clientApiKey !== 'your-api-key-here') {
+      // Pass API key from client if available and using Claude
+      if (aiEngine === 'claude' && clientApiKey && clientApiKey !== 'your-api-key-here') {
         headers['x-anthropic-api-key'] = clientApiKey;
         headers['x-anthropic-model'] = clientModel;
       }
@@ -341,7 +348,7 @@ export function AISummary() {
       const response = await fetch('/api/pnl/ai-summary', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ prompt, mode }),
+        body: JSON.stringify({ prompt, mode, engine: aiEngine }),
       });
 
       if (!response.ok) {
@@ -463,9 +470,11 @@ export function AISummary() {
                 <Zap className="h-5 w-5 text-amber-500" />
                 <span>التحليل الذكي —</span>
               </div>
-              <Badge variant="outline" className="gap-1 text-xs bg-white/50 dark:bg-slate-800/50">
-                <Cpu className="h-3 w-3" />
-                Claude AI
+              <Badge variant="outline" className={`gap-1 text-xs bg-white/50 dark:bg-slate-800/50 ${
+                aiEngine === 'chatgpt' ? 'text-emerald-700 dark:text-emerald-400' : 'text-violet-700 dark:text-violet-400'
+              }`}>
+                {aiEngine === 'chatgpt' ? <Zap className="h-3 w-3" /> : <Cpu className="h-3 w-3" />}
+                {aiEngine === 'chatgpt' ? 'ChatGPT مجاني' : 'Claude AI'}
               </Badge>
             </CardTitle>
             <div className="flex items-center gap-2">
@@ -473,13 +482,15 @@ export function AISummary() {
               <Badge
                 variant="outline"
                 className={`gap-1 text-[10px] ${
-                  apiKeySaved
+                  aiEngine === 'chatgpt'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400'
+                    : apiKeySaved
                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400'
                     : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400'
                 }`}
               >
-                <Key className="h-3 w-3" />
-                {apiKeySaved ? 'متصل' : 'غير متصل'}
+                {aiEngine === 'chatgpt' ? <Zap className="h-3 w-3" /> : <Key className="h-3 w-3" />}
+                {aiEngine === 'chatgpt' ? 'مجاني' : apiKeySaved ? 'متصل' : 'غير متصل'}
               </Badge>
               <Button
                 onClick={() => setShowSettings(!showSettings)}
@@ -529,11 +540,31 @@ export function AISummary() {
               </Badge>
             ))}
             <div className="flex-1" />
-            {/* Engine Badge */}
-            <Badge variant="outline" className="gap-1 text-[10px] bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-900/20 dark:text-indigo-400">
-              <Cpu className="h-2.5 w-2.5" />
-              Claude AI
-            </Badge>
+            {/* Engine Switcher */}
+            <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-0.5">
+              <button
+                onClick={() => { setAiEngine('chatgpt'); localStorage.setItem('ai_engine', 'chatgpt'); }}
+                className={`text-[10px] px-2.5 py-1 rounded-md transition-all flex items-center gap-1 ${
+                  aiEngine === 'chatgpt'
+                    ? 'bg-background shadow-sm font-bold text-emerald-700'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Zap className="h-2.5 w-2.5" />
+                ChatGPT مجاني
+              </button>
+              <button
+                onClick={() => { setAiEngine('claude'); localStorage.setItem('ai_engine', 'claude'); }}
+                className={`text-[10px] px-2.5 py-1 rounded-md transition-all flex items-center gap-1 ${
+                  aiEngine === 'claude'
+                    ? 'bg-background shadow-sm font-bold text-violet-700'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Cpu className="h-2.5 w-2.5" />
+                Claude
+              </button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -739,12 +770,25 @@ export function AISummary() {
           {/* Response metadata */}
           {currentResponse && (
             <div className="space-y-2">
+              {/* Fallback notice */}
+              {currentResponse.fallbackUsed && currentResponse.fallbackReason && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 dark:border-amber-800 p-2.5">
+                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                  <div className="text-xs text-amber-800 dark:text-amber-300">
+                    <p>{currentResponse.fallbackReason}</p>
+                  </div>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3 flex-wrap">
                   {/* Engine Badge */}
-                  <Badge variant="outline" className="gap-1 text-[10px] bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-400">
-                    <Cpu className="h-3 w-3" />
-                    {`Claude — ${currentResponse.model}`}
+                  <Badge variant="outline" className={`gap-1 text-[10px] ${
+                    currentResponse.engine === 'chatgpt'
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400'
+                      : 'bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-400'
+                  }`}>
+                    {currentResponse.engine === 'chatgpt' ? <Zap className="h-3 w-3" /> : <Cpu className="h-3 w-3" />}
+                    {currentResponse.engine === 'chatgpt' ? `ChatGPT — ${currentResponse.model}` : `Claude — ${currentResponse.model}`}
                   </Badge>
                   <Badge variant="outline" className="gap-1 text-[10px] bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">
                     <MessageSquare className="h-3 w-3" />

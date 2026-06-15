@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import ZAI from 'z-ai-web-dev-sdk';
+
+// ─── AI Engine Types ──────────────────────────────────────────────────────────
+type AIEngine = 'chatgpt' | 'claude';
 
 interface AIResponse {
   summary: string;
   mode: string;
-  engine: 'claude';
+  engine: AIEngine;
   model: string;
   tokensUsed: number;
   inputTokens: number;
   outputTokens: number;
+  fallbackUsed: boolean;
+  fallbackReason?: string;
 }
 
 // ─── Analysis Modes ──────────────────────────────────────────────────────────
@@ -149,6 +155,53 @@ const MODEL_FALLBACKS: Record<string, string[]> = {
   'claude-3-haiku-20240307': [],
 };
 
+// ─── ChatGPT Free Engine (GLM-4 Plus) ────────────────────────────────────────
+async function analyzeWithChatGPT(
+  prompt: string,
+  mode: string,
+  analysisConfig: typeof ANALYSIS_MODES.executive,
+): Promise<AIResponse> {
+  console.log('[ChatGPT] Using z-ai-web-dev-sdk (GLM-4 Plus) — Free');
+
+  const zai = await ZAI.create();
+
+  const completion = await zai.chat.completions.create({
+    messages: [
+      { role: 'system', content: analysisConfig.systemPrompt },
+      { role: 'user', content: prompt },
+    ],
+    temperature: analysisConfig.temperature,
+    max_tokens: analysisConfig.maxTokens,
+  });
+
+  let content = '';
+  if (completion.choices && completion.choices[0]) {
+    const message = completion.choices[0].message;
+    if (typeof message.content === 'string') {
+      content = message.content;
+    } else if (message.content) {
+      content = Array.isArray(message.content)
+        ? message.content.map((c: any) => c.text || c.content || '').join('')
+        : String(message.content);
+    }
+  }
+
+  if (!content || content.trim().length === 0) {
+    content = 'لم يتم إنشاء تحليل — يرجى المحاولة مرة أخرى';
+  }
+
+  return {
+    summary: content,
+    mode,
+    engine: 'chatgpt',
+    model: completion.model || 'glm-4-plus',
+    tokensUsed: completion.usage?.total_tokens || 0,
+    inputTokens: completion.usage?.prompt_tokens || 0,
+    outputTokens: completion.usage?.completion_tokens || 0,
+    fallbackUsed: false,
+  };
+}
+
 // ─── Claude AI Engine ────────────────────────────────────────────────────────
 async function analyzeWithClaude(
   apiKey: string,
@@ -214,15 +267,14 @@ async function analyzeWithClaude(
     tokensUsed: (message.usage?.input_tokens || 0) + (message.usage?.output_tokens || 0),
     inputTokens: message.usage?.input_tokens || 0,
     outputTokens: message.usage?.output_tokens || 0,
+    fallbackUsed: false,
   };
 }
-
-
 
 // ─── Main API Handler ────────────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   try {
-    const { prompt, mode = 'executive' } = await request.json();
+    const { prompt, mode = 'executive', engine: preferredEngine } = await request.json();
 
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
       return NextResponse.json(
@@ -233,7 +285,21 @@ export async function POST(request: NextRequest) {
 
     const analysisConfig = ANALYSIS_MODES[mode] || ANALYSIS_MODES.executive;
 
-    // Check for Claude API key
+    // ── ChatGPT Free Mode (no API key needed) ──
+    if (preferredEngine === 'chatgpt') {
+      try {
+        const result = await analyzeWithChatGPT(prompt, mode, analysisConfig);
+        return NextResponse.json(result);
+      } catch (zaiError: any) {
+        console.error('[ChatGPT] Free engine failed:', zaiError.message);
+        return NextResponse.json(
+          { error: `فشل المحرك المجاني: ${zaiError.message || 'خطأ غير معروف'}` },
+          { status: 500 }
+        );
+      }
+    }
+
+    // ── Claude Mode ──
     const clientApiKey = request.headers.get('x-anthropic-api-key');
     const clientModel = request.headers.get('x-anthropic-model');
     const envApiKey = process.env.ANTHROPIC_API_KEY;
@@ -243,45 +309,38 @@ export async function POST(request: NextRequest) {
     const hasClaudeKey = !!(apiKey && apiKey !== 'your-api-key-here');
     const requestedModel = clientModel || process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
 
-    // No Claude API key provided
+    // No Claude API key — fall back to ChatGPT free automatically
     if (!hasClaudeKey) {
-      return NextResponse.json(
-        { error: 'يرجى إضافة مفتاح Claude API من الإعدادات أولاً. يمكنك الحصول على مفتاح من https://console.anthropic.com/' },
-        { status: 401 }
-      );
+      const result = await analyzeWithChatGPT(prompt, mode, analysisConfig);
+      result.fallbackUsed = true;
+      result.fallbackReason = 'لا يوجد مفتاح Claude API — يتم استخدام ChatGPT المجاني تلقائياً';
+      return NextResponse.json(result);
     }
 
-    // Try Claude with model fallback
+    // Try Claude first, fall back to ChatGPT free on failure
     try {
       const result = await analyzeWithClaude(apiKey!, prompt, mode, analysisConfig, requestedModel);
       return NextResponse.json(result);
     } catch (claudeError: any) {
-      console.error('[Claude] All models failed:', claudeError.message);
+      console.warn('[Claude] Failed, falling back to ChatGPT free:', claudeError.message);
 
-      // Return specific error messages
-      let errorMessage = 'فشل في إنشاء التحليل الذكي';
-      let statusCode = 500;
-
+      // Determine fallback reason
+      let fallbackReason = 'فشل Claude AI — يتم استخدام ChatGPT المجاني';
       if (claudeError.status === 400 && claudeError.message?.includes('credit balance')) {
-        errorMessage = 'رصيد Claude API غير كافٍ. يرجى الذهاب إلى https://console.anthropic.com/settings/billing لشراء رصيد إضافي، أو جرّب استخدام نموذج Claude 3 Haiku (الأرخص)';
-        statusCode = 402;
+        fallbackReason = 'رصيد Claude API غير كافٍ — يتم استخدام ChatGPT المجاني تلقائياً';
       } else if (claudeError.status === 401) {
-        errorMessage = 'مفتاح Claude API غير صالح. يرجى التحقق من المفتاح في الإعدادات';
-        statusCode = 401;
+        fallbackReason = 'مفتاح Claude API غير صالح — يتم استخدام ChatGPT المجاني';
       } else if (claudeError.status === 403) {
-        errorMessage = 'النموذج المطلوب غير متاح لحسابك. جرّب استخدام Claude 3.5 Sonnet أو Claude 3 Haiku';
-        statusCode = 403;
+        fallbackReason = 'النموذج غير متاح لحسابك — يتم استخدام ChatGPT المجاني';
       } else if (claudeError.status === 429) {
-        errorMessage = 'تم تجاوز حد طلبات Claude. يرجى الانتظار قليلاً ثم المحاولة مرة أخرى';
-        statusCode = 429;
-      } else if (claudeError.status === 529) {
-        errorMessage = 'خوادم Claude محملة بشكل زائد. يرجى المحاولة بعد بضع دقائق';
-        statusCode = 503;
-      } else {
-        errorMessage = `فشل في إنشاء التحليل الذكي: ${claudeError.message || 'خطأ غير معروف'}`;
+        fallbackReason = 'تم تجاوز حد طلبات Claude — يتم استخدام ChatGPT المجاني';
       }
 
-      return NextResponse.json({ error: errorMessage }, { status: statusCode });
+      // Fall back to ChatGPT free
+      const result = await analyzeWithChatGPT(prompt, mode, analysisConfig);
+      result.fallbackUsed = true;
+      result.fallbackReason = fallbackReason;
+      return NextResponse.json(result);
     }
   } catch (error: any) {
     console.error('AI Summary error:', error);
