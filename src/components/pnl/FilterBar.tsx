@@ -6,16 +6,25 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import {
-  Building2, Calendar, CheckCheck, X, Trash2, Filter,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Building2, Calendar, CheckCheck, X, Trash2, Filter, ArrowRightLeft,
 } from 'lucide-react';
 import { usePnLStore } from '@/lib/pnl-store';
-import { COMPANY_COLORS, groupByCompany } from '@/lib/pnl-types';
+import { COMPANY_COLORS, groupByCompany, periodToArabic } from '@/lib/pnl-types';
 
 export function FilterBar() {
   const {
     companies,
     selectedCompanyNames,
     selectedPeriods,
+    dateRangeStart,
+    dateRangeEnd,
     toggleCompanyName,
     togglePeriod,
     selectAllCompanies,
@@ -23,6 +32,7 @@ export function FilterBar() {
     selectAllPeriods,
     deselectAllPeriods,
     removeCompanyGroup,
+    setDateRange,
   } = usePnLStore();
 
   const groups = groupByCompany(companies);
@@ -153,6 +163,79 @@ export function FilterBar() {
               );
             })}
           </div>
+        </div>
+
+        <Separator className="!my-1" />
+
+        {/* Date Range Selector */}
+        <div>
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+              <ArrowRightLeft className="h-4 w-4" />
+              نطاق التجميع
+              <span className="text-xs font-normal">(Aggregation Range)</span>
+            </div>
+            {(dateRangeStart || dateRangeEnd) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 text-[10px] px-2 text-red-500 hover:text-red-600"
+                onClick={() => setDateRange(null, null)}
+              >
+                <X className="h-3 w-3 ml-1" />
+                إعادة تعيين
+              </Button>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <label className="mb-1 block text-xs text-muted-foreground">من (From)</label>
+              <Select
+                value={dateRangeStart || '__all__'}
+                onValueChange={(val) => setDateRange(val === '__all__' ? null : val, dateRangeEnd)}
+              >
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="الكل" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">الكل — All</SelectItem>
+                  {allPeriods.map((period) => (
+                    <SelectItem key={period} value={period}>
+                      {period} ({periodToArabic(period)})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="pt-5 text-muted-foreground">—</div>
+            <div className="flex-1">
+              <label className="mb-1 block text-xs text-muted-foreground">إلى (To)</label>
+              <Select
+                value={dateRangeEnd || '__all__'}
+                onValueChange={(val) => setDateRange(dateRangeStart, val === '__all__' ? null : val)}
+              >
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="الكل" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">الكل — All</SelectItem>
+                  {allPeriods.map((period) => (
+                    <SelectItem key={period} value={period}>
+                      {period} ({periodToArabic(period)})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          {dateRangeStart && dateRangeEnd && (
+            <div className="mt-2 flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 p-2 text-xs text-green-800">
+              <ArrowRightLeft className="h-3.5 w-3.5 shrink-0" />
+              <span>
+                تجميع البيانات من {periodToArabic(dateRangeStart)} إلى {periodToArabic(dateRangeEnd)}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Active filter summary */}

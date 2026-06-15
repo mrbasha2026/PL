@@ -176,6 +176,35 @@ export function groupByCompany(datasets: CompanyPnL[]): CompanyGroup[] {
   }));
 }
 
+// Aggregate multiple periods of the same company into a single consolidated data object
+export function aggregatePeriods(datasets: CompanyPnL[]): Record<string, number> {
+  const result: Record<string, number> = {};
+  datasets.forEach(ds => {
+    Object.entries(ds.data).forEach(([key, val]) => {
+      result[key] = (result[key] || 0) + val;
+    });
+  });
+  return result;
+}
+
+// Arabic month names for period label generation
+export const ARABIC_MONTHS: Record<string, string> = {
+  'Jan': 'يناير', 'Feb': 'فبراير', 'Mar': 'مارس', 'Apr': 'أبريل',
+  'May': 'مايو', 'Jun': 'يونيو', 'Jul': 'يوليو', 'Aug': 'أغسطس',
+  'Sep': 'سبتمبر', 'Oct': 'أكتوبر', 'Nov': 'نوفمبر', 'Dec': 'ديسمبر',
+  'Q1': 'الربع الأول', 'Q2': 'الربع الثاني', 'Q3': 'الربع الثالث', 'Q4': 'الربع الرابع',
+};
+
+export function periodToArabic(period: string): string {
+  // Try patterns like "Jan 2026", "Q1 2024", etc.
+  for (const [en, ar] of Object.entries(ARABIC_MONTHS)) {
+    if (period.startsWith(en + ' ') || period.startsWith(en + '-')) {
+      return period.replace(en, ar);
+    }
+  }
+  return period;
+}
+
 // Calculate growth between two datasets
 export function calcGrowth(current: Record<string, number>, previous: Record<string, number>, key: string): number | null {
   const curr = current[key];

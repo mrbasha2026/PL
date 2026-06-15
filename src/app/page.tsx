@@ -1,9 +1,11 @@
 'use client';
 
 import React from 'react';
+import Image from 'next/image';
 import {
-  Table2, BarChart3, GitCompareArrows, Building2,
+  Table2, BarChart3, GitCompareArrows,
   Sparkles, Calculator, FileText, TrendingUp, Database, Clock,
+  CalendarDays,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -17,6 +19,7 @@ import { PnLCharts } from '@/components/pnl/PnLCharts';
 import { PnLComparison } from '@/components/pnl/PnLComparison';
 import { ExecutiveSummary } from '@/components/pnl/ExecutiveSummary';
 import { FinancialRatios } from '@/components/pnl/FinancialRatios';
+import { CompanyMoM } from '@/components/pnl/CompanyMoM';
 
 export default function Home() {
   const { companies, selectedCompanyNames, selectedPeriods, clearAll, lastUpdated } = usePnLStore();
@@ -30,15 +33,23 @@ export default function Home() {
       <header className="sticky top-0 z-50 border-b bg-white/90 backdrop-blur-lg shadow-sm">
         <div className="mx-auto flex h-14 max-w-[1400px] items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-teal-600 to-teal-700 text-white shadow-md">
-              <Building2 className="h-4.5 w-4.5" />
-            </div>
+            <Image
+              src="/logo.png"
+              alt="Dealz Tree"
+              width={36}
+              height={36}
+              className="h-9 w-auto"
+              priority
+            />
             <div>
-              <h1 className="text-base font-bold leading-tight tracking-tight">
-                لوحة مقارنة الأرباح والخسائر
-              </h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-base font-bold leading-tight tracking-tight text-[#4CAF50]">
+                  ديلز تري
+                </h1>
+                <span className="text-xs text-muted-foreground font-medium">Dealz Tree</span>
+              </div>
               <p className="text-[10px] text-muted-foreground tracking-wide">
-                PROFIT & LOSS COMPARISON DASHBOARD
+                لوحة مقارنة الأرباح والخسائر — P&L COMPARISON DASHBOARD
               </p>
             </div>
           </div>
@@ -48,7 +59,7 @@ export default function Home() {
               <>
                 <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
                   <Database className="h-3.5 w-3.5" />
-                  <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-semibold text-teal-800">
+                  <span className="rounded-full bg-[#4CAF50]/10 px-2 py-0.5 text-[10px] font-semibold text-[#4CAF50]">
                     {companyCount} {companyCount === 1 ? 'شركة' : 'شركات'}
                   </span>
                   <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
@@ -83,7 +94,7 @@ export default function Home() {
         {!hasData && (
           <div className="mb-10">
             <div className="mb-8 text-center">
-              <div className="mb-4 inline-flex items-center gap-1.5 rounded-full bg-teal-100 px-4 py-1.5 text-xs font-semibold text-teal-800">
+              <div className="mb-4 inline-flex items-center gap-1.5 rounded-full bg-[#4CAF50]/10 px-4 py-1.5 text-xs font-semibold text-[#4CAF50]">
                 <Sparkles className="h-3.5 w-3.5" />
                 منصة تحليل مالي احترافية
               </div>
@@ -102,7 +113,7 @@ export default function Home() {
 
             <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-3">
               {[
-                { step: 1, title: 'حمّل القالب', desc: 'نزّل قالب Excel المقترح واملأ بيانات الشركات والفترات الشهرية', color: 'bg-teal-100', numColor: 'text-teal-700' },
+                { step: 1, title: 'حمّل القالب', desc: 'نزّل قالب Excel المقترح واملأ بيانات الشركات والفترات الشهرية', color: 'bg-[#4CAF50]/10', numColor: 'text-[#4CAF50]' },
                 { step: 2, title: 'ارفع الملف', desc: 'ارفع ملف Excel — كل ورقة تمثل شركة وكل عمود يمثل شهر', color: 'bg-amber-100', numColor: 'text-amber-700' },
                 { step: 3, title: 'حلّل وقارن', desc: 'استخدم الملخص التنفيذي والجداول والرسوم البيانية والنسب المالية', color: 'bg-violet-100', numColor: 'text-violet-700' },
               ].map((item) => (
@@ -128,7 +139,7 @@ export default function Home() {
 
             {/* Report Tabs */}
             <Tabs defaultValue="summary" className="w-full">
-              <TabsList className="mb-5 grid h-auto w-full grid-cols-3 gap-1 rounded-xl bg-muted/50 p-1 sm:grid-cols-6">
+              <TabsList className="mb-5 grid h-auto w-full grid-cols-4 gap-1 rounded-xl bg-muted/50 p-1 sm:grid-cols-7">
                 <TabsTrigger value="summary" className="gap-1.5 rounded-lg text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm">
                   <FileText className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">الملخص التنفيذي</span>
@@ -149,6 +160,11 @@ export default function Home() {
                   <span className="hidden sm:inline">المقارنة</span>
                   <span className="sm:hidden">مقارنة</span>
                 </TabsTrigger>
+                <TabsTrigger value="mom" className="gap-1.5 rounded-lg text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">مقارنة شهرية</span>
+                  <span className="sm:hidden">شهرية</span>
+                </TabsTrigger>
                 <TabsTrigger value="charts" className="gap-1.5 rounded-lg text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm">
                   <BarChart3 className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">الرسوم البيانية</span>
@@ -165,6 +181,7 @@ export default function Home() {
               <TabsContent value="table"><PnLTable /></TabsContent>
               <TabsContent value="ratios"><FinancialRatios /></TabsContent>
               <TabsContent value="comparison"><PnLComparison /></TabsContent>
+              <TabsContent value="mom"><CompanyMoM /></TabsContent>
               <TabsContent value="charts"><PnLCharts /></TabsContent>
               <TabsContent value="trends"><PnLCharts forceTrends /></TabsContent>
             </Tabs>
@@ -176,7 +193,7 @@ export default function Home() {
       <footer className="mt-auto border-t bg-slate-50 py-5">
         <div className="mx-auto max-w-[1400px] px-4 text-center sm:px-6 lg:px-8">
           <p className="text-xs text-muted-foreground">
-            لوحة مقارنة الأرباح والخسائر — Profit & Loss Comparison Dashboard
+            ديلز تري — Dealz Tree | لوحة مقارنة الأرباح والخسائر — Profit & Loss Comparison Dashboard
           </p>
           <p className="mt-1 text-[10px] text-muted-foreground/50">
             البيانات محفوظة تلقائياً في المتصفح — لا تُرسل لأي خادم خارجي

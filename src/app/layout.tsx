@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   description: "لوحة تفاعلية لعرض ومقارنة بيانات الأرباح والخسائر لعدة شركات مع رفع البيانات من Excel",
   keywords: ["P&L", "الأرباح والخسائر", "مقارنة مالية", "تحليل مالي", "Excel"],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/logo.png",
   },
   openGraph: {
     title: "مقارنة الأرباح والخسائر — P&L Comparison Dashboard",

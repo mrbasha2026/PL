@@ -211,9 +211,12 @@ export function ExecutiveSummary() {
                     <tr className="border-b bg-muted/20">
                       <th className="py-2 pr-4 text-right font-medium text-muted-foreground">المؤشر</th>
                       {groups.map((g, i) => (
-                        <th key={g.name} className="py-2 px-3 text-center font-bold" style={{ color: COMPANY_COLORS[i % COMPANY_COLORS.length] }}>
-                          {g.name}
-                        </th>
+                        <React.Fragment key={g.name}>
+                          <th className="py-2 px-3 text-center font-bold" style={{ color: COMPANY_COLORS[i % COMPANY_COLORS.length] }}>
+                            {g.name}
+                          </th>
+                          <th className="py-2 px-2 text-center text-[10px] font-medium text-muted-foreground bg-muted/10">النسبة %</th>
+                        </React.Fragment>
                       ))}
                       <th className="py-2 px-3 text-center font-medium text-muted-foreground">الأعلى</th>
                     </tr>
@@ -226,18 +229,28 @@ export function ExecutiveSummary() {
                     ].map((metric) => {
                       const values = groups.map((g) => {
                         const latest = g.datasets[g.datasets.length - 1];
-                        return { name: g.name, value: latest?.data[metric.key] || 0, currency: latest?.currency || 'SAR' };
+                        return { name: g.name, value: latest?.data[metric.key] || 0, currency: latest?.currency || 'SAR', revenue: latest?.data['revenue'] || 0 };
                       });
                       const maxVal = Math.max(...values.map((v) => v.value));
 
                       return (
                         <tr key={metric.key} className="border-b last:border-0">
                           <td className="py-2.5 pr-4 font-medium">{metric.label}</td>
-                          {values.map((v, i) => (
-                            <td key={i} className={`py-2.5 px-3 text-center tabular-nums ${v.value === maxVal && v.value > 0 ? 'font-bold' : ''}`}>
-                              {formatNumber(v.value, v.currency)}
-                            </td>
-                          ))}
+                          {values.map((v, i) => {
+                            const pct = metric.key === 'revenue'
+                              ? (v.revenue !== 0 ? '100.0%' : '—')
+                              : (v.revenue !== 0 ? ((v.value / v.revenue) * 100).toFixed(1) + '%' : '—');
+                            return (
+                              <React.Fragment key={i}>
+                                <td className={`py-2.5 px-3 text-center tabular-nums ${v.value === maxVal && v.value > 0 ? 'font-bold' : ''}`}>
+                                  {formatNumber(v.value, v.currency)}
+                                </td>
+                                <td className="py-2.5 px-2 text-center text-xs text-muted-foreground bg-muted/5 tabular-nums">
+                                  {pct}
+                                </td>
+                              </React.Fragment>
+                            );
+                          })}
                           <td className="py-2.5 px-3 text-center">
                             <Badge variant="secondary" className="text-xs">
                               {values.find((v) => v.value === maxVal)?.name || '—'}

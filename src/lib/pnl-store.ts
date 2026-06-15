@@ -2,13 +2,23 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { CompanyPnL, PnLLineItem, PNL_LINE_ITEMS } from './pnl-types';
+import { CompanyPnL, PnLLineItem, PNL_LINE_ITEMS, aggregatePeriods, periodToArabic } from './pnl-types';
+
+interface AggregatedCompany {
+  companyName: string;
+  currency: string;
+  aggregatedData: Record<string, number>;
+  periodLabel: string;
+  periodCount: number;
+}
 
 interface PnLStore {
   companies: CompanyPnL[];
   lineItems: PnLLineItem[];
   selectedCompanyNames: string[];
   selectedPeriods: string[];
+  dateRangeStart: string | null;
+  dateRangeEnd: string | null;
   lastUpdated: string | null;
 
   addCompanies: (newCompanies: CompanyPnL[]) => void;
@@ -20,8 +30,10 @@ interface PnLStore {
   deselectAllCompanies: () => void;
   selectAllPeriods: () => void;
   deselectAllPeriods: () => void;
+  setDateRange: (start: string | null, end: string | null) => void;
   clearAll: () => void;
   getFiltered: () => CompanyPnL[];
+  getAggregatedFiltered: () => AggregatedCompany[];
 }
 
 export const usePnLStore = create<PnLStore>()(
@@ -31,6 +43,8 @@ export const usePnLStore = create<PnLStore>()(
       lineItems: PNL_LINE_ITEMS,
       selectedCompanyNames: [],
       selectedPeriods: [],
+      dateRangeStart: null,
+      dateRangeEnd: null,
       lastUpdated: null,
 
       addCompanies: (newCompanies) =>
@@ -99,14 +113,75 @@ export const usePnLStore = create<PnLStore>()(
 
       deselectAllPeriods: () => set({ selectedPeriods: [] }),
 
+      setDateRange: (start, end) =>
+        set({ dateRangeStart: start, dateRangeEnd: end }),
+
       clearAll: () =>
-        set({ companies: [], selectedCompanyNames: [], selectedPeriods: [], lastUpdated: null }),
+        set({ companies: [], selectedCompanyNames: [], selectedPeriods: [], dateRangeStart: null, dateRangeEnd: null, lastUpdated: null }),
 
       getFiltered: () => {
         const state = get();
         return state.companies.filter(
           (c) => state.selectedCompanyNames.includes(c.companyName) && state.selectedPeriods.includes(c.period)
         );
+      },
+
+      getAggregatedFiltered: () => {
+        const state = get();
+        const filtered = state.companies.filter(
+          (c) => state.selectedCompanyNames.includes(c.companyName) && state.selectedPeriods.includes(c.period)
+        );
+
+        // Group by company
+        const companyMap = new Map<string, CompanyPnL[]>();
+        filtered.forEach((ds) => {
+          const existing = companyMap.get(ds.companyName) || [];
+          existing.push(ds);
+          companyMap.set(ds.companyName, existing);
+        });
+
+        const allPeriods = [...new Set(filtered.map((c) => c.period))].sort();
+
+        return Array.from(companyMap.entries()).map(([companyName, datasets]) => {
+          let datasetsInRange = datasets;
+
+          // Filter by date range if set
+          if (state.dateRangeStart && state.dateRangeEnd) {
+            const startIdx = allPeriods.indexOf(state.dateRangeStart);
+            const endIdx = allPeriods.indexOf(state.dateRangeEnd);
+            if (startIdx !== -1 && endIdx !== -1) {
+              const rangePeriods = allPeriods.slice(
+                Math.min(startIdx, endIdx),
+                Math.max(startIdx, endIdx) + 1
+              );
+              datasetsInRange = datasets.filter((ds) => rangePeriods.includes(ds.period));
+            }
+          }
+
+          const aggregatedData = aggregatePeriods(datasetsInRange);
+          const currency = datasetsInRange[0]?.currency || 'SAR';
+
+          // Build period label
+          let periodLabel: string;
+          if (state.dateRangeStart && state.dateRangeEnd) {
+            periodLabel = `${periodToArabic(state.dateRangeStart)} - ${periodToArabic(state.dateRangeEnd)}`;
+          } else if (datasetsInRange.length > 1) {
+            const sorted = [...datasetsInRange].sort((a, b) => a.period.localeCompare(b.period));
+            periodLabel = `${periodToArabic(sorted[0].period)} - ${periodToArabic(sorted[sorted.length - 1].period)}`;
+          } else if (datasetsInRange.length === 1) {
+            periodLabel = periodToArabic(datasetsInRange[0].period);
+          } else {
+            periodLabel = '—';
+          }
+
+          return {
+            companyName,
+            currency,
+            aggregatedData,
+            periodLabel,
+            periodCount: datasetsInRange.length,
+          };
+        });
       },
     }),
     {
@@ -115,6 +190,8 @@ export const usePnLStore = create<PnLStore>()(
         companies: state.companies,
         selectedCompanyNames: state.selectedCompanyNames,
         selectedPeriods: state.selectedPeriods,
+        dateRangeStart: state.dateRangeStart,
+        dateRangeEnd: state.dateRangeEnd,
         lastUpdated: state.lastUpdated,
       }),
     }

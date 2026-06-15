@@ -14,9 +14,9 @@ export async function GET() {
       ['العربية:', 'قم بملء بيانات كل شركة في ورقة منفصلة'],
       ['', 'اسم الورقة = اسم الشركة (مثال: الراجحي)'],
       ['', 'الصف 1: الفترة المالية | كل عمود يمثل فترة مختلفة'],
-      ['', 'B1 = الفترة الأولى (مثل: يناير 2024 أو Jan 2024)'],
-      ['', 'C1 = الفترة الثانية (مثل: فبراير 2024 أو Feb 2024)'],
-      ['', 'D1 = الفترة الثالثة (مثل: مارس 2024 أو Mar 2024)'],
+      ['', 'B1 = الفترة الأولى (مثل: يناير 2026 أو Jan 2026)'],
+      ['', 'C1 = الفترة الثانية (مثل: فبراير 2026 أو Feb 2026)'],
+      ['', 'D1 = الفترة الثالثة (مثل: مارس 2026 أو Mar 2026)'],
       ['', '... وهكذا'],
       ['', 'الخلية A2 = العملة (مثل: SAR, USD)'],
       ['', 'عمود A = اسم البند المالي'],
@@ -25,9 +25,9 @@ export async function GET() {
       ['English:', 'Fill each company data in a separate sheet'],
       ['', 'Sheet name = Company name (e.g., Al Rajhi)'],
       ['', 'Row 1: Financial period | Each column represents a different period'],
-      ['', 'B1 = First period (e.g., Jan 2024)'],
-      ['', 'C1 = Second period (e.g., Feb 2024)'],
-      ['', 'D1 = Third period (e.g., Mar 2024)'],
+      ['', 'B1 = First period (e.g., Jan 2026)'],
+      ['', 'C1 = Second period (e.g., Feb 2026)'],
+      ['', 'D1 = Third period (e.g., Mar 2026)'],
       ['', '... and so on'],
       ['', 'Cell A2 = Currency (e.g., SAR, USD)'],
       ['', 'Column A = Line item name'],
@@ -38,7 +38,7 @@ export async function GET() {
     XLSX.utils.book_append_sheet(wb, instructionsWs, 'تعليمات Instructions');
 
     // Template sheet with multi-period columns
-    const headerRow = ['البند Line Item', 'Jan 2024', 'Feb 2024', 'Mar 2024', 'Apr 2024', 'May 2024', 'Jun 2024'];
+    const headerRow = ['البند Line Item', 'Jan 2026', 'Feb 2026', 'Mar 2026', 'Apr 2026', 'May 2026', 'Jun 2026'];
     const currencyRow = ['العملة Currency', 'SAR', 'SAR', 'SAR', 'SAR', 'SAR', 'SAR'];
     const emptyRow = ['', '', '', '', '', '', ''];
     
