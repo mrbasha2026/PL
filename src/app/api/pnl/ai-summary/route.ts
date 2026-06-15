@@ -60,7 +60,7 @@ const ANALYSIS_MODES: Record<string, { systemPrompt: string; maxTokens: number; 
 - 5 توصيات محددة لتحسين الهوامش مع تقدير الأثر المالي
 
 كن دقيقاً جداً في الأرقام والنسب. استخدم لغة مهنية مع شرح المصطلحات.`,
-    maxTokens: 6000,
+    maxTokens: 4096,
     temperature: 0.3,
   },
 
@@ -95,7 +95,7 @@ const ANALYSIS_MODES: Record<string, { systemPrompt: string; maxTokens: number; 
 - إجراءات استراتيجية (خلال سنة)
 
 قدم أرقاماً محددة في كل توقع مع توضيح الافتراضات.`,
-    maxTokens: 5000,
+    maxTokens: 4096,
     temperature: 0.5,
   },
 
@@ -126,9 +126,17 @@ const ANALYSIS_MODES: Record<string, { systemPrompt: string; maxTokens: number; 
 - ما الذي يجب أن تركز عليه كل شركة للتحسين؟
 
 استخدم جداول مقارنة وأرقام محددة. كن موضوعياً ومتوازناً.`,
-    maxTokens: 5000,
+    maxTokens: 4096,
     temperature: 0.5,
   },
+};
+
+// Model fallback chain - try these models in order if one fails
+const MODEL_FALLBACKS: Record<string, string[]> = {
+  'claude-sonnet-4-20250514': ['claude-3-5-sonnet-20241022', 'claude-3-haiku-20240307'],
+  'claude-opus-4-20250514': ['claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022', 'claude-3-haiku-20240307'],
+  'claude-3-5-sonnet-20241022': ['claude-3-haiku-20240307'],
+  'claude-3-haiku-20240307': [],
 };
 
 export async function POST(request: NextRequest) {
@@ -163,32 +171,65 @@ export async function POST(request: NextRequest) {
     }
 
     const analysisConfig = ANALYSIS_MODES[mode] || ANALYSIS_MODES.executive;
-    const model = clientModel || process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514';
+    const requestedModel = clientModel || process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
 
     // Initialize Anthropic client
     const client = new Anthropic({ apiKey });
 
-    // Use Claude Messages API with extended thinking for deep analysis
-    const useThinking = mode === 'deep' || mode === 'forecast';
+    // Try the requested model, then fallback to other models if 403
+    const modelsToTry = [requestedModel, ...(MODEL_FALLBACKS[requestedModel] || ['claude-3-5-sonnet-20241022', 'claude-3-haiku-20240307'])];
+    // Remove duplicates
+    const uniqueModels = [...new Set(modelsToTry)];
 
-    const message = await client.messages.create({
-      model,
-      max_tokens: analysisConfig.maxTokens,
-      temperature: analysisConfig.temperature,
-      system: analysisConfig.systemPrompt,
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
+    let message: Anthropic.Message | null = null;
+    let usedModel = '';
+    let lastError: any = null;
+
+    for (const model of uniqueModels) {
+      try {
+        console.log(`Trying model: ${model}`);
+        message = await client.messages.create({
+          model,
+          max_tokens: analysisConfig.maxTokens,
+          temperature: analysisConfig.temperature,
+          system: analysisConfig.systemPrompt,
+          messages: [
+            {
+              role: 'user',
+              content: prompt,
+            }
+          ],
+        });
+        usedModel = model;
+        break; // Success, exit the loop
+      } catch (modelError: any) {
+        console.warn(`Model ${model} failed:`, modelError.message);
+        lastError = modelError;
+
+        // If it's a 403 (model not allowed) or 404 (model not found), try next model
+        if (modelError.status === 403 || modelError.status === 404) {
+          continue;
         }
-      ],
-      ...(useThinking ? {
-        thinking: {
-          type: 'enabled',
-          budget_tokens: Math.floor(analysisConfig.maxTokens * 0.4),
-        }
-      } : {}),
-    });
+
+        // For other errors (429, 500, etc.), don't try other models
+        throw modelError;
+      }
+    }
+
+    if (!message) {
+      // All models failed with 403/404
+      if (lastError?.status === 403) {
+        return NextResponse.json(
+          {
+            error: 'النماذج المطلوبة غير متاحة لحسابك',
+            details: 'يرجى التحقق من أن حسابك في Anthropic يدعم النماذج المحددة. جرب اختيار نموذج آخر مثل Claude 3.5 Sonnet أو Claude 3 Haiku.',
+            triedModels: uniqueModels,
+          },
+          { status: 403 }
+        );
+      }
+      throw lastError;
+    }
 
     // Extract the content from Claude's response
     let content = '';
@@ -198,7 +239,6 @@ export async function POST(request: NextRequest) {
         if (block.type === 'text') {
           content += block.text;
         }
-        // Skip thinking blocks in the output
       }
     }
 
@@ -209,7 +249,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       summary: content,
       mode,
-      model: message.model,
+      model: usedModel,
+      requestedModel,
       tokensUsed: (message.usage?.input_tokens || 0) + (message.usage?.output_tokens || 0),
       inputTokens: message.usage?.input_tokens || 0,
       outputTokens: message.usage?.output_tokens || 0,
@@ -222,22 +263,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: 'مفتاح API غير صالح',
-          details: 'يرجى التحقق من مفتاح Anthropic API في ملف .env.local',
+          details: 'يرجى التحقق من مفتاح Anthropic API — تأكد أنه صحيح ولم تنتهِ صلاحيته',
         },
         { status: 401 }
       );
     }
 
+    if (error.status === 403) {
+      return NextResponse.json(
+        {
+          error: 'الوصول مرفوض — النموذج غير متاح لحسابك',
+          details: 'حسابك في Anthropic قد لا يدعم هذا النموذج. جرب اختيار Claude 3.5 Sonnet أو Claude 3 Haiku من الإعدادات.',
+        },
+        { status: 403 }
+      );
+    }
+
     if (error.status === 429) {
       return NextResponse.json(
-        { error: 'تم تجاوز حد الطلبات — يرجى الانتظار قليلاً ثم المحاولة مرة أخرى' },
+        {
+          error: 'تم تجاوز حد الطلبات',
+          details: 'يرجى الانتظار قليلاً ثم المحاولة مرة أخرى. تحقق من حدود استخدامك في لوحة تحكم Anthropic.',
+        },
         { status: 429 }
       );
     }
 
-    if (error.status === 500) {
+    if (error.status === 500 || error.status === 529) {
       return NextResponse.json(
-        { error: 'خطأ في خادم Anthropic — يرجى المحاولة لاحقاً' },
+        {
+          error: 'خطأ في خادم Anthropic',
+          details: 'خوادم Anthropic تواجه مشكلة مؤقتة — يرجى المحاولة بعد دقيقة',
+        },
         { status: 502 }
       );
     }

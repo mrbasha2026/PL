@@ -60,9 +60,10 @@ const MODE_CONFIG: Record<AnalysisMode, {
 
 // Claude model options
 const CLAUDE_MODELS = [
-  { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', desc: 'أفضل توازن بين السرعة والجودة' },
-  { id: 'claude-opus-4-20250514', name: 'Claude Opus 4', desc: 'أعلى جودة تحليل — أبطأ قليلاً' },
-  { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', desc: 'سريع وفعال' },
+  { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', desc: 'الأكثر توفراً — سريع وفعال ومتاح لمعظم الحسابات' },
+  { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', desc: 'أحدث نموذج — أفضل جودة (قد لا يكون متاحاً لجميع الحسابات)' },
+  { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', desc: 'الأسرع والأرخص — مناسب للتحليلات السريعة' },
+  { id: 'claude-opus-4-20250514', name: 'Claude Opus 4', desc: 'أعلى جودة — أبطأ وأغلى (يحتاج خطة خاصة)' },
 ];
 
 interface AIResponse {
@@ -94,7 +95,7 @@ export function AISummary() {
   // API Key settings
   const [showSettings, setShowSettings] = useState(false);
   const [apiKey, setApiKey] = useState('');
-  const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-20250514');
+  const [selectedModel, setSelectedModel] = useState('claude-3-5-sonnet-20241022');
   const [apiKeySaved, setApiKeySaved] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'connected' | 'error'>('unknown');
 

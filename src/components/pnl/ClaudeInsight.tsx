@@ -43,7 +43,7 @@ export function ClaudeInsight({
     if (!prompt.trim()) return;
 
     const clientApiKey = localStorage.getItem('anthropic_api_key');
-    const clientModel = localStorage.getItem('anthropic_model') || 'claude-sonnet-4-20250514';
+    const clientModel = localStorage.getItem('anthropic_model') || 'claude-3-5-sonnet-20241022';
 
     if (!clientApiKey || clientApiKey === 'your-api-key-here') {
       setError('يرجى إضافة مفتاح Claude API من تبويب التحليل الذكي أولاً');
