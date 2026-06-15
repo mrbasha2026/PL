@@ -1,20 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import ZAI from 'z-ai-web-dev-sdk';
-
-// ─── AI Engine Types ──────────────────────────────────────────────────────────
-type AIEngine = 'claude' | 'zai';
 
 interface AIResponse {
   summary: string;
   mode: string;
-  engine: AIEngine;
+  engine: 'claude';
   model: string;
   tokensUsed: number;
   inputTokens: number;
   outputTokens: number;
-  fallbackUsed: boolean;
-  fallbackReason?: string;
 }
 
 // ─── Analysis Modes ──────────────────────────────────────────────────────────
@@ -220,61 +214,15 @@ async function analyzeWithClaude(
     tokensUsed: (message.usage?.input_tokens || 0) + (message.usage?.output_tokens || 0),
     inputTokens: message.usage?.input_tokens || 0,
     outputTokens: message.usage?.output_tokens || 0,
-    fallbackUsed: false,
   };
 }
 
-// ─── Z-AI Engine (Free Fallback) ─────────────────────────────────────────────
-async function analyzeWithZAI(
-  prompt: string,
-  mode: string,
-  analysisConfig: typeof ANALYSIS_MODES.executive,
-): Promise<AIResponse> {
-  console.log('[Z-AI] Using z-ai-web-dev-sdk as fallback');
 
-  const zai = await ZAI.create();
-
-  const completion = await zai.chat.completions.create({
-    messages: [
-      { role: 'system', content: analysisConfig.systemPrompt },
-      { role: 'user', content: prompt },
-    ],
-    temperature: analysisConfig.temperature,
-    max_tokens: analysisConfig.maxTokens,
-  });
-
-  let content = '';
-  if (completion.choices && completion.choices[0]) {
-    const message = completion.choices[0].message;
-    if (typeof message.content === 'string') {
-      content = message.content;
-    } else if (message.content) {
-      content = Array.isArray(message.content)
-        ? message.content.map((c: any) => c.text || c.content || '').join('')
-        : String(message.content);
-    }
-  }
-
-  if (!content || content.trim().length === 0) {
-    content = 'لم يتم إنشاء تحليل — يرجى المحاولة مرة أخرى';
-  }
-
-  return {
-    summary: content,
-    mode,
-    engine: 'zai',
-    model: 'z-ai-default',
-    tokensUsed: completion.usage?.total_tokens || 0,
-    inputTokens: completion.usage?.prompt_tokens || 0,
-    outputTokens: completion.usage?.completion_tokens || 0,
-    fallbackUsed: false,
-  };
-}
 
 // ─── Main API Handler ────────────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   try {
-    const { prompt, mode = 'executive', engine: preferredEngine } = await request.json();
+    const { prompt, mode = 'executive' } = await request.json();
 
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
       return NextResponse.json(
@@ -295,44 +243,45 @@ export async function POST(request: NextRequest) {
     const hasClaudeKey = !!(apiKey && apiKey !== 'your-api-key-here');
     const requestedModel = clientModel || process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
 
-    // If user explicitly requested Z-AI engine
-    if (preferredEngine === 'zai') {
-      const result = await analyzeWithZAI(prompt, mode, analysisConfig);
-      return NextResponse.json(result);
-    }
-
-    // If no Claude key, go straight to Z-AI
+    // No Claude API key provided
     if (!hasClaudeKey) {
-      const result = await analyzeWithZAI(prompt, mode, analysisConfig);
-      result.fallbackUsed = true;
-      result.fallbackReason = 'لا يوجد مفتاح Claude API — يتم استخدام المحرك الذكي الافتراضي';
-      return NextResponse.json(result);
+      return NextResponse.json(
+        { error: 'يرجى إضافة مفتاح Claude API من الإعدادات أولاً. يمكنك الحصول على مفتاح من https://console.anthropic.com/' },
+        { status: 401 }
+      );
     }
 
-    // Try Claude first, fall back to Z-AI on failure
+    // Try Claude with model fallback
     try {
       const result = await analyzeWithClaude(apiKey!, prompt, mode, analysisConfig, requestedModel);
       return NextResponse.json(result);
     } catch (claudeError: any) {
-      console.warn('[Claude] Failed, falling back to Z-AI:', claudeError.message);
+      console.error('[Claude] All models failed:', claudeError.message);
 
-      // Determine fallback reason
-      let fallbackReason = 'فشل Claude AI — يتم استخدام المحرك الذكي الافتراضي';
+      // Return specific error messages
+      let errorMessage = 'فشل في إنشاء التحليل الذكي';
+      let statusCode = 500;
+
       if (claudeError.status === 400 && claudeError.message?.includes('credit balance')) {
-        fallbackReason = 'رصيد Claude API غير كافٍ — يتم استخدام المحرك الذكي الافتراضي مجاناً';
+        errorMessage = 'رصيد Claude API غير كافٍ. يرجى الذهاب إلى https://console.anthropic.com/settings/billing لشراء رصيد إضافي، أو جرّب استخدام نموذج Claude 3 Haiku (الأرخص)';
+        statusCode = 402;
       } else if (claudeError.status === 401) {
-        fallbackReason = 'مفتاح Claude API غير صالح — يتم استخدام المحرك الذكي الافتراضي';
+        errorMessage = 'مفتاح Claude API غير صالح. يرجى التحقق من المفتاح في الإعدادات';
+        statusCode = 401;
       } else if (claudeError.status === 403) {
-        fallbackReason = 'النموذج غير متاح لحسابك — يتم استخدام المحرك الذكي الافتراضي';
+        errorMessage = 'النموذج المطلوب غير متاح لحسابك. جرّب استخدام Claude 3.5 Sonnet أو Claude 3 Haiku';
+        statusCode = 403;
       } else if (claudeError.status === 429) {
-        fallbackReason = 'تم تجاوز حد طلبات Claude — يتم استخدام المحرك الذكي الافتراضي';
+        errorMessage = 'تم تجاوز حد طلبات Claude. يرجى الانتظار قليلاً ثم المحاولة مرة أخرى';
+        statusCode = 429;
+      } else if (claudeError.status === 529) {
+        errorMessage = 'خوادم Claude محملة بشكل زائد. يرجى المحاولة بعد بضع دقائق';
+        statusCode = 503;
+      } else {
+        errorMessage = `فشل في إنشاء التحليل الذكي: ${claudeError.message || 'خطأ غير معروف'}`;
       }
 
-      // Fall back to Z-AI
-      const result = await analyzeWithZAI(prompt, mode, analysisConfig);
-      result.fallbackUsed = true;
-      result.fallbackReason = fallbackReason;
-      return NextResponse.json(result);
+      return NextResponse.json({ error: errorMessage }, { status: statusCode });
     }
   } catch (error: any) {
     console.error('AI Summary error:', error);

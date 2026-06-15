@@ -69,13 +69,11 @@ const CLAUDE_MODELS = [
 interface AIResponse {
   summary: string;
   mode: string;
-  engine: 'claude' | 'zai';
+  engine: 'claude';
   model: string;
   tokensUsed: number;
   inputTokens: number;
   outputTokens: number;
-  fallbackUsed: boolean;
-  fallbackReason?: string;
 }
 
 export function AISummary() {
@@ -96,7 +94,7 @@ export function AISummary() {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
 
   // AI Engine selection
-  const [aiEngine, setAiEngine] = useState<'auto' | 'claude' | 'zai'>('auto');
+  const [aiEngine, setAiEngine] = useState<'claude'>('claude');
 
   // API Key settings
   const [showSettings, setShowSettings] = useState(false);
@@ -340,13 +338,10 @@ export function AISummary() {
         headers['x-anthropic-model'] = clientModel;
       }
 
-      // Determine which engine to use
-      const engineToSend = aiEngine === 'zai' ? 'zai' : undefined;
-
       const response = await fetch('/api/pnl/ai-summary', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ prompt, mode, engine: engineToSend }),
+        body: JSON.stringify({ prompt, mode }),
       });
 
       if (!response.ok) {
@@ -470,7 +465,7 @@ export function AISummary() {
               </div>
               <Badge variant="outline" className="gap-1 text-xs bg-white/50 dark:bg-slate-800/50">
                 <Cpu className="h-3 w-3" />
-                {aiEngine === 'zai' ? 'Z-AI' : aiEngine === 'claude' ? 'Claude AI' : 'تلقائي'}
+                Claude AI
               </Badge>
             </CardTitle>
             <div className="flex items-center gap-2">
@@ -534,41 +529,11 @@ export function AISummary() {
               </Badge>
             ))}
             <div className="flex-1" />
-            {/* Engine Switcher */}
-            <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-0.5">
-              <button
-                onClick={() => setAiEngine('auto')}
-                className={`text-[10px] px-2.5 py-1 rounded-md transition-all ${
-                  aiEngine === 'auto'
-                    ? 'bg-background shadow-sm font-bold text-teal-700'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                تلقائي
-              </button>
-              <button
-                onClick={() => setAiEngine('claude')}
-                className={`text-[10px] px-2.5 py-1 rounded-md transition-all flex items-center gap-1 ${
-                  aiEngine === 'claude'
-                    ? 'bg-background shadow-sm font-bold text-indigo-700'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                <Cpu className="h-2.5 w-2.5" />
-                Claude
-              </button>
-              <button
-                onClick={() => setAiEngine('zai')}
-                className={`text-[10px] px-2.5 py-1 rounded-md transition-all flex items-center gap-1 ${
-                  aiEngine === 'zai'
-                    ? 'bg-background shadow-sm font-bold text-emerald-700'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                <Zap className="h-2.5 w-2.5" />
-                Z-AI مجاني
-              </button>
-            </div>
+            {/* Engine Badge */}
+            <Badge variant="outline" className="gap-1 text-[10px] bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-900/20 dark:text-indigo-400">
+              <Cpu className="h-2.5 w-2.5" />
+              Claude AI
+            </Badge>
           </div>
         </CardContent>
       </Card>
@@ -774,26 +739,12 @@ export function AISummary() {
           {/* Response metadata */}
           {currentResponse && (
             <div className="space-y-2">
-              {/* Fallback notice */}
-              {currentResponse.fallbackUsed && currentResponse.fallbackReason && (
-                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 dark:border-amber-800 p-2.5">
-                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-                  <div className="text-xs text-amber-800 dark:text-amber-300">
-                    <p className="font-bold">محرك احتياطي</p>
-                    <p>{currentResponse.fallbackReason}</p>
-                  </div>
-                </div>
-              )}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3 flex-wrap">
                   {/* Engine Badge */}
-                  <Badge variant="outline" className={`gap-1 text-[10px] ${
-                    currentResponse.engine === 'claude'
-                      ? 'bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-400'
-                      : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400'
-                  }`}>
-                    {currentResponse.engine === 'claude' ? <Cpu className="h-3 w-3" /> : <Zap className="h-3 w-3" />}
-                    {currentResponse.engine === 'claude' ? `Claude — ${currentResponse.model}` : 'Z-AI (مجاني)'}
+                  <Badge variant="outline" className="gap-1 text-[10px] bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-400">
+                    <Cpu className="h-3 w-3" />
+                    {`Claude — ${currentResponse.model}`}
                   </Badge>
                   <Badge variant="outline" className="gap-1 text-[10px] bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">
                     <MessageSquare className="h-3 w-3" />
