@@ -20,6 +20,7 @@ interface PnLStore {
   dateRangeStart: string | null;
   dateRangeEnd: string | null;
   lastUpdated: string | null;
+  notes: Record<string, string>;
 
   addCompanies: (newCompanies: CompanyPnL[]) => void;
   removeDataset: (id: string) => void;
@@ -34,6 +35,9 @@ interface PnLStore {
   clearAll: () => void;
   getFiltered: () => CompanyPnL[];
   getAggregatedFiltered: () => AggregatedCompany[];
+  setNote: (key: string, value: string) => void;
+  deleteNote: (key: string) => void;
+  clearNotes: () => void;
 }
 
 export const usePnLStore = create<PnLStore>()(
@@ -46,6 +50,7 @@ export const usePnLStore = create<PnLStore>()(
       dateRangeStart: null,
       dateRangeEnd: null,
       lastUpdated: null,
+      notes: {},
 
       addCompanies: (newCompanies) =>
         set((state) => {
@@ -117,7 +122,27 @@ export const usePnLStore = create<PnLStore>()(
         set({ dateRangeStart: start, dateRangeEnd: end }),
 
       clearAll: () =>
-        set({ companies: [], selectedCompanyNames: [], selectedPeriods: [], dateRangeStart: null, dateRangeEnd: null, lastUpdated: null }),
+        set({ companies: [], selectedCompanyNames: [], selectedPeriods: [], dateRangeStart: null, dateRangeEnd: null, lastUpdated: null, notes: {} }),
+
+      setNote: (key, value) =>
+        set((state) => {
+          const updated = { ...state.notes };
+          if (value.trim() === '') {
+            delete updated[key];
+          } else {
+            updated[key] = value;
+          }
+          return { notes: updated };
+        }),
+
+      deleteNote: (key) =>
+        set((state) => {
+          const updated = { ...state.notes };
+          delete updated[key];
+          return { notes: updated };
+        }),
+
+      clearNotes: () => set({ notes: {} }),
 
       getFiltered: () => {
         const state = get();
@@ -193,6 +218,7 @@ export const usePnLStore = create<PnLStore>()(
         dateRangeStart: state.dateRangeStart,
         dateRangeEnd: state.dateRangeEnd,
         lastUpdated: state.lastUpdated,
+        notes: state.notes,
       }),
     }
   )

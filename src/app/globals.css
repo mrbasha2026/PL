@@ -120,3 +120,35 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Print Styles */
+@media print {
+  header, footer, .no-print, [role="tablist"], button[variant="ghost"] {
+    display: none !important;
+  }
+  main {
+    padding: 0 !important;
+  }
+  .shadow-sm, .shadow, [class*="shadow-"] {
+    box-shadow: none !important;
+  }
+  [class*="bg-gradient"] {
+    background: none !important;
+  }
+  .sticky {
+    position: static !important;
+  }
+  table {
+    page-break-inside: auto;
+  }
+  tr {
+    page-break-inside: avoid;
+  }
+  .print-break-before {
+    page-break-before: always;
+  }
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
