@@ -1,7 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import ZAI from 'z-ai-web-dev-sdk';
 
-// Analysis modes with tailored system prompts
+// ─── AI Engine Types ──────────────────────────────────────────────────────────
+type AIEngine = 'claude' | 'zai';
+
+interface AIResponse {
+  summary: string;
+  mode: string;
+  engine: AIEngine;
+  model: string;
+  tokensUsed: number;
+  inputTokens: number;
+  outputTokens: number;
+  fallbackUsed: boolean;
+  fallbackReason?: string;
+}
+
+// ─── Analysis Modes ──────────────────────────────────────────────────────────
 const ANALYSIS_MODES: Record<string, { systemPrompt: string; maxTokens: number; temperature: number }> = {
   executive: {
     systemPrompt: `أنت محلل مالي محترف ومستشار تنفيذي. قم بتحليل البيانات المالية المقدمة وأجب بالعربية فقط.
@@ -131,7 +147,7 @@ const ANALYSIS_MODES: Record<string, { systemPrompt: string; maxTokens: number; 
   },
 };
 
-// Model fallback chain - try these models in order if one fails
+// ─── Model Fallback Chain ────────────────────────────────────────────────────
 const MODEL_FALLBACKS: Record<string, string[]> = {
   'claude-sonnet-4-20250514': ['claude-3-5-sonnet-20241022', 'claude-3-haiku-20240307'],
   'claude-opus-4-20250514': ['claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022', 'claude-3-haiku-20240307'],
@@ -139,9 +155,126 @@ const MODEL_FALLBACKS: Record<string, string[]> = {
   'claude-3-haiku-20240307': [],
 };
 
+// ─── Claude AI Engine ────────────────────────────────────────────────────────
+async function analyzeWithClaude(
+  apiKey: string,
+  prompt: string,
+  mode: string,
+  analysisConfig: typeof ANALYSIS_MODES.executive,
+  requestedModel: string,
+): Promise<AIResponse> {
+  const client = new Anthropic({ apiKey });
+
+  const modelsToTry = [requestedModel, ...(MODEL_FALLBACKS[requestedModel] || ['claude-3-5-sonnet-20241022', 'claude-3-haiku-20240307'])];
+  const uniqueModels = [...new Set(modelsToTry)];
+
+  let message: Anthropic.Message | null = null;
+  let usedModel = '';
+  let lastError: any = null;
+
+  for (const model of uniqueModels) {
+    try {
+      console.log(`[Claude] Trying model: ${model}`);
+      message = await client.messages.create({
+        model,
+        max_tokens: analysisConfig.maxTokens,
+        temperature: analysisConfig.temperature,
+        system: analysisConfig.systemPrompt,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      usedModel = model;
+      break;
+    } catch (modelError: any) {
+      console.warn(`[Claude] Model ${model} failed:`, modelError.message);
+      lastError = modelError;
+      // 403 (not allowed), 404 (not found), 400 (credit too low) — try next model
+      if ([400, 403, 404].includes(modelError.status)) {
+        continue;
+      }
+      throw modelError;
+    }
+  }
+
+  if (!message) {
+    throw lastError;
+  }
+
+  let content = '';
+  if (message.content) {
+    for (const block of message.content) {
+      if (block.type === 'text') {
+        content += block.text;
+      }
+    }
+  }
+
+  if (!content || content.trim().length === 0) {
+    content = 'لم يتم إنشاء تحليل — يرجى المحاولة مرة أخرى';
+  }
+
+  return {
+    summary: content,
+    mode,
+    engine: 'claude',
+    model: usedModel,
+    tokensUsed: (message.usage?.input_tokens || 0) + (message.usage?.output_tokens || 0),
+    inputTokens: message.usage?.input_tokens || 0,
+    outputTokens: message.usage?.output_tokens || 0,
+    fallbackUsed: false,
+  };
+}
+
+// ─── Z-AI Engine (Free Fallback) ─────────────────────────────────────────────
+async function analyzeWithZAI(
+  prompt: string,
+  mode: string,
+  analysisConfig: typeof ANALYSIS_MODES.executive,
+): Promise<AIResponse> {
+  console.log('[Z-AI] Using z-ai-web-dev-sdk as fallback');
+
+  const zai = await ZAI.create();
+
+  const completion = await zai.chat.completions.create({
+    messages: [
+      { role: 'system', content: analysisConfig.systemPrompt },
+      { role: 'user', content: prompt },
+    ],
+    temperature: analysisConfig.temperature,
+    max_tokens: analysisConfig.maxTokens,
+  });
+
+  let content = '';
+  if (completion.choices && completion.choices[0]) {
+    const message = completion.choices[0].message;
+    if (typeof message.content === 'string') {
+      content = message.content;
+    } else if (message.content) {
+      content = Array.isArray(message.content)
+        ? message.content.map((c: any) => c.text || c.content || '').join('')
+        : String(message.content);
+    }
+  }
+
+  if (!content || content.trim().length === 0) {
+    content = 'لم يتم إنشاء تحليل — يرجى المحاولة مرة أخرى';
+  }
+
+  return {
+    summary: content,
+    mode,
+    engine: 'zai',
+    model: 'z-ai-default',
+    tokensUsed: completion.usage?.total_tokens || 0,
+    inputTokens: completion.usage?.prompt_tokens || 0,
+    outputTokens: completion.usage?.completion_tokens || 0,
+    fallbackUsed: false,
+  };
+}
+
+// ─── Main API Handler ────────────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   try {
-    const { prompt, mode = 'executive' } = await request.json();
+    const { prompt, mode = 'executive', engine: preferredEngine } = await request.json();
 
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
       return NextResponse.json(
@@ -150,155 +283,59 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check for API key: first from client headers, then from environment variables
+    const analysisConfig = ANALYSIS_MODES[mode] || ANALYSIS_MODES.executive;
+
+    // Check for Claude API key
     const clientApiKey = request.headers.get('x-anthropic-api-key');
     const clientModel = request.headers.get('x-anthropic-model');
     const envApiKey = process.env.ANTHROPIC_API_KEY;
-
     const apiKey = (clientApiKey && clientApiKey !== 'your-api-key-here')
       ? clientApiKey
       : envApiKey;
-
-    if (!apiKey || apiKey === 'your-api-key-here') {
-      return NextResponse.json(
-        {
-          error: 'مفتاح API غير مضبوط',
-          details: 'يرجى إضافة مفتاح Anthropic API من إعدادات التحليل الذكي أو في ملف .env.local',
-          setupUrl: 'https://console.anthropic.com/settings/keys',
-        },
-        { status: 401 }
-      );
-    }
-
-    const analysisConfig = ANALYSIS_MODES[mode] || ANALYSIS_MODES.executive;
+    const hasClaudeKey = !!(apiKey && apiKey !== 'your-api-key-here');
     const requestedModel = clientModel || process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
 
-    // Initialize Anthropic client
-    const client = new Anthropic({ apiKey });
+    // If user explicitly requested Z-AI engine
+    if (preferredEngine === 'zai') {
+      const result = await analyzeWithZAI(prompt, mode, analysisConfig);
+      return NextResponse.json(result);
+    }
 
-    // Try the requested model, then fallback to other models if 403
-    const modelsToTry = [requestedModel, ...(MODEL_FALLBACKS[requestedModel] || ['claude-3-5-sonnet-20241022', 'claude-3-haiku-20240307'])];
-    // Remove duplicates
-    const uniqueModels = [...new Set(modelsToTry)];
+    // If no Claude key, go straight to Z-AI
+    if (!hasClaudeKey) {
+      const result = await analyzeWithZAI(prompt, mode, analysisConfig);
+      result.fallbackUsed = true;
+      result.fallbackReason = 'لا يوجد مفتاح Claude API — يتم استخدام المحرك الذكي الافتراضي';
+      return NextResponse.json(result);
+    }
 
-    let message: Anthropic.Message | null = null;
-    let usedModel = '';
-    let lastError: any = null;
+    // Try Claude first, fall back to Z-AI on failure
+    try {
+      const result = await analyzeWithClaude(apiKey!, prompt, mode, analysisConfig, requestedModel);
+      return NextResponse.json(result);
+    } catch (claudeError: any) {
+      console.warn('[Claude] Failed, falling back to Z-AI:', claudeError.message);
 
-    for (const model of uniqueModels) {
-      try {
-        console.log(`Trying model: ${model}`);
-        message = await client.messages.create({
-          model,
-          max_tokens: analysisConfig.maxTokens,
-          temperature: analysisConfig.temperature,
-          system: analysisConfig.systemPrompt,
-          messages: [
-            {
-              role: 'user',
-              content: prompt,
-            }
-          ],
-        });
-        usedModel = model;
-        break; // Success, exit the loop
-      } catch (modelError: any) {
-        console.warn(`Model ${model} failed:`, modelError.message);
-        lastError = modelError;
-
-        // If it's a 403 (model not allowed) or 404 (model not found), try next model
-        if (modelError.status === 403 || modelError.status === 404) {
-          continue;
-        }
-
-        // For other errors (429, 500, etc.), don't try other models
-        throw modelError;
+      // Determine fallback reason
+      let fallbackReason = 'فشل Claude AI — يتم استخدام المحرك الذكي الافتراضي';
+      if (claudeError.status === 400 && claudeError.message?.includes('credit balance')) {
+        fallbackReason = 'رصيد Claude API غير كافٍ — يتم استخدام المحرك الذكي الافتراضي مجاناً';
+      } else if (claudeError.status === 401) {
+        fallbackReason = 'مفتاح Claude API غير صالح — يتم استخدام المحرك الذكي الافتراضي';
+      } else if (claudeError.status === 403) {
+        fallbackReason = 'النموذج غير متاح لحسابك — يتم استخدام المحرك الذكي الافتراضي';
+      } else if (claudeError.status === 429) {
+        fallbackReason = 'تم تجاوز حد طلبات Claude — يتم استخدام المحرك الذكي الافتراضي';
       }
+
+      // Fall back to Z-AI
+      const result = await analyzeWithZAI(prompt, mode, analysisConfig);
+      result.fallbackUsed = true;
+      result.fallbackReason = fallbackReason;
+      return NextResponse.json(result);
     }
-
-    if (!message) {
-      // All models failed with 403/404
-      if (lastError?.status === 403) {
-        return NextResponse.json(
-          {
-            error: 'النماذج المطلوبة غير متاحة لحسابك',
-            details: 'يرجى التحقق من أن حسابك في Anthropic يدعم النماذج المحددة. جرب اختيار نموذج آخر مثل Claude 3.5 Sonnet أو Claude 3 Haiku.',
-            triedModels: uniqueModels,
-          },
-          { status: 403 }
-        );
-      }
-      throw lastError;
-    }
-
-    // Extract the content from Claude's response
-    let content = '';
-
-    if (message.content) {
-      for (const block of message.content) {
-        if (block.type === 'text') {
-          content += block.text;
-        }
-      }
-    }
-
-    if (!content || content.trim().length === 0) {
-      content = 'لم يتم إنشاء تحليل — يرجى المحاولة مرة أخرى';
-    }
-
-    return NextResponse.json({
-      summary: content,
-      mode,
-      model: usedModel,
-      requestedModel,
-      tokensUsed: (message.usage?.input_tokens || 0) + (message.usage?.output_tokens || 0),
-      inputTokens: message.usage?.input_tokens || 0,
-      outputTokens: message.usage?.output_tokens || 0,
-    });
   } catch (error: any) {
-    console.error('Claude AI Summary error:', error);
-
-    // Handle specific Anthropic errors
-    if (error.status === 401) {
-      return NextResponse.json(
-        {
-          error: 'مفتاح API غير صالح',
-          details: 'يرجى التحقق من مفتاح Anthropic API — تأكد أنه صحيح ولم تنتهِ صلاحيته',
-        },
-        { status: 401 }
-      );
-    }
-
-    if (error.status === 403) {
-      return NextResponse.json(
-        {
-          error: 'الوصول مرفوض — النموذج غير متاح لحسابك',
-          details: 'حسابك في Anthropic قد لا يدعم هذا النموذج. جرب اختيار Claude 3.5 Sonnet أو Claude 3 Haiku من الإعدادات.',
-        },
-        { status: 403 }
-      );
-    }
-
-    if (error.status === 429) {
-      return NextResponse.json(
-        {
-          error: 'تم تجاوز حد الطلبات',
-          details: 'يرجى الانتظار قليلاً ثم المحاولة مرة أخرى. تحقق من حدود استخدامك في لوحة تحكم Anthropic.',
-        },
-        { status: 429 }
-      );
-    }
-
-    if (error.status === 500 || error.status === 529) {
-      return NextResponse.json(
-        {
-          error: 'خطأ في خادم Anthropic',
-          details: 'خوادم Anthropic تواجه مشكلة مؤقتة — يرجى المحاولة بعد دقيقة',
-        },
-        { status: 502 }
-      );
-    }
-
+    console.error('AI Summary error:', error);
     return NextResponse.json(
       { error: `فشل في إنشاء التحليل الذكي: ${error.message || 'خطأ غير معروف'}` },
       { status: 500 }

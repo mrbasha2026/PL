@@ -69,10 +69,13 @@ const CLAUDE_MODELS = [
 interface AIResponse {
   summary: string;
   mode: string;
+  engine: 'claude' | 'zai';
   model: string;
   tokensUsed: number;
   inputTokens: number;
   outputTokens: number;
+  fallbackUsed: boolean;
+  fallbackReason?: string;
 }
 
 export function AISummary() {
@@ -91,6 +94,9 @@ export function AISummary() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+
+  // AI Engine selection
+  const [aiEngine, setAiEngine] = useState<'auto' | 'claude' | 'zai'>('auto');
 
   // API Key settings
   const [showSettings, setShowSettings] = useState(false);
@@ -328,27 +334,23 @@ export function AISummary() {
         'Content-Type': 'application/json',
       };
 
-      // Pass API key from client if available (allows user to set it from UI)
+      // Pass API key from client if available
       if (clientApiKey && clientApiKey !== 'your-api-key-here') {
         headers['x-anthropic-api-key'] = clientApiKey;
         headers['x-anthropic-model'] = clientModel;
       }
 
+      // Determine which engine to use
+      const engineToSend = aiEngine === 'zai' ? 'zai' : undefined;
+
       const response = await fetch('/api/pnl/ai-summary', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ prompt, mode }),
+        body: JSON.stringify({ prompt, mode, engine: engineToSend }),
       });
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
-
-        // If API key error, show settings
-        if (response.status === 401) {
-          setShowSettings(true);
-          throw new Error(errData.details || errData.error || 'يرجى إضافة مفتاح API أولاً');
-        }
-
         throw new Error(errData.error || 'فشل في إنشاء التحليل');
       }
 
@@ -357,12 +359,12 @@ export function AISummary() {
       setAiResponses(prev => ({ ...prev, [mode]: data }));
       setConnectionStatus('connected');
     } catch (err: any) {
-      console.error('Claude AI Summary fetch error:', err);
+      console.error('AI Summary fetch error:', err);
       setError(err.message || 'حدث خطأ أثناء إنشاء التحليل الذكي');
     } finally {
       setLoading(false);
     }
-  }, [buildPrompt, apiKey, selectedModel]);
+  }, [buildPrompt, apiKey, selectedModel, aiEngine]);
 
   const copyToClipboard = useCallback(async (text: string) => {
     try {
@@ -468,7 +470,7 @@ export function AISummary() {
               </div>
               <Badge variant="outline" className="gap-1 text-xs bg-white/50 dark:bg-slate-800/50">
                 <Cpu className="h-3 w-3" />
-                Claude AI
+                {aiEngine === 'zai' ? 'Z-AI' : aiEngine === 'claude' ? 'Claude AI' : 'تلقائي'}
               </Badge>
             </CardTitle>
             <div className="flex items-center gap-2">
@@ -519,7 +521,8 @@ export function AISummary() {
           </div>
         </CardHeader>
         <CardContent className="p-4">
-          <div className="flex items-center gap-3 flex-wrap">
+          {/* AI Engine Selection */}
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
             {groups.map((group, idx) => (
               <Badge key={group.name} variant="outline" className="gap-1 text-xs">
                 <span
@@ -530,6 +533,42 @@ export function AISummary() {
                 <span className="opacity-50">({group.periods.length} فترات)</span>
               </Badge>
             ))}
+            <div className="flex-1" />
+            {/* Engine Switcher */}
+            <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-0.5">
+              <button
+                onClick={() => setAiEngine('auto')}
+                className={`text-[10px] px-2.5 py-1 rounded-md transition-all ${
+                  aiEngine === 'auto'
+                    ? 'bg-background shadow-sm font-bold text-teal-700'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                تلقائي
+              </button>
+              <button
+                onClick={() => setAiEngine('claude')}
+                className={`text-[10px] px-2.5 py-1 rounded-md transition-all flex items-center gap-1 ${
+                  aiEngine === 'claude'
+                    ? 'bg-background shadow-sm font-bold text-indigo-700'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Cpu className="h-2.5 w-2.5" />
+                Claude
+              </button>
+              <button
+                onClick={() => setAiEngine('zai')}
+                className={`text-[10px] px-2.5 py-1 rounded-md transition-all flex items-center gap-1 ${
+                  aiEngine === 'zai'
+                    ? 'bg-background shadow-sm font-bold text-emerald-700'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Zap className="h-2.5 w-2.5" />
+                Z-AI مجاني
+              </button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -734,34 +773,51 @@ export function AISummary() {
         <div className="space-y-4">
           {/* Response metadata */}
           {currentResponse && (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 flex-wrap">
-                <Badge variant="outline" className="gap-1 text-[10px] bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-400">
-                  <Cpu className="h-3 w-3" />
-                  {currentResponse.model}
-                </Badge>
-                <Badge variant="outline" className="gap-1 text-[10px] bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">
-                  <MessageSquare className="h-3 w-3" />
-                  {currentResponse.inputTokens?.toLocaleString()} توكن إدخال
-                </Badge>
-                <Badge variant="outline" className="gap-1 text-[10px] bg-teal-50 text-teal-700 dark:bg-teal-900/20 dark:text-teal-400">
-                  <Sparkles className="h-3 w-3" />
-                  {currentResponse.outputTokens?.toLocaleString()} توكن إخراج
-                </Badge>
-                <Badge variant="outline" className="gap-1 text-[10px] bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400">
-                  <Zap className="h-3 w-3" />
-                  {currentResponse.tokensUsed?.toLocaleString()} توكن إجمالي
-                </Badge>
+            <div className="space-y-2">
+              {/* Fallback notice */}
+              {currentResponse.fallbackUsed && currentResponse.fallbackReason && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 dark:border-amber-800 p-2.5">
+                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                  <div className="text-xs text-amber-800 dark:text-amber-300">
+                    <p className="font-bold">محرك احتياطي</p>
+                    <p>{currentResponse.fallbackReason}</p>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3 flex-wrap">
+                  {/* Engine Badge */}
+                  <Badge variant="outline" className={`gap-1 text-[10px] ${
+                    currentResponse.engine === 'claude'
+                      ? 'bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-400'
+                      : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400'
+                  }`}>
+                    {currentResponse.engine === 'claude' ? <Cpu className="h-3 w-3" /> : <Zap className="h-3 w-3" />}
+                    {currentResponse.engine === 'claude' ? `Claude — ${currentResponse.model}` : 'Z-AI (مجاني)'}
+                  </Badge>
+                  <Badge variant="outline" className="gap-1 text-[10px] bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">
+                    <MessageSquare className="h-3 w-3" />
+                    {currentResponse.inputTokens?.toLocaleString()} توكن إدخال
+                  </Badge>
+                  <Badge variant="outline" className="gap-1 text-[10px] bg-teal-50 text-teal-700 dark:bg-teal-900/20 dark:text-teal-400">
+                    <Sparkles className="h-3 w-3" />
+                    {currentResponse.outputTokens?.toLocaleString()} توكن إخراج
+                  </Badge>
+                  <Badge variant="outline" className="gap-1 text-[10px] bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400">
+                    <Zap className="h-3 w-3" />
+                    {currentResponse.tokensUsed?.toLocaleString()} توكن إجمالي
+                  </Badge>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-xs h-7"
+                  onClick={() => copyToClipboard(currentSummary)}
+                >
+                  {copied ? <Check className="h-3.5 w-3.5 text-teal-500" /> : <Copy className="h-3.5 w-3.5" />}
+                  {copied ? 'تم النسخ' : 'نسخ التحليل'}
+                </Button>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-1.5 text-xs h-7"
-                onClick={() => copyToClipboard(currentSummary)}
-              >
-                {copied ? <Check className="h-3.5 w-3.5 text-teal-500" /> : <Copy className="h-3.5 w-3.5" />}
-                {copied ? 'تم النسخ' : 'نسخ التحليل'}
-              </Button>
             </div>
           )}
 
