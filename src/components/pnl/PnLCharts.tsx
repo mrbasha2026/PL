@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePnLStore } from '@/lib/pnl-store';
 import {
   COMPANY_COLORS, CompanyPnL, groupByCompany, formatCompact,
-  formatPercentage,
+  formatPercentage, getAllLineItems, PNL_LINE_ITEMS, getLineItemKey,
 } from '@/lib/pnl-types';
 
 const KEY_METRICS = [
@@ -97,7 +97,7 @@ function MarginChart({ groups }: { groups: ReturnType<typeof groupByCompany> }) 
   );
 }
 
-function ExpenseChart({ groups }: { groups: ReturnType<typeof groupByCompany> }) {
+function ExpenseChart({ groups, allExpenses }: { groups: ReturnType<typeof groupByCompany>; allExpenses: { key: string; labelAr: string }[] }) {
   return (
     <Card>
       <CardHeader className="pb-2"><CardTitle className="text-base">توزيع المصروفات</CardTitle></CardHeader>
@@ -106,7 +106,7 @@ function ExpenseChart({ groups }: { groups: ReturnType<typeof groupByCompany> })
           {groups.map((group, idx) => {
             const latest = group.datasets[group.datasets.length - 1];
             if (!latest) return null;
-            const pieData = EXPENSE_BREAKDOWN.map((exp) => ({
+            const pieData = allExpenses.map((exp) => ({
               name: exp.labelAr,
               value: Math.abs(latest.data[exp.key] || 0),
             })).filter((d) => d.value > 0);
@@ -246,9 +246,21 @@ function TrendChart({ groups }: { groups: ReturnType<typeof groupByCompany> }) {
 }
 
 export function PnLCharts({ forceTrends }: { forceTrends?: boolean } = {}) {
-  const { getFiltered } = usePnLStore();
+  const { getFiltered, companies } = usePnLStore();
   const selected = getFiltered();
   const groups = groupByCompany(selected);
+
+  // Build dynamic expense list: standard + custom items categorized as expense
+  const allLineItems = getAllLineItems(companies);
+  const allExpenses = allLineItems
+    .filter(item => item.category === 'expense')
+    .map(item => ({
+      key: item.isCustom ? item.name : getLineItemKey(item.name),
+      labelAr: item.nameAr,
+    }));
+
+  // If no custom expenses found, use the standard breakdown
+  const expenseList = allExpenses.length > 0 ? allExpenses : EXPENSE_BREAKDOWN;
 
   if (selected.length === 0) {
     return (
@@ -276,7 +288,7 @@ export function PnLCharts({ forceTrends }: { forceTrends?: boolean } = {}) {
       </TabsList>
       <TabsContent value="metrics"><KeyMetricsChart groups={groups} /></TabsContent>
       <TabsContent value="margins"><MarginChart groups={groups} /></TabsContent>
-      <TabsContent value="expenses"><ExpenseChart groups={groups} /></TabsContent>
+      <TabsContent value="expenses"><ExpenseChart groups={groups} allExpenses={expenseList} /></TabsContent>
       <TabsContent value="radar"><RadarView groups={groups} /></TabsContent>
       <TabsContent value="trends"><TrendChart groups={groups} /></TabsContent>
     </Tabs>

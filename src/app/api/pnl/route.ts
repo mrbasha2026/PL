@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
-import { PNL_LINE_ITEMS, getLineItemKey } from '@/lib/pnl-types';
+import { PNL_LINE_ITEMS, getLineItemKey, detectCategory } from '@/lib/pnl-types';
 
 // GET: Download Excel template with multi-period support
 export async function GET() {
@@ -21,6 +21,10 @@ export async function GET() {
       ['', 'الخلية A2 = العملة (مثل: SAR, USD)'],
       ['', 'عمود A = اسم البند المالي'],
       ['', 'الأعمدة B,C,D... = القيم لكل فترة'],
+      ['', ''],
+      ['', 'يمكنك إضافة أي بنود مخصصة جديدة!'],
+      ['', 'فقط اكتب اسم البند في عمود A والقيمة في الأعمدة التالية'],
+      ['', 'النظام سيتعرف عليه تلقائياً ويصنفه حسب الاسم'],
       [''],
       ['English:', 'Fill each company data in a separate sheet'],
       ['', 'Sheet name = Company name (e.g., Al Rajhi)'],
@@ -32,6 +36,10 @@ export async function GET() {
       ['', 'Cell A2 = Currency (e.g., SAR, USD)'],
       ['', 'Column A = Line item name'],
       ['', 'Columns B,C,D... = Values for each period'],
+      ['', ''],
+      ['', 'You can add ANY custom line items!'],
+      ['', 'Just type the item name in column A and values in subsequent columns'],
+      ['', 'The system will auto-detect and categorize them by name'],
     ];
     const instructionsWs = XLSX.utils.aoa_to_sheet(instructionsData);
     instructionsWs['!cols'] = [{ wch: 30 }, { wch: 50 }];
@@ -41,7 +49,7 @@ export async function GET() {
     const headerRow = ['البند Line Item', 'Jan 2026', 'Feb 2026', 'Mar 2026', 'Apr 2026', 'May 2026', 'Jun 2026'];
     const currencyRow = ['العملة Currency', 'SAR', 'SAR', 'SAR', 'SAR', 'SAR', 'SAR'];
     const emptyRow = ['', '', '', '', '', '', ''];
-    
+
     const templateData: (string | number)[][] = [headerRow, currencyRow, emptyRow];
 
     PNL_LINE_ITEMS.forEach((item) => {
@@ -50,6 +58,13 @@ export async function GET() {
       const nameStr = `${prefix}${item.nameAr} - ${item.name}`;
       templateData.push([nameStr, 0, 0, 0, 0, 0, 0]);
     });
+
+    // Add examples of custom items
+    templateData.push(['', '', '', '', '', '', '']);
+    templateData.push(['--- بنود مخصصة (أمثلة) --- Custom Items (Examples) ---', '', '', '', '', '', '']);
+    templateData.push(['مصروفات زكاة - Zakat Expense', 0, 0, 0, 0, 0, 0]);
+    templateData.push(['إيجار المحل - Shop Rent', 0, 0, 0, 0, 0, 0]);
+    templateData.push(['مصروفات نقل - Transportation Cost', 0, 0, 0, 0, 0, 0]);
 
     const templateWs = XLSX.utils.aoa_to_sheet(templateData);
     templateWs['!cols'] = [{ wch: 45 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }];
@@ -71,7 +86,56 @@ export async function GET() {
   }
 }
 
-// POST: Parse uploaded Excel file with multi-period support
+// ─── Parse a line item name from Excel cell ──────────────────────────────────
+// Handles formats like: "مصروفات البيع - Selling Expenses", "Selling Expenses", "مصروفات زكاة"
+function parseLineItemName(cellText: string): { key: string; nameAr: string; nameEn: string } | null {
+  const trimmed = cellText.trim();
+  if (!trimmed) return null;
+
+  // Skip separator rows, headers, and currency rows
+  if (trimmed.startsWith('---') || trimmed.startsWith('العملة') || trimmed.startsWith('Currency') ||
+      trimmed.startsWith('البند') || trimmed.startsWith('Line Item')) {
+    return null;
+  }
+
+  // Check if it matches any standard line item first
+  for (const item of PNL_LINE_ITEMS) {
+    if (trimmed.includes(item.name) || trimmed.includes(item.nameAr)) {
+      return {
+        key: getLineItemKey(item.name),
+        nameAr: item.nameAr,
+        nameEn: item.name,
+      };
+    }
+  }
+
+  // Custom item — parse the name
+  let nameAr = trimmed;
+  let nameEn = '';
+
+  // If format is "عربي - English", split it
+  if (trimmed.includes(' - ')) {
+    const parts = trimmed.split(' - ');
+    nameAr = parts[0].trim();
+    nameEn = parts[1].trim();
+  } else if (trimmed.includes(' -')) {
+    const parts = trimmed.split(' -');
+    nameAr = parts[0].trim();
+    nameEn = parts.slice(1).join('-').trim();
+  }
+
+  // Remove leading spaces/indentation
+  nameAr = nameAr.replace(/^\s+/, '');
+
+  // Generate key from English name if available, otherwise from Arabic
+  const key = nameEn
+    ? getLineItemKey(nameEn)
+    : 'custom_' + getLineItemKey(nameAr);
+
+  return { key, nameAr, nameEn };
+}
+
+// POST: Parse uploaded Excel file with multi-period + custom items support
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
@@ -90,6 +154,7 @@ export async function POST(request: Request) {
       period: string;
       currency: string;
       data: Record<string, number>;
+      customItems?: { key: string; nameAr: string; nameEn: string; category: string }[];
     }[] = [];
 
     wb.SheetNames.forEach((sheetName) => {
@@ -127,10 +192,10 @@ export async function POST(request: Request) {
 
       // If no periods found, try old format (single period)
       if (periods.length === 0) {
-        // Fallback: try old format
         let period = 'N/A';
         let currency = 'SAR';
         const data: Record<string, number> = {};
+        const customItemsList: { key: string; nameAr: string; nameEn: string; category: string }[] = [];
 
         sheetData.forEach((row) => {
           const colA = String(row[0] || '').trim();
@@ -145,13 +210,34 @@ export async function POST(request: Request) {
             return;
           }
 
+          // Try standard items first
+          let matched = false;
           PNL_LINE_ITEMS.forEach((item) => {
             if (colA.includes(item.name) || colA.includes(item.nameAr)) {
               const key = getLineItemKey(item.name);
               const value = typeof colB === 'number' ? colB : parseFloat(String(colB).replace(/,/g, '')) || 0;
               data[key] = value;
+              matched = true;
             }
           });
+
+          // If not matched, try as custom item
+          if (!matched && colA) {
+            const parsed = parseLineItemName(colA);
+            if (parsed) {
+              const value = typeof colB === 'number' ? colB : parseFloat(String(colB).replace(/,/g, '')) || 0;
+              if (value !== 0) {
+                data[parsed.key] = value;
+                const category = detectCategory(colA);
+                customItemsList.push({
+                  key: parsed.key,
+                  nameAr: parsed.nameAr,
+                  nameEn: parsed.nameEn,
+                  category,
+                });
+              }
+            }
+          }
         });
 
         if (Object.keys(data).length > 0) {
@@ -161,6 +247,7 @@ export async function POST(request: Request) {
             period,
             currency,
             data,
+            customItems: customItemsList.length > 0 ? customItemsList : undefined,
           });
         }
         return;
@@ -171,19 +258,41 @@ export async function POST(request: Request) {
         const col = colIdx + 1; // column index in sheet (1-based after A)
         const currency = currencies[colIdx] || 'SAR';
         const data: Record<string, number> = {};
+        const customItemsList: { key: string; nameAr: string; nameEn: string; category: string }[] = [];
 
         sheetData.forEach((row, rowIdx) => {
           if (rowIdx <= 1) return; // skip header and currency rows
           const colA = String(row[0] || '').trim();
           const cellValue = row[col];
 
+          // Try standard items first
+          let matched = false;
           PNL_LINE_ITEMS.forEach((item) => {
             if (colA.includes(item.name) || colA.includes(item.nameAr)) {
               const key = getLineItemKey(item.name);
               const value = typeof cellValue === 'number' ? cellValue : parseFloat(String(cellValue || '0').replace(/,/g, '')) || 0;
               data[key] = value;
+              matched = true;
             }
           });
+
+          // If not matched, try as custom item
+          if (!matched && colA) {
+            const parsed = parseLineItemName(colA);
+            if (parsed) {
+              const value = typeof cellValue === 'number' ? cellValue : parseFloat(String(cellValue || '0').replace(/,/g, '')) || 0;
+              if (value !== 0) {
+                data[parsed.key] = value;
+                const category = detectCategory(colA);
+                customItemsList.push({
+                  key: parsed.key,
+                  nameAr: parsed.nameAr,
+                  nameEn: parsed.nameEn,
+                  category,
+                });
+              }
+            }
+          }
         });
 
         if (Object.keys(data).length > 0) {
@@ -193,6 +302,7 @@ export async function POST(request: Request) {
             period,
             currency,
             data,
+            customItems: customItemsList.length > 0 ? customItemsList : undefined,
           });
         }
       });

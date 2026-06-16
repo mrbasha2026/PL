@@ -12,7 +12,7 @@ import {
   MessageSquare, Cpu,
 } from 'lucide-react';
 import { usePnLStore } from '@/lib/pnl-store';
-import { groupByCompany, formatNumber, formatPercentage, FINANCIAL_RATIOS, periodToArabic } from '@/lib/pnl-types';
+import { groupByCompany, formatNumber, formatPercentage, FINANCIAL_RATIOS, periodToArabic, getAllLineItems, getLineItemKey, PNL_LINE_ITEMS } from '@/lib/pnl-types';
 
 type AnalysisMode = 'executive' | 'deep' | 'forecast' | 'comparison';
 
@@ -186,6 +186,18 @@ export function AISummary() {
       prompt += `  معدل الضريبة الفعلي: ${effectiveTaxRate.toFixed(1)}%\n`;
       if (interestCoverage !== null) {
         prompt += `  نسبة تغطية الفوائد: ${interestCoverage.toFixed(2)}x\n`;
+      }
+
+      // Custom line items from Excel
+      const standardKeys = new Set(PNL_LINE_ITEMS.map(item => getLineItemKey(item.name)));
+      const customItems = Object.entries(latest.data).filter(([key, val]) => !standardKeys.has(key) && val !== 0);
+      if (customItems.length > 0) {
+        prompt += `\n📋 بنود مخصصة إضافية من Excel:\n`;
+        customItems.forEach(([key, val]) => {
+          const nameAr = key.replace(/custom_/g, '').replace(/_/g, ' ');
+          const pct = revenue ? ((val / revenue) * 100).toFixed(1) : '—';
+          prompt += `  ${nameAr}: ${formatNumber(val, latest.currency, false)} (${pct}% من الإيرادات)\n`;
+        });
       }
 
       // All periods trend if available

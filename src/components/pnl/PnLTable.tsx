@@ -10,24 +10,27 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Building2, Info } from 'lucide-react';
+import { Building2, Info, Tag } from 'lucide-react';
 import { usePnLStore } from '@/lib/pnl-store';
 import {
   PNL_LINE_ITEMS,
+  getAllLineItems,
   getLineItemKey,
   COMPANY_COLORS,
   groupByPeriod,
   formatNumber,
   periodToArabic,
-  PeriodGroup,
 } from '@/lib/pnl-types';
 import { InfoTooltip } from '@/components/pnl/InfoTooltip';
 
 export function PnLTable() {
-  const { getFiltered, getAggregatedFiltered, dateRangeStart, dateRangeEnd } = usePnLStore();
+  const { getFiltered, getAggregatedFiltered, dateRangeStart, dateRangeEnd, companies } = usePnLStore();
   const selected = getFiltered();
   const aggregated = getAggregatedFiltered();
   const isAggregated = !!(dateRangeStart && dateRangeEnd);
+
+  // Get all line items including custom ones from the data
+  const allLineItems = getAllLineItems(companies);
 
   if (selected.length === 0) {
     return (
@@ -81,8 +84,8 @@ export function PnLTable() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {PNL_LINE_ITEMS.map((item) => {
-                  const key = getLineItemKey(item.name);
+                {allLineItems.map((item) => {
+                  const key = item.isCustom ? item.name : getLineItemKey(item.name);
                   const isSummary = item.isSubtotal || item.isTotal;
 
                   return (
@@ -90,12 +93,23 @@ export function PnLTable() {
                       key={key}
                       className={`${isSummary ? 'bg-muted/30 font-bold' : ''} ${
                         item.category === 'profit' && !isSummary ? 'bg-emerald-50/30' : ''
-                      } hover:bg-muted/10 transition-colors`}
+                      } ${item.isCustom ? 'bg-blue-50/20' : ''} hover:bg-muted/10 transition-colors`}
                     >
                       <TableCell className={`font-medium ${isSummary ? 'text-foreground' : 'text-muted-foreground'}`}>
                         <span style={{ paddingRight: `${(item.indent || 0) * 24}px` }}>
                           {item.nameAr}
-                          <span className="mr-1.5 text-xs opacity-50">({item.name})</span>
+                          {item.isCustom && (
+                            <span className="mr-1.5 inline-flex items-center gap-0.5 text-[9px] text-blue-600 bg-blue-50 px-1 py-0.5 rounded">
+                              <Tag className="h-2.5 w-2.5" />
+                              مخصص
+                            </span>
+                          )}
+                          {!item.isCustom && (
+                            <span className="mr-1.5 text-xs opacity-50">({item.name})</span>
+                          )}
+                          {item.isCustom && item.nameEn && (
+                            <span className="mr-1.5 text-xs opacity-50">({item.nameEn})</span>
+                          )}
                           {item.description && <InfoTooltip text={item.description} side="left" />}
                         </span>
                       </TableCell>
@@ -134,6 +148,7 @@ export function PnLTable() {
               <div className="space-y-1">
                 <p>النسبة % = قيمة البند ÷ الإيرادات × 100 — القيم السلبية باللون الأحمر</p>
                 <p>القيم المعروضة بالشكل المضغوط: K = ألف، M = مليون، B = مليار</p>
+                <p>البنود المخصصة <Tag className="h-2.5 w-2.5 inline" /> مضافة من ملف Excel — يتم تصنيفها تلقائياً حسب الاسم</p>
               </div>
             </div>
           </div>
@@ -209,8 +224,8 @@ export function PnLTable() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {PNL_LINE_ITEMS.map((item) => {
-                const key = getLineItemKey(item.name);
+              {allLineItems.map((item) => {
+                const key = item.isCustom ? item.name : getLineItemKey(item.name);
                 const isSummary = item.isSubtotal || item.isTotal;
 
                 return (
@@ -218,12 +233,23 @@ export function PnLTable() {
                     key={key}
                     className={`${isSummary ? 'bg-muted/30 font-bold' : ''} ${
                       item.category === 'profit' && !isSummary ? 'bg-emerald-50/30' : ''
-                    } hover:bg-muted/10 transition-colors`}
+                    } ${item.isCustom ? 'bg-blue-50/20' : ''} hover:bg-muted/10 transition-colors`}
                   >
                     <TableCell className={`font-medium ${isSummary ? 'text-foreground' : 'text-muted-foreground'}`}>
                       <span style={{ paddingRight: `${(item.indent || 0) * 24}px` }}>
                         {item.nameAr}
-                        <span className="mr-1.5 text-xs opacity-50">({item.name})</span>
+                        {item.isCustom && (
+                          <span className="mr-1.5 inline-flex items-center gap-0.5 text-[9px] text-blue-600 bg-blue-50 px-1 py-0.5 rounded">
+                            <Tag className="h-2.5 w-2.5" />
+                            مخصص
+                          </span>
+                        )}
+                        {!item.isCustom && (
+                          <span className="mr-1.5 text-xs opacity-50">({item.name})</span>
+                        )}
+                        {item.isCustom && item.nameEn && (
+                          <span className="mr-1.5 text-xs opacity-50">({item.nameEn})</span>
+                        )}
                         {item.description && <InfoTooltip text={item.description} side="left" />}
                       </span>
                     </TableCell>
@@ -265,6 +291,7 @@ export function PnLTable() {
               <p>الجدول مجمّع حسب الشهر — كل شهر يعرض جميع الشركات جنباً إلى جنب للمقارنة المباشرة</p>
               <p>النسبة % = قيمة البند ÷ الإيرادات × 100 — القيم السلبية باللون الأحمر</p>
               <p>القيم المعروضة بالشكل المضغوط: K = ألف، M = مليون، B = مليار</p>
+              <p>البنود المخصصة <Tag className="h-2.5 w-2.5 inline" /> مضافة من ملف Excel — يتم تصنيفها تلقائياً حسب الاسم</p>
             </div>
           </div>
         </div>

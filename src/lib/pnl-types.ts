@@ -1,4 +1,4 @@
-// P&L Data Types — Professional Grade
+// P&L Data Types — Professional Grade with Dynamic Line Items
 
 export interface PnLLineItem {
   name: string;
@@ -8,6 +8,7 @@ export interface PnLLineItem {
   isTotal?: boolean;
   indent?: number;
   description?: string;
+  isCustom?: boolean; // For dynamically added items from Excel
 }
 
 // Each dataset represents ONE company in ONE period
@@ -31,7 +32,7 @@ export const PNL_LINE_ITEMS: PnLLineItem[] = [
   { name: 'Revenue', nameAr: 'الإيرادات', category: 'revenue', isTotal: true, indent: 0, description: 'إجمالي المبالغ المحصلة من المبيعات والخدمات قبل خصم أي تكاليف — Total revenue from sales and services before any deductions' },
   { name: 'Cost of Goods Sold', nameAr: 'تكلفة البضاعة المباعة', category: 'expense', indent: 1, description: 'التكلفة المباشرة للمنتجات أو الخدمات المباعة — Direct cost of products or services sold' },
   { name: 'Gross Profit', nameAr: 'إجمالي الربح', category: 'profit', isSubtotal: true, indent: 0, description: 'الإيرادات ناقص تكلفة البضاعة المباعة — Revenue minus COGS. يشير إلى كفاءة الإنتاج' },
-  { name: 'Operating Expenses', nameAr: 'المصروفات التشغيلية', category: 'expense', isTotal: true, indent: 0, description: 'إجمالي المصروفات التشغيلية包括 البيع والإدارة والإهلاك — Total operating costs including selling, G&A, and depreciation' },
+  { name: 'Operating Expenses', nameAr: 'المصروفات التشغيلية', category: 'expense', isTotal: true, indent: 0, description: 'إجمالي المصروفات التشغيلية — Total operating costs including selling, G&A, and depreciation' },
   { name: 'Selling Expenses', nameAr: 'مصروفات البيع', category: 'expense', indent: 1, description: 'تكاليف التسويق والمبيعات والترويج — Marketing, sales, and promotion costs' },
   { name: 'General & Administrative', nameAr: 'مصروفات إدارية وعمومية', category: 'expense', indent: 1, description: 'رواتب الإدارة والإيجار والمصروفات العمومية — Management salaries, rent, and general costs' },
   { name: 'Depreciation & Amortization', nameAr: 'الإهلاك والاستنفاد', category: 'expense', indent: 1, description: 'توزيع تكلفة الأصول الثابتة والشهرة على عمرها — Allocating asset costs over their useful life' },
@@ -43,6 +44,88 @@ export const PNL_LINE_ITEMS: PnLLineItem[] = [
   { name: 'Income Tax Expense', nameAr: 'مصروف ضريبة الدخل', category: 'expense', indent: 1, description: 'الضريبة المستحقة على الأرباح — Tax owed on profits' },
   { name: 'Net Income', nameAr: 'صافي الدخل', category: 'profit', isTotal: true, indent: 0, description: 'الربح النهائي بعد خصم جميع التكاليف والضرائب — Final profit after all costs and taxes. المعروف أيضاً بالنتيجة الصافية' },
 ];
+
+// ─── Keyword-based category detection for custom items ────────────────────────
+const EXPENSE_KEYWORDS_AR = [
+  'مصروف', 'تكلفة', 'إهلاك', 'استنفاد', 'ضريبة', 'زكاة', 'فائدة', 'إيجار',
+  'رواتب', 'أجور', 'مخصص', 'خسارة', 'مصاريف', 'عمولة', 'خصم', 'ديون',
+  'مخزون', 'بضاعة', 'تسويق', 'إعلان', 'صيانة', 'تأمين', 'سفر', 'نقل',
+  'اتصالات', 'كهرباء', 'ماء', 'غاز', 'مواد', 'لوازم', 'استشارات',
+  'محاسبة', 'قانوني', 'تراخيص', 'رسوم', 'غرامات', 'عقوبات', 'متفرقة',
+];
+const EXPENSE_KEYWORDS_EN = [
+  'expense', 'cost', 'depreciat', 'amortiz', 'tax', 'zakat', 'interest', 'rent',
+  'salary', 'wage', 'provision', 'loss', 'commission', 'discount', 'debt',
+  'inventory', 'marketing', 'advertis', 'maintenanc', 'insuranc', 'travel', 'transport',
+  'telecom', 'electric', 'water', 'gas', 'material', 'suppl', 'consult',
+  'account', 'legal', 'licens', 'fee', 'fine', 'penalty', 'miscellaneous',
+];
+const REVENUE_KEYWORDS_AR = [
+  'إيراد', 'دخل', 'ربح', 'عائد', 'مبيعات', 'حاصلات', 'أرباح',
+];
+const REVENUE_KEYWORDS_EN = [
+  'revenue', 'income', 'profit', 'return', 'sales', 'gain', 'earning',
+];
+
+export function detectCategory(name: string): 'revenue' | 'expense' | 'profit' {
+  const lower = name.toLowerCase();
+  // Check expense keywords first (most common for custom items)
+  if (EXPENSE_KEYWORDS_AR.some(kw => name.includes(kw)) || EXPENSE_KEYWORDS_EN.some(kw => lower.includes(kw))) {
+    return 'expense';
+  }
+  // Check revenue keywords
+  if (REVENUE_KEYWORDS_AR.some(kw => name.includes(kw)) || REVENUE_KEYWORDS_EN.some(kw => lower.includes(kw))) {
+    return 'revenue';
+  }
+  // Default: expense (most custom items are expenses)
+  return 'expense';
+}
+
+// ─── Build merged line items: standard + custom from data ──────────────────────
+export function getAllLineItems(datasets: CompanyPnL[]): PnLLineItem[] {
+  const standardKeys = new Set(PNL_LINE_ITEMS.map(item => getLineItemKey(item.name)));
+  const customKeys = new Set<string>();
+
+  // Collect all keys from all datasets that aren't standard
+  datasets.forEach(ds => {
+    Object.keys(ds.data).forEach(key => {
+      if (!standardKeys.has(key) && ds.data[key] !== 0) {
+        customKeys.add(key);
+      }
+    });
+  });
+
+  if (customKeys.size === 0) return PNL_LINE_ITEMS;
+
+  // Build custom line items — insert before Net Income
+  const customItems: PnLLineItem[] = Array.from(customKeys).map(key => {
+    // Try to find the original name from the data key
+    const nameAr = key.replace(/_/g, ' ');
+    return {
+      name: key,
+      nameAr,
+      category: detectCategory(nameAr),
+      indent: 1,
+      isCustom: true,
+      description: 'بند مخصص من ملف Excel — Custom item from uploaded Excel',
+    };
+  });
+
+  // Sort: revenue first, then expense, then profit
+  const categoryOrder = { revenue: 0, expense: 1, profit: 2 };
+  customItems.sort((a, b) => categoryOrder[a.category] - categoryOrder[b.category]);
+
+  // Insert custom items before Net Income
+  const result = [...PNL_LINE_ITEMS];
+  const netIncomeIdx = result.findIndex(item => item.name === 'Net Income');
+  if (netIncomeIdx !== -1) {
+    result.splice(netIncomeIdx, 0, ...customItems);
+  } else {
+    result.push(...customItems);
+  }
+
+  return result;
+}
 
 export function getLineItemKey(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
@@ -235,7 +318,7 @@ export function groupByCompany(datasets: CompanyPnL[]): CompanyGroup[] {
 export interface PeriodGroup {
   period: string;
   periodAr: string;
-  datasets: CompanyPnL[]; // one dataset per company for this period
+  datasets: CompanyPnL[];
 }
 
 export function groupByPeriod(datasets: CompanyPnL[]): PeriodGroup[] {
