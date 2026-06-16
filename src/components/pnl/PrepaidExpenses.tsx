@@ -7,13 +7,6 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,24 +17,24 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Building2, Plus, Pencil, Trash2, Search, Filter, X,
   Wallet, Calendar, TrendingUp, TrendingDown, PieChart,
-  BarChart3, Clock, CheckCircle2, AlertCircle, Coins,
+  BarChart3, Clock, CheckCircle2, AlertCircle,
   LayoutGrid, CalendarRange, FileBarChart,
 } from 'lucide-react';
 import {
   usePrepaidStore,
-  type PrepaidCompany,
   type PrepaidExpense,
   type PrepaidCategory,
   type PrepaidStatus,
   PREPAID_CATEGORIES,
   PREPAID_STATUSES,
-  PREPAID_COMPANY_COLORS,
+  getCompanyColor,
   getCategoryInfo,
   getStatusInfo,
   monthsBetween,
   getMonthlyInstallment,
   getConsumedInfo,
 } from '@/lib/prepaid-store';
+import { usePnLStore } from '@/lib/pnl-store';
 import { useToast } from '@/hooks/use-toast';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -72,24 +65,49 @@ function addMonthsISO(iso: string, months: number): string {
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 export function PrepaidExpenses() {
+  // P&L companies (single source of truth when P&L data is uploaded)
+  const pnlCompanies = usePnLStore((s) => s.companies);
+
   const {
-    companies, expenses,
-    selectedCompanyId, searchQuery, filterCategory, filterStatus, filterYear,
-    setSelectedCompany, setSearchQuery, setFilterCategory, setFilterStatus, setFilterYear,
+    standaloneCompanyNames, expenses,
+    selectedCompanyName, searchQuery, filterCategory, filterStatus, filterYear,
+    setSelectedCompanyName, setSearchQuery, setFilterCategory, setFilterStatus, setFilterYear,
     getFilteredExpenses, getExpenseCountByCompany,
-    deleteCompany, deleteExpense,
+    deleteStandaloneCompany, deleteExpense,
   } = usePrepaidStore();
 
   const [companyDialogOpen, setCompanyDialogOpen] = useState(false);
-  const [editingCompany, setEditingCompany] = useState<PrepaidCompany | null>(null);
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<PrepaidExpense | null>(null);
 
-  // Depend on the underlying state so the memo recomputes when filters/data change.
-  // (Zustand action references are stable, so they alone won't trigger recomputation.)
+  // ─── Unified company list (P&L companies + standalone names) ──────────────
+  // Single source of truth: P&L `companyName`s come first (sorted by upload
+  // order), then standalone names that aren't already in P&L. Colors are
+  // assigned via `COMPANY_COLORS` (same array used by the P&L dashboard).
+  const allCompanyNames = useMemo(() => {
+    const pnlNames = Array.from(new Set(pnlCompanies.map((c) => c.companyName)));
+    const standalone = standaloneCompanyNames.filter((n) => !pnlNames.includes(n));
+    return [...pnlNames, ...standalone];
+  }, [pnlCompanies, standaloneCompanyNames]);
+
+  const companyColorMap = useMemo(() => {
+    const m = new Map<string, string>();
+    allCompanyNames.forEach((name, idx) => {
+      m.set(name, getCompanyColor(name, allCompanyNames));
+    });
+    return m;
+  }, [allCompanyNames]);
+
+  // Clean up selection if it no longer exists
+  useEffect(() => {
+    if (selectedCompanyName && !allCompanyNames.includes(selectedCompanyName)) {
+      setSelectedCompanyName(null);
+    }
+  }, [allCompanyNames, selectedCompanyName, setSelectedCompanyName]);
+
   const filteredExpenses = useMemo(
-    () => getFilteredExpenses(),
-    [getFilteredExpenses, expenses, selectedCompanyId, searchQuery, filterCategory, filterStatus, filterYear]
+    () => getFilteredExpenses(allCompanyNames),
+    [getFilteredExpenses, expenses, selectedCompanyName, searchQuery, filterCategory, filterStatus, filterYear, allCompanyNames]
   );
 
   const availableYears = useMemo(() => {
@@ -101,13 +119,19 @@ export function PrepaidExpenses() {
     return Array.from(set).sort((a, b) => b - a);
   }, [expenses]);
 
-  const totalCount = expenses.length;
-  const totalAmount = expenses.reduce((s, e) => s + e.totalAmount, 0);
+  const totalCount = expenses.filter((e) => allCompanyNames.includes(e.companyName)).length;
+  const totalAmount = expenses
+    .filter((e) => allCompanyNames.includes(e.companyName))
+    .reduce((s, e) => s + e.totalAmount, 0);
   const totalMonthly = expenses
-    .filter((e) => e.status === 'active')
+    .filter((e) => e.status === 'active' && allCompanyNames.includes(e.companyName))
     .reduce((s, e) => s + getMonthlyInstallment(e.totalAmount, e.monthsCount), 0);
-  const totalConsumed = expenses.reduce((s, e) => s + getConsumedInfo(e).consumed, 0);
-  const totalRemaining = expenses.reduce((s, e) => s + getConsumedInfo(e).remaining, 0);
+  const totalConsumed = expenses
+    .filter((e) => allCompanyNames.includes(e.companyName))
+    .reduce((s, e) => s + getConsumedInfo(e).consumed, 0);
+  const totalRemaining = expenses
+    .filter((e) => allCompanyNames.includes(e.companyName))
+    .reduce((s, e) => s + getConsumedInfo(e).remaining, 0);
 
   return (
     <div className="space-y-6" dir="rtl">
@@ -123,7 +147,7 @@ export function PrepaidExpenses() {
             <div>
               <h2 className="text-2xl font-bold tracking-tight">تتبع المصروفات المقدمة</h2>
               <p className="text-sm text-muted-foreground mt-1">
-                إدارة المصروفات المدفوعة مسبقاً وتوزيعها على الفترات المحاسبية
+                إدارة المصروفات المدفوعة مسبقاً وتوزيعها على الفترات المحاسبية — الشركات موحّدة مع لوحة P&L
               </p>
             </div>
           </div>
@@ -132,16 +156,16 @@ export function PrepaidExpenses() {
               variant="outline"
               size="sm"
               className="gap-1.5 rounded-xl text-xs h-9"
-              onClick={() => { setEditingCompany(null); setCompanyDialogOpen(true); }}
+              onClick={() => setCompanyDialogOpen(true)}
             >
               <Building2 className="h-3.5 w-3.5" />
-              شركة جديدة
+              إضافة شركة
             </Button>
             <Button
               size="sm"
               className="gap-1.5 rounded-xl text-xs h-9 bg-gradient-to-l from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
               onClick={() => { setEditingExpense(null); setExpenseDialogOpen(true); }}
-              disabled={companies.length === 0}
+              disabled={allCompanyNames.length === 0}
             >
               <Plus className="h-3.5 w-3.5" />
               مصروف مقدم جديد
@@ -159,20 +183,25 @@ export function PrepaidExpenses() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
-        {/* Sidebar: Companies */}
+        {/* Sidebar: Companies (unified) */}
         <aside className="space-y-3">
           <div className="rounded-2xl border border-border/50 bg-card/40 backdrop-blur-sm overflow-hidden">
             <div className="px-4 py-3 border-b border-border/40 bg-muted/20">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">الشركات</h3>
-                <Badge variant="outline" className="text-[10px] rounded-md">{companies.length}</Badge>
+                <Badge variant="outline" className="text-[10px] rounded-md">{allCompanyNames.length}</Badge>
               </div>
+              <p className="text-[10px] text-muted-foreground/70 mt-1">
+                {pnlCompanies.length > 0
+                  ? 'موحّدة مع بيانات P&L'
+                  : 'أضف شركات مباشرة أو ارفع ملف P&L'}
+              </p>
             </div>
             <div className="p-2 space-y-1">
               <button
-                onClick={() => setSelectedCompany(null)}
+                onClick={() => setSelectedCompanyName(null)}
                 className={`w-full flex items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-xs font-medium transition-all ${
-                  selectedCompanyId === null
+                  selectedCompanyName === null
                     ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20'
                     : 'text-foreground/70 hover:bg-muted/40 border border-transparent'
                 }`}
@@ -183,7 +212,7 @@ export function PrepaidExpenses() {
                 </span>
                 <span className="text-[10px] text-muted-foreground">{totalCount}</span>
               </button>
-              {companies.length === 0 ? (
+              {allCompanyNames.length === 0 ? (
                 <div className="text-center py-6 px-3">
                   <Building2 className="h-7 w-7 text-muted-foreground/30 mx-auto mb-2" />
                   <p className="text-[11px] text-muted-foreground mb-3">لا توجد شركات بعد</p>
@@ -191,19 +220,21 @@ export function PrepaidExpenses() {
                     size="sm"
                     variant="outline"
                     className="h-7 text-[11px] gap-1 rounded-lg w-full"
-                    onClick={() => { setEditingCompany(null); setCompanyDialogOpen(true); }}
+                    onClick={() => setCompanyDialogOpen(true)}
                   >
                     <Plus className="h-3 w-3" />
                     إضافة شركة
                   </Button>
                 </div>
               ) : (
-                companies.map((c) => {
-                  const count = getExpenseCountByCompany(c.id);
-                  const isActive = selectedCompanyId === c.id;
+                allCompanyNames.map((name) => {
+                  const count = getExpenseCountByCompany(name);
+                  const isActive = selectedCompanyName === name;
+                  const color = companyColorMap.get(name);
+                  const isStandalone = !pnlCompanies.some((c) => c.companyName === name);
                   return (
                     <div
-                      key={c.id}
+                      key={name}
                       className={`group w-full flex items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-xs font-medium transition-all ${
                         isActive
                           ? 'bg-emerald-500/10 border border-emerald-500/20'
@@ -211,33 +242,35 @@ export function PrepaidExpenses() {
                       }`}
                     >
                       <button
-                        onClick={() => setSelectedCompany(c.id)}
+                        onClick={() => setSelectedCompanyName(name)}
                         className="flex-1 flex items-center justify-between gap-2 text-right min-w-0"
                       >
                         <span className="flex items-center gap-2 min-w-0">
-                          <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: c.color }} />
-                          <span className={`truncate ${isActive ? 'text-emerald-700 dark:text-emerald-400' : ''}`}>{c.name}</span>
+                          <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                          <span className={`truncate ${isActive ? 'text-emerald-700 dark:text-emerald-400' : ''}`}>
+                            {name}
+                          </span>
+                          {isStandalone && (
+                            <Badge variant="outline" className="text-[8px] px-1 py-0 rounded h-3.5 shrink-0 text-muted-foreground/70">
+                              مستقلة
+                            </Badge>
+                          )}
                         </span>
                         <span className="text-[10px] text-muted-foreground shrink-0">{count}</span>
                       </button>
-                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => { setEditingCompany(c); setCompanyDialogOpen(true); }}
-                          className="h-6 w-6 flex items-center justify-center rounded-md hover:bg-muted text-muted-foreground hover:text-foreground"
-                          title="تعديل"
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (confirm(`حذف "${c.name}"؟ سيتم حذف ${count} مصروف مرتبط.`)) deleteCompany(c.id);
-                          }}
-                          className="h-6 w-6 flex items-center justify-center rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-                          title="حذف"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </div>
+                      {isStandalone && (
+                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => {
+                              if (confirm(`حذف "${name}"؟ سيتم حذف ${count} مصروف مرتبط.`)) deleteStandaloneCompany(name);
+                            }}
+                            className="h-6 w-6 flex items-center justify-center rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                            title="حذف"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })
@@ -296,7 +329,7 @@ export function PrepaidExpenses() {
 
           {/* Tabs */}
           {expenses.length === 0 ? (
-            <EmptyState onAdd={() => { setEditingExpense(null); setExpenseDialogOpen(true); }} hasCompanies={companies.length > 0} onAddCompany={() => { setEditingCompany(null); setCompanyDialogOpen(true); }} />
+            <EmptyState onAdd={() => { setEditingExpense(null); setExpenseDialogOpen(true); }} hasCompanies={allCompanyNames.length > 0} onAddCompany={() => setCompanyDialogOpen(true)} />
           ) : filteredExpenses.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border/60 py-12 text-center">
               <Filter className="h-8 w-8 text-muted-foreground/30 mx-auto mb-3" />
@@ -322,7 +355,7 @@ export function PrepaidExpenses() {
               <TabsContent value="cards" className="mt-4">
                 <ExpensesCardsList
                   expenses={filteredExpenses}
-                  companies={companies}
+                  companyColorMap={companyColorMap}
                   onEdit={(e) => { setEditingExpense(e); setExpenseDialogOpen(true); }}
                   onDelete={(e) => { if (confirm(`حذف "${e.name}"؟`)) deleteExpense(e.id); }}
                 />
@@ -341,16 +374,13 @@ export function PrepaidExpenses() {
       </div>
 
       {/* Dialogs */}
-      <CompanyDialog
-        open={companyDialogOpen}
-        onClose={() => setCompanyDialogOpen(false)}
-        editing={editingCompany}
-      />
+      <CompanyDialog open={companyDialogOpen} onClose={() => setCompanyDialogOpen(false)} />
       <ExpenseDialog
         open={expenseDialogOpen}
         onClose={() => setExpenseDialogOpen(false)}
         editing={editingExpense}
-        companies={companies}
+        allCompanyNames={allCompanyNames}
+        companyColorMap={companyColorMap}
       />
     </div>
   );
@@ -405,7 +435,7 @@ function EmptyState({ onAdd, hasCompanies, onAddCompany }: { onAdd: () => void; 
       <p className="text-sm text-muted-foreground max-w-md mx-auto mb-5">
         {hasCompanies
           ? 'أضف أول مصروف مقدم لتتبع توزيعه الشهري وحساب المستهلك والمتبقي تلقائياً'
-          : 'أضف أولاً شركة، ثم ابدأ بإضافة المصروفات المقدمة المرتبطة بها'}
+          : 'أضف أولاً شركة، ثم ابدأ بإضافة المصروفات المقدمة المرتبطة بها (أو ارفع ملف P&L لاستيراد الشركات)'}
       </p>
       {hasCompanies ? (
         <Button size="sm" className="gap-1.5 rounded-xl bg-gradient-to-l from-emerald-600 to-teal-600" onClick={onAdd}>
@@ -423,21 +453,19 @@ function EmptyState({ onAdd, hasCompanies, onAddCompany }: { onAdd: () => void; 
 }
 
 function ExpensesCardsList({
-  expenses, companies, onEdit, onDelete,
+  expenses, companyColorMap, onEdit, onDelete,
 }: {
   expenses: PrepaidExpense[];
-  companies: PrepaidCompany[];
+  companyColorMap: Map<string, string>;
   onEdit: (e: PrepaidExpense) => void;
   onDelete: (e: PrepaidExpense) => void;
 }) {
-  const companyMap = useMemo(() => new Map(companies.map((c) => [c.id, c])), [companies]);
-
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {expenses.map((e) => {
         const cat = getCategoryInfo(e.category);
         const status = getStatusInfo(e.status);
-        const company = companyMap.get(e.companyId);
+        const companyColor = companyColorMap.get(e.companyName);
         const monthly = getMonthlyInstallment(e.totalAmount, e.monthsCount);
         const info = getConsumedInfo(e);
 
@@ -455,12 +483,10 @@ function ExpensesCardsList({
                 <div className="min-w-0">
                   <h4 className="text-sm font-bold truncate">{e.name}</h4>
                   <div className="flex items-center gap-1.5 mt-1">
-                    {company && (
-                      <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: company.color }} />
-                        {company.name}
-                      </span>
-                    )}
+                    <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: companyColor }} />
+                      {e.companyName}
+                    </span>
                   </div>
                 </div>
                 <Badge variant="outline" className={`text-[10px] rounded-md border ${status.bg} ${status.color}`}>
@@ -727,48 +753,44 @@ function AnalyticsView({ expenses }: { expenses: PrepaidExpense[] }) {
   );
 }
 
-// ─── Dialogs ──────────────────────────────────────────────────────────────
-function CompanyDialog({ open, onClose, editing }: { open: boolean; onClose: () => void; editing: PrepaidCompany | null }) {
-  const { addCompany, updateCompany } = usePrepaidStore();
+// ─── Company Dialog (simplified — name only, color auto-assigned) ─────────
+function CompanyDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { addStandaloneCompany, standaloneCompanyNames } = usePrepaidStore();
+  const pnlCompanies = usePnLStore((s) => s.companies);
   const { toast } = useToast();
   const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [color, setColor] = useState(PREPAID_COMPANY_COLORS[0]);
 
   useEffect(() => {
-    if (open) {
-      if (editing) {
-        setName(editing.name);
-        setDescription(editing.description);
-        setColor(editing.color);
-      } else {
-        setName('');
-        setDescription('');
-        setColor(PREPAID_COMPANY_COLORS[Math.floor(Math.random() * PREPAID_COMPANY_COLORS.length)]);
-      }
-    }
-  }, [open, editing]);
+    if (open) setName('');
+  }, [open]);
+
+  const existingNames = useMemo(() => {
+    const set = new Set<string>();
+    pnlCompanies.forEach((c) => set.add(c.companyName));
+    standaloneCompanyNames.forEach((n) => set.add(n));
+    return set;
+  }, [pnlCompanies, standaloneCompanyNames]);
 
   const handleSubmit = () => {
-    if (!name.trim()) {
+    const trimmed = name.trim();
+    if (!trimmed) {
       toast({ variant: 'destructive', title: 'الاسم مطلوب' });
       return;
     }
-    if (editing) {
-      updateCompany(editing.id, { name: name.trim(), description: description.trim(), color });
-      toast({ title: 'تم التحديث', description: `تم تحديث بيانات "${name.trim()}"` });
-    } else {
-      addCompany({ name: name.trim(), description: description.trim(), color });
-      toast({ title: 'تمت الإضافة', description: `تمت إضافة "${name.trim()}"` });
+    if (existingNames.has(trimmed)) {
+      toast({ variant: 'destructive', title: 'الشركة موجودة مسبقاً', description: `"${trimmed}" موجودة في القائمة الموحدة` });
+      return;
     }
+    addStandaloneCompany(trimmed);
+    toast({ title: 'تمت الإضافة', description: `تمت إضافة "${trimmed}" للقائمة الموحدة للشركات` });
     onClose();
   };
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="!max-w-md p-0 gap-0 overflow-hidden rounded-3xl border-0 shadow-2xl" dir="rtl" aria-describedby={undefined}>
-        <DialogTitle className="sr-only">{editing ? 'تعديل شركة' : 'إضافة شركة جديدة'}</DialogTitle>
-        <DialogDescription className="sr-only">نموذج إدارة بيانات الشركة</DialogDescription>
+        <DialogTitle className="sr-only">إضافة شركة</DialogTitle>
+        <DialogDescription className="sr-only">إضافة شركة جديدة للقائمة الموحدة</DialogDescription>
 
         <div className="relative overflow-hidden px-6 py-5">
           <div className="absolute inset-0 bg-gradient-to-bl from-emerald-600 to-teal-600" />
@@ -778,48 +800,27 @@ function CompanyDialog({ open, onClose, editing }: { open: boolean; onClose: () 
               <Building2 className="h-5 w-5 text-white" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-white">{editing ? 'تعديل الشركة' : 'إضافة شركة جديدة'}</h2>
-              <p className="text-white/70 text-[11px]">أدخل بيانات الشركة</p>
+              <h2 className="text-lg font-bold text-white">إضافة شركة</h2>
+              <p className="text-white/70 text-[11px]">سيتم إضافتها للقائمة الموحدة (مع شركات P&L إن وجدت)</p>
             </div>
           </div>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-3">
           <div className="space-y-1.5">
             <Label htmlFor="co-name" className="text-xs font-semibold">اسم الشركة <span className="text-destructive">*</span></Label>
             <Input
               id="co-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
               placeholder="مثال: شركة النور للتجارة"
               className="rounded-xl"
+              autoFocus
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="co-desc" className="text-xs font-semibold">الوصف</Label>
-            <Textarea
-              id="co-desc"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="وصف مختصر"
-              rows={2}
-              className="rounded-xl resize-none"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-semibold">اللون التعريفي</Label>
-            <div className="flex flex-wrap gap-2">
-              {PREPAID_COMPANY_COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setColor(c)}
-                  className={`h-8 w-8 rounded-full transition-all ${color === c ? 'ring-2 ring-offset-2 ring-offset-background ring-foreground scale-110' : 'hover:scale-105'}`}
-                  style={{ backgroundColor: c }}
-                  aria-label={`color ${c}`}
-                />
-              ))}
-            </div>
+            <p className="text-[10px] text-muted-foreground">
+              اللون يُعيّن تلقائياً بشكل موحّد مع لوحة P&L
+            </p>
           </div>
         </div>
 
@@ -831,7 +832,7 @@ function CompanyDialog({ open, onClose, editing }: { open: boolean; onClose: () 
             onClick={handleSubmit}
           >
             <CheckCircle2 className="h-3.5 w-3.5" />
-            {editing ? 'تحديث' : 'إضافة الشركة'}
+            إضافة
           </Button>
         </div>
       </DialogContent>
@@ -840,18 +841,19 @@ function CompanyDialog({ open, onClose, editing }: { open: boolean; onClose: () 
 }
 
 function ExpenseDialog({
-  open, onClose, editing, companies,
+  open, onClose, editing, allCompanyNames, companyColorMap,
 }: {
   open: boolean;
   onClose: () => void;
   editing: PrepaidExpense | null;
-  companies: PrepaidCompany[];
+  allCompanyNames: string[];
+  companyColorMap: Map<string, string>;
 }) {
   const { addExpense, updateExpense } = usePrepaidStore();
   const { toast } = useToast();
 
   const [name, setName] = useState('');
-  const [companyId, setCompanyId] = useState('');
+  const [companyName, setCompanyName] = useState('');
   const [category, setCategory] = useState<PrepaidCategory>('rent');
   const [status, setStatus] = useState<PrepaidStatus>('active');
   const [totalAmount, setTotalAmount] = useState('');
@@ -866,7 +868,7 @@ function ExpenseDialog({
     if (open) {
       if (editing) {
         setName(editing.name);
-        setCompanyId(editing.companyId);
+        setCompanyName(editing.companyName);
         setCategory(editing.category);
         setStatus(editing.status);
         setTotalAmount(String(editing.totalAmount));
@@ -875,7 +877,7 @@ function ExpenseDialog({
         setNotes(editing.notes || '');
       } else {
         setName('');
-        setCompanyId(companies[0]?.id || '');
+        setCompanyName(allCompanyNames[0] || '');
         setCategory('rent');
         setStatus('active');
         setTotalAmount('');
@@ -884,9 +886,8 @@ function ExpenseDialog({
         setNotes('');
       }
     }
-  }, [open, editing, companies]);
+  }, [open, editing, allCompanyNames]);
 
-  // Auto-adjust end date when start date or months change
   const handleMonthsChange = (m: number) => {
     setEndDate(addMonthsISO(startDate, Math.max(1, m)));
   };
@@ -896,7 +897,7 @@ function ExpenseDialog({
       toast({ variant: 'destructive', title: 'الاسم مطلوب' });
       return;
     }
-    if (!companyId) {
+    if (!companyName) {
       toast({ variant: 'destructive', title: 'اختر شركة' });
       return;
     }
@@ -912,7 +913,7 @@ function ExpenseDialog({
 
     const payload = {
       name: name.trim(),
-      companyId,
+      companyName,
       category,
       status,
       totalAmount: amount,
@@ -969,12 +970,12 @@ function ExpenseDialog({
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold">الشركة <span className="text-destructive">*</span></Label>
                 <select
-                  value={companyId}
-                  onChange={(e) => setCompanyId(e.target.value)}
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
                   className="w-full h-9 text-xs rounded-xl border border-border/50 bg-background px-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                 >
-                  {companies.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                  {allCompanyNames.map((n) => (
+                    <option key={n} value={n}>{n}</option>
                   ))}
                 </select>
               </div>
