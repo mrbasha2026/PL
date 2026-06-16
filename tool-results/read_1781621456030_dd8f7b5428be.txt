@@ -1,0 +1,1094 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useMemo, useEffect } from 'react';
+     4→import {
+     5→  Dialog,
+     6→  DialogContent,
+     7→  DialogTitle,
+     8→  DialogDescription,
+     9→} from '@/components/ui/dialog';
+    10→import { Button } from '@/components/ui/button';
+    11→import { Input } from '@/components/ui/input';
+    12→import { Label } from '@/components/ui/label';
+    13→import { Textarea } from '@/components/ui/textarea';
+    14→import { Badge } from '@/components/ui/badge';
+    15→import { ScrollArea } from '@/components/ui/scroll-area';
+    16→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    17→import {
+    18→  Building2, Plus, Pencil, Trash2, Search, Filter, X,
+    19→  Wallet, Calendar, TrendingUp, TrendingDown, PieChart,
+    20→  BarChart3, Clock, CheckCircle2, AlertCircle,
+    21→  LayoutGrid, CalendarRange, FileBarChart,
+    22→} from 'lucide-react';
+    23→import {
+    24→  usePrepaidStore,
+    25→  type PrepaidExpense,
+    26→  type PrepaidCategory,
+    27→  type PrepaidStatus,
+    28→  PREPAID_CATEGORIES,
+    29→  PREPAID_STATUSES,
+    30→  getCompanyColor,
+    31→  getCategoryInfo,
+    32→  getStatusInfo,
+    33→  monthsBetween,
+    34→  getMonthlyInstallment,
+    35→  getConsumedInfo,
+    36→} from '@/lib/prepaid-store';
+    37→import { usePnLStore } from '@/lib/pnl-store';
+    38→import { useToast } from '@/hooks/use-toast';
+    39→
+    40→// ─── Helpers ───────────────────────────────────────────────────────────────
+    41→function formatSAR(n: number): string {
+    42→  return new Intl.NumberFormat('ar-SA', {
+    43→    style: 'currency',
+    44→    currency: 'SAR',
+    45→    maximumFractionDigits: 2,
+    46→  }).format(n || 0);
+    47→}
+    48→
+    49→function formatDateAr(iso: string): string {
+    50→  if (!iso) return '—';
+    51→  const d = new Date(iso);
+    52→  if (isNaN(d.getTime())) return '—';
+    53→  return d.toLocaleDateString('ar-SA', { year: 'numeric', month: 'long', day: 'numeric' });
+    54→}
+    55→
+    56→function todayISO(): string {
+    57→  return new Date().toISOString().slice(0, 10);
+    58→}
+    59→
+    60→function addMonthsISO(iso: string, months: number): string {
+    61→  const d = new Date(iso);
+    62→  d.setMonth(d.getMonth() + months - 1);
+    63→  return d.toISOString().slice(0, 10);
+    64→}
+    65→
+    66→// ─── Main Component ─────────────────────────────────────────────────────────
+    67→export function PrepaidExpenses() {
+    68→  // P&L companies (single source of truth when P&L data is uploaded)
+    69→  const pnlCompanies = usePnLStore((s) => s.companies);
+    70→
+    71→  const {
+    72→    standaloneCompanyNames, expenses,
+    73→    selectedCompanyName, searchQuery, filterCategory, filterStatus, filterYear,
+    74→    setSelectedCompanyName, setSearchQuery, setFilterCategory, setFilterStatus, setFilterYear,
+    75→    getFilteredExpenses, getExpenseCountByCompany,
+    76→    deleteStandaloneCompany, deleteExpense,
+    77→  } = usePrepaidStore();
+    78→
+    79→  const [companyDialogOpen, setCompanyDialogOpen] = useState(false);
+    80→  const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
+    81→  const [editingExpense, setEditingExpense] = useState<PrepaidExpense | null>(null);
+    82→
+    83→  // ─── Unified company list (P&L companies + standalone names) ──────────────
+    84→  // Single source of truth: P&L `companyName`s come first (sorted by upload
+    85→  // order), then standalone names that aren't already in P&L. Colors are
+    86→  // assigned via `COMPANY_COLORS` (same array used by the P&L dashboard).
+    87→  const allCompanyNames = useMemo(() => {
+    88→    const pnlNames = Array.from(new Set(pnlCompanies.map((c) => c.companyName)));
+    89→    const standalone = standaloneCompanyNames.filter((n) => !pnlNames.includes(n));
+    90→    return [...pnlNames, ...standalone];
+    91→  }, [pnlCompanies, standaloneCompanyNames]);
+    92→
+    93→  const companyColorMap = useMemo(() => {
+    94→    const m = new Map<string, string>();
+    95→    allCompanyNames.forEach((name, idx) => {
+    96→      m.set(name, getCompanyColor(name, allCompanyNames));
+    97→    });
+    98→    return m;
+    99→  }, [allCompanyNames]);
+   100→
+   101→  // Clean up selection if it no longer exists
+   102→  useEffect(() => {
+   103→    if (selectedCompanyName && !allCompanyNames.includes(selectedCompanyName)) {
+   104→      setSelectedCompanyName(null);
+   105→    }
+   106→  }, [allCompanyNames, selectedCompanyName, setSelectedCompanyName]);
+   107→
+   108→  const filteredExpenses = useMemo(
+   109→    () => getFilteredExpenses(allCompanyNames),
+   110→    [getFilteredExpenses, expenses, selectedCompanyName, searchQuery, filterCategory, filterStatus, filterYear, allCompanyNames]
+   111→  );
+   112→
+   113→  const availableYears = useMemo(() => {
+   114→    const set = new Set<number>();
+   115→    expenses.forEach((e) => {
+   116→      set.add(new Date(e.startDate).getFullYear());
+   117→      set.add(new Date(e.endDate).getFullYear());
+   118→    });
+   119→    return Array.from(set).sort((a, b) => b - a);
+   120→  }, [expenses]);
+   121→
+   122→  const totalCount = expenses.filter((e) => allCompanyNames.includes(e.companyName)).length;
+   123→  const totalAmount = expenses
+   124→    .filter((e) => allCompanyNames.includes(e.companyName))
+   125→    .reduce((s, e) => s + e.totalAmount, 0);
+   126→  const totalMonthly = expenses
+   127→    .filter((e) => e.status === 'active' && allCompanyNames.includes(e.companyName))
+   128→    .reduce((s, e) => s + getMonthlyInstallment(e.totalAmount, e.monthsCount), 0);
+   129→  const totalConsumed = expenses
+   130→    .filter((e) => allCompanyNames.includes(e.companyName))
+   131→    .reduce((s, e) => s + getConsumedInfo(e).consumed, 0);
+   132→  const totalRemaining = expenses
+   133→    .filter((e) => allCompanyNames.includes(e.companyName))
+   134→    .reduce((s, e) => s + getConsumedInfo(e).remaining, 0);
+   135→
+   136→  return (
+   137→    <div className="space-y-6" dir="rtl">
+   138→      {/* Page Header */}
+   139→      <div className="relative overflow-hidden rounded-3xl border border-emerald-500/15 dark:border-emerald-500/25 bg-gradient-to-bl from-emerald-500/5 via-transparent to-teal-500/5 dark:from-emerald-500/10 dark:to-teal-500/10 p-6">
+   140→        <div className="absolute -top-8 -left-8 h-32 w-32 rounded-full bg-emerald-500/8 blur-2xl" />
+   141→        <div className="absolute -bottom-10 -right-10 h-40 w-40 rounded-full bg-teal-500/8 blur-3xl" />
+   142→        <div className="relative flex flex-wrap items-start justify-between gap-4">
+   143→          <div className="flex items-start gap-4">
+   144→            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/20">
+   145→              <Wallet className="h-7 w-7 text-white" />
+   146→            </div>
+   147→            <div>
+   148→              <h2 className="text-2xl font-bold tracking-tight">تتبع المصروفات المقدمة</h2>
+   149→              <p className="text-sm text-muted-foreground mt-1">
+   150→                إدارة المصروفات المدفوعة مسبقاً وتوزيعها على الفترات المحاسبية — الشركات موحّدة مع لوحة P&L
+   151→              </p>
+   152→            </div>
+   153→          </div>
+   154→          <div className="flex items-center gap-2">
+   155→            <Button
+   156→              variant="outline"
+   157→              size="sm"
+   158→              className="gap-1.5 rounded-xl text-xs h-9"
+   159→              onClick={() => setCompanyDialogOpen(true)}
+   160→            >
+   161→              <Building2 className="h-3.5 w-3.5" />
+   162→              إضافة شركة
+   163→            </Button>
+   164→            <Button
+   165→              size="sm"
+   166→              className="gap-1.5 rounded-xl text-xs h-9 bg-gradient-to-l from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
+   167→              onClick={() => { setEditingExpense(null); setExpenseDialogOpen(true); }}
+   168→              disabled={allCompanyNames.length === 0}
+   169→            >
+   170→              <Plus className="h-3.5 w-3.5" />
+   171→              مصروف مقدم جديد
+   172→            </Button>
+   173→          </div>
+   174→        </div>
+   175→
+   176→        {/* Stat Cards */}
+   177→        <div className="relative mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+   178→          <StatCard icon={Wallet} label="إجمالي المصروفات" value={formatSAR(totalAmount)} color="emerald" />
+   179→          <StatCard icon={Calendar} label="القسط الشهري (نشط)" value={formatSAR(totalMonthly)} color="sky" />
+   180→          <StatCard icon={TrendingDown} label="المستهلك" value={formatSAR(totalConsumed)} color="amber" />
+   181→          <StatCard icon={TrendingUp} label="المتبقي" value={formatSAR(totalRemaining)} color="violet" />
+   182→        </div>
+   183→      </div>
+   184→
+   185→      <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
+   186→        {/* Sidebar: Companies (unified) */}
+   187→        <aside className="space-y-3">
+   188→          <div className="rounded-2xl border border-border/50 bg-card/40 backdrop-blur-sm overflow-hidden">
+   189→            <div className="px-4 py-3 border-b border-border/40 bg-muted/20">
+   190→              <div className="flex items-center justify-between">
+   191→                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">الشركات</h3>
+   192→                <Badge variant="outline" className="text-[10px] rounded-md">{allCompanyNames.length}</Badge>
+   193→              </div>
+   194→              <p className="text-[10px] text-muted-foreground/70 mt-1">
+   195→                {pnlCompanies.length > 0
+   196→                  ? 'موحّدة مع بيانات P&L'
+   197→                  : 'أضف شركات مباشرة أو ارفع ملف P&L'}
+   198→              </p>
+   199→            </div>
+   200→            <div className="p-2 space-y-1">
+   201→              <button
+   202→                onClick={() => setSelectedCompanyName(null)}
+   203→                className={`w-full flex items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-xs font-medium transition-all ${
+   204→                  selectedCompanyName === null
+   205→                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20'
+   206→                    : 'text-foreground/70 hover:bg-muted/40 border border-transparent'
+   207→                }`}
+   208→              >
+   209→                <span className="flex items-center gap-2">
+   210→                  <LayoutGrid className="h-3.5 w-3.5" />
+   211→                  جميع الشركات
+   212→                </span>
+   213→                <span className="text-[10px] text-muted-foreground">{totalCount}</span>
+   214→              </button>
+   215→              {allCompanyNames.length === 0 ? (
+   216→                <div className="text-center py-6 px-3">
+   217→                  <Building2 className="h-7 w-7 text-muted-foreground/30 mx-auto mb-2" />
+   218→                  <p className="text-[11px] text-muted-foreground mb-3">لا توجد شركات بعد</p>
+   219→                  <Button
+   220→                    size="sm"
+   221→                    variant="outline"
+   222→                    className="h-7 text-[11px] gap-1 rounded-lg w-full"
+   223→                    onClick={() => setCompanyDialogOpen(true)}
+   224→                  >
+   225→                    <Plus className="h-3 w-3" />
+   226→                    إضافة شركة
+   227→                  </Button>
+   228→                </div>
+   229→              ) : (
+   230→                allCompanyNames.map((name) => {
+   231→                  const count = getExpenseCountByCompany(name);
+   232→                  const isActive = selectedCompanyName === name;
+   233→                  const color = companyColorMap.get(name);
+   234→                  const isStandalone = !pnlCompanies.some((c) => c.companyName === name);
+   235→                  return (
+   236→                    <div
+   237→                      key={name}
+   238→                      className={`group w-full flex items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-xs font-medium transition-all ${
+   239→                        isActive
+   240→                          ? 'bg-emerald-500/10 border border-emerald-500/20'
+   241→                          : 'hover:bg-muted/40 border border-transparent'
+   242→                      }`}
+   243→                    >
+   244→                      <button
+   245→                        onClick={() => setSelectedCompanyName(name)}
+   246→                        className="flex-1 flex items-center justify-between gap-2 text-right min-w-0"
+   247→                      >
+   248→                        <span className="flex items-center gap-2 min-w-0">
+   249→                          <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+   250→                          <span className={`truncate ${isActive ? 'text-emerald-700 dark:text-emerald-400' : ''}`}>
+   251→                            {name}
+   252→                          </span>
+   253→                          {isStandalone && (
+   254→                            <Badge variant="outline" className="text-[8px] px-1 py-0 rounded h-3.5 shrink-0 text-muted-foreground/70">
+   255→                              مستقلة
+   256→                            </Badge>
+   257→                          )}
+   258→                        </span>
+   259→                        <span className="text-[10px] text-muted-foreground shrink-0">{count}</span>
+   260→                      </button>
+   261→                      {isStandalone && (
+   262→                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+   263→                          <button
+   264→                            onClick={() => {
+   265→                              if (confirm(`حذف "${name}"؟ سيتم حذف ${count} مصروف مرتبط.`)) deleteStandaloneCompany(name);
+   266→                            }}
+   267→                            className="h-6 w-6 flex items-center justify-center rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+   268→                            title="حذف"
+   269→                          >
+   270→                            <Trash2 className="h-3 w-3" />
+   271→                          </button>
+   272→                        </div>
+   273→                      )}
+   274→                    </div>
+   275→                  );
+   276→                })
+   277→              )}
+   278→            </div>
+   279→          </div>
+   280→        </aside>
+   281→
+   282→        {/* Main content */}
+   283→        <div className="space-y-4 min-w-0">
+   284→          {/* Filter Bar */}
+   285→          <div className="rounded-2xl border border-border/50 bg-card/40 backdrop-blur-sm p-3">
+   286→            <div className="flex flex-wrap items-center gap-2">
+   287→              <div className="relative flex-1 min-w-[180px]">
+   288→                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+   289→                <Input
+   290→                  placeholder="بحث..."
+   291→                  value={searchQuery}
+   292→                  onChange={(e) => setSearchQuery(e.target.value)}
+   293→                  className="h-9 text-xs rounded-xl pr-9"
+   294→                />
+   295→              </div>
+   296→              <FilterSelect
+   297→                value={filterCategory}
+   298→                onChange={(v) => setFilterCategory(v as PrepaidCategory | 'all')}
+   299→                options={[{ value: 'all', label: 'جميع التصنيفات' }, ...PREPAID_CATEGORIES.map((c) => ({ value: c.value, label: c.labelAr }))]}
+   300→              />
+   301→              <FilterSelect
+   302→                value={filterStatus}
+   303→                onChange={(v) => setFilterStatus(v as PrepaidStatus | 'all')}
+   304→                options={[{ value: 'all', label: 'جميع الحالات' }, ...PREPAID_STATUSES.map((s) => ({ value: s.value, label: s.labelAr }))]}
+   305→              />
+   306→              <FilterSelect
+   307→                value={filterYear}
+   308→                onChange={(v) => setFilterYear(v === 'all' ? 'all' : Number(v))}
+   309→                options={[{ value: 'all', label: 'كل السنوات' }, ...availableYears.map((y) => ({ value: y, label: String(y) }))]}
+   310→              />
+   311→              {(searchQuery || filterCategory !== 'all' || filterStatus !== 'all' || filterYear !== 'all') && (
+   312→                <Button
+   313→                  variant="ghost"
+   314→                  size="sm"
+   315→                  className="h-9 text-xs gap-1 rounded-xl"
+   316→                  onClick={() => {
+   317→                    setSearchQuery('');
+   318→                    setFilterCategory('all');
+   319→                    setFilterStatus('all');
+   320→                    setFilterYear('all');
+   321→                  }}
+   322→                >
+   323→                  <X className="h-3 w-3" />
+   324→                  مسح
+   325→                </Button>
+   326→              )}
+   327→            </div>
+   328→          </div>
+   329→
+   330→          {/* Tabs */}
+   331→          {expenses.length === 0 ? (
+   332→            <EmptyState onAdd={() => { setEditingExpense(null); setExpenseDialogOpen(true); }} hasCompanies={allCompanyNames.length > 0} onAddCompany={() => setCompanyDialogOpen(true)} />
+   333→          ) : filteredExpenses.length === 0 ? (
+   334→            <div className="rounded-2xl border border-dashed border-border/60 py-12 text-center">
+   335→              <Filter className="h-8 w-8 text-muted-foreground/30 mx-auto mb-3" />
+   336→              <p className="text-sm text-muted-foreground">لا توجد نتائج مطابقة للفلتر</p>
+   337→            </div>
+   338→          ) : (
+   339→            <Tabs defaultValue="cards" className="w-full">
+   340→              <TabsList className="bg-muted/30 border border-border/40 rounded-2xl p-1 h-auto">
+   341→                <TabsTrigger value="cards" className="gap-1.5 rounded-xl text-xs px-3 py-1.5 data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-700 dark:data-[state=active]:text-emerald-400">
+   342→                  <LayoutGrid className="h-3.5 w-3.5" />
+   343→                  المصروفات ({filteredExpenses.length})
+   344→                </TabsTrigger>
+   345→                <TabsTrigger value="monthly" className="gap-1.5 rounded-xl text-xs px-3 py-1.5 data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-700 dark:data-[state=active]:text-emerald-400">
+   346→                  <CalendarRange className="h-3.5 w-3.5" />
+   347→                  التوزيع الشهري
+   348→                </TabsTrigger>
+   349→                <TabsTrigger value="analytics" className="gap-1.5 rounded-xl text-xs px-3 py-1.5 data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-700 dark:data-[state=active]:text-emerald-400">
+   350→                  <FileBarChart className="h-3.5 w-3.5" />
+   351→                  التحليلات
+   352→                </TabsTrigger>
+   353→              </TabsList>
+   354→
+   355→              <TabsContent value="cards" className="mt-4">
+   356→                <ExpensesCardsList
+   357→                  expenses={filteredExpenses}
+   358→                  companyColorMap={companyColorMap}
+   359→                  onEdit={(e) => { setEditingExpense(e); setExpenseDialogOpen(true); }}
+   360→                  onDelete={(e) => { if (confirm(`حذف "${e.name}"؟`)) deleteExpense(e.id); }}
+   361→                />
+   362→              </TabsContent>
+   363→
+   364→              <TabsContent value="monthly" className="mt-4">
+   365→                <MonthlyDistribution expenses={filteredExpenses} />
+   366→              </TabsContent>
+   367→
+   368→              <TabsContent value="analytics" className="mt-4">
+   369→                <AnalyticsView expenses={filteredExpenses} />
+   370→              </TabsContent>
+   371→            </Tabs>
+   372→          )}
+   373→        </div>
+   374→      </div>
+   375→
+   376→      {/* Dialogs */}
+   377→      <CompanyDialog open={companyDialogOpen} onClose={() => setCompanyDialogOpen(false)} />
+   378→      <ExpenseDialog
+   379→        open={expenseDialogOpen}
+   380→        onClose={() => setExpenseDialogOpen(false)}
+   381→        editing={editingExpense}
+   382→        allCompanyNames={allCompanyNames}
+   383→        companyColorMap={companyColorMap}
+   384→      />
+   385→    </div>
+   386→  );
+   387→}
+   388→
+   389→// ─── Subcomponents ─────────────────────────────────────────────────────────
+   390→function StatCard({ icon: Icon, label, value, color }: { icon: any; label: string; value: string; color: string }) {
+   391→  const colorMap: Record<string, string> = {
+   392→    emerald: 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10',
+   393→    sky: 'text-sky-600 dark:text-sky-400 bg-sky-500/10',
+   394→    amber: 'text-amber-600 dark:text-amber-400 bg-amber-500/10',
+   395→    violet: 'text-violet-600 dark:text-violet-400 bg-violet-500/10',
+   396→  };
+   397→  return (
+   398→    <div className="rounded-2xl border border-border/40 bg-card/60 backdrop-blur-sm p-3.5">
+   399→      <div className="flex items-center gap-2 mb-2">
+   400→        <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${colorMap[color]}`}>
+   401→          <Icon className="h-3.5 w-3.5" />
+   402→        </div>
+   403→        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">{label}</span>
+   404→      </div>
+   405→      <p className="text-base font-bold tabular-nums tracking-tight truncate">{value}</p>
+   406→    </div>
+   407→  );
+   408→}
+   409→
+   410→function FilterSelect({ value, onChange, options }: { value: any; onChange: (v: any) => void; options: { value: any; label: string }[] }) {
+   411→  return (
+   412→    <select
+   413→      value={String(value)}
+   414→      onChange={(e) => {
+   415→        const raw = e.target.value;
+   416→        const numeric = options.find((o) => String(o.value) === raw && typeof o.value === 'number')?.value;
+   417→        onChange(numeric ?? (raw === 'all' ? 'all' : raw));
+   418→      }}
+   419→      className="h-9 text-xs rounded-xl border border-border/50 bg-background px-3 pr-3 pl-8 cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+   420→    >
+   421→      {options.map((o) => (
+   422→        <option key={String(o.value)} value={String(o.value)}>{o.label}</option>
+   423→      ))}
+   424→    </select>
+   425→  );
+   426→}
+   427→
+   428→function EmptyState({ onAdd, hasCompanies, onAddCompany }: { onAdd: () => void; hasCompanies: boolean; onAddCompany: () => void }) {
+   429→  return (
+   430→    <div className="rounded-3xl border border-dashed border-border/60 py-16 text-center">
+   431→      <div className="h-16 w-16 rounded-2xl bg-emerald-500/8 flex items-center justify-center mx-auto mb-4">
+   432→        <Wallet className="h-8 w-8 text-emerald-500/60" />
+   433→      </div>
+   434→      <h3 className="text-base font-semibold mb-1">ابدأ بتتبع مصروفاتك المقدمة</h3>
+   435→      <p className="text-sm text-muted-foreground max-w-md mx-auto mb-5">
+   436→        {hasCompanies
+   437→          ? 'أضف أول مصروف مقدم لتتبع توزيعه الشهري وحساب المستهلك والمتبقي تلقائياً'
+   438→          : 'أضف أولاً شركة، ثم ابدأ بإضافة المصروفات المقدمة المرتبطة بها (أو ارفع ملف P&L لاستيراد الشركات)'}
+   439→      </p>
+   440→      {hasCompanies ? (
+   441→        <Button size="sm" className="gap-1.5 rounded-xl bg-gradient-to-l from-emerald-600 to-teal-600" onClick={onAdd}>
+   442→          <Plus className="h-4 w-4" />
+   443→          مصروف مقدم جديد
+   444→        </Button>
+   445→      ) : (
+   446→        <Button size="sm" className="gap-1.5 rounded-xl bg-gradient-to-l from-emerald-600 to-teal-600" onClick={onAddCompany}>
+   447→          <Building2 className="h-4 w-4" />
+   448→          إضافة شركة
+   449→        </Button>
+   450→      )}
+   451→    </div>
+   452→  );
+   453→}
+   454→
+   455→function ExpensesCardsList({
+   456→  expenses, companyColorMap, onEdit, onDelete,
+   457→}: {
+   458→  expenses: PrepaidExpense[];
+   459→  companyColorMap: Map<string, string>;
+   460→  onEdit: (e: PrepaidExpense) => void;
+   461→  onDelete: (e: PrepaidExpense) => void;
+   462→}) {
+   463→  return (
+   464→    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   465→      {expenses.map((e) => {
+   466→        const cat = getCategoryInfo(e.category);
+   467→        const status = getStatusInfo(e.status);
+   468→        const companyColor = companyColorMap.get(e.companyName);
+   469→        const monthly = getMonthlyInstallment(e.totalAmount, e.monthsCount);
+   470→        const info = getConsumedInfo(e);
+   471→
+   472→        return (
+   473→          <div
+   474→            key={e.id}
+   475→            className="group rounded-2xl border border-border/50 bg-card/60 backdrop-blur-sm overflow-hidden transition-all hover:shadow-lg hover:shadow-emerald-500/5 hover:border-emerald-500/30"
+   476→          >
+   477→            {/* Top stripe */}
+   478→            <div className="h-1" style={{ backgroundColor: cat.color }} />
+   479→
+   480→            <div className="p-5">
+   481→              {/* Header */}
+   482→              <div className="flex items-start justify-between gap-2 mb-3">
+   483→                <div className="min-w-0">
+   484→                  <h4 className="text-sm font-bold truncate">{e.name}</h4>
+   485→                  <div className="flex items-center gap-1.5 mt-1">
+   486→                    <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+   487→                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: companyColor }} />
+   488→                      {e.companyName}
+   489→                    </span>
+   490→                  </div>
+   491→                </div>
+   492→                <Badge variant="outline" className={`text-[10px] rounded-md border ${status.bg} ${status.color}`}>
+   493→                  {status.labelAr}
+   494→                </Badge>
+   495→              </div>
+   496→
+   497→              {/* Meta */}
+   498→              <div className="flex flex-wrap items-center gap-1.5 mb-4">
+   499→                <Badge variant="outline" className="text-[10px] rounded-md gap-1" style={{ borderColor: `${cat.color}40`, color: cat.color, background: `${cat.color}08` }}>
+   500→                  <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: cat.color }} />
+   501→                  {cat.labelAr}
+   502→                </Badge>
+   503→                <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+   504→                  <CalendarRange className="h-3 w-3" />
+   505→                  {formatDateAr(e.startDate)} — {formatDateAr(e.endDate)}
+   506→                </span>
+   507→              </div>
+   508→
+   509→              {/* Amounts grid */}
+   510→              <div className="grid grid-cols-2 gap-2 mb-4">
+   511→                <div className="rounded-xl bg-muted/20 p-2.5">
+   512→                  <p className="text-[10px] text-muted-foreground mb-0.5">الإجمالي</p>
+   513→                  <p className="text-sm font-bold tabular-nums">{formatSAR(e.totalAmount)}</p>
+   514→                </div>
+   515→                <div className="rounded-xl bg-muted/20 p-2.5">
+   516→                  <p className="text-[10px] text-muted-foreground mb-0.5">القسط الشهري</p>
+   517→                  <p className="text-sm font-bold tabular-nums">{formatSAR(monthly)}</p>
+   518→                </div>
+   519→                <div className="rounded-xl bg-amber-500/5 border border-amber-500/15 p-2.5">
+   520→                  <p className="text-[10px] text-amber-700 dark:text-amber-400 mb-0.5">مستهلك</p>
+   521→                  <p className="text-sm font-bold tabular-nums text-amber-700 dark:text-amber-400">{formatSAR(info.consumed)}</p>
+   522→                </div>
+   523→                <div className="rounded-xl bg-violet-500/5 border border-violet-500/15 p-2.5">
+   524→                  <p className="text-[10px] text-violet-700 dark:text-violet-400 mb-0.5">متبقي</p>
+   525→                  <p className="text-sm font-bold tabular-nums text-violet-700 dark:text-violet-400">{formatSAR(info.remaining)}</p>
+   526→                </div>
+   527→              </div>
+   528→
+   529→              {/* Progress */}
+   530→              <div className="mb-3">
+   531→                <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
+   532→                  <span className="flex items-center gap-1">
+   533→                    <Clock className="h-3 w-3" />
+   534→                    الشهر {info.monthsElapsed} من {e.monthsCount}
+   535→                  </span>
+   536→                  <span className="font-semibold">{info.percent}%</span>
+   537→                </div>
+   538→                <div className="h-1.5 rounded-full bg-muted/30 overflow-hidden">
+   539→                  <div
+   540→                    className="h-full rounded-full transition-all"
+   541→                    style={{
+   542→                      width: `${Math.min(100, info.percent)}%`,
+   543→                      background: `linear-gradient(to left, ${cat.color}, ${cat.color}aa)`,
+   544→                    }}
+   545→                  />
+   546→                </div>
+   547→              </div>
+   548→
+   549→              {/* Actions */}
+   550→              <div className="flex items-center justify-end gap-1 pt-2 border-t border-border/40">
+   551→                <Button
+   552→                  variant="ghost"
+   553→                  size="sm"
+   554→                  className="h-7 text-xs gap-1 rounded-lg"
+   555→                  onClick={() => onEdit(e)}
+   556→                >
+   557→                  <Pencil className="h-3 w-3" />
+   558→                  تعديل
+   559→                </Button>
+   560→                <Button
+   561→                  variant="ghost"
+   562→                  size="sm"
+   563→                  className="h-7 text-xs gap-1 rounded-lg text-destructive hover:bg-destructive/10 hover:text-destructive"
+   564→                  onClick={() => onDelete(e)}
+   565→                >
+   566→                  <Trash2 className="h-3 w-3" />
+   567→                  حذف
+   568→                </Button>
+   569→              </div>
+   570→            </div>
+   571→          </div>
+   572→        );
+   573→      })}
+   574→    </div>
+   575→  );
+   576→}
+   577→
+   578→function MonthlyDistribution({ expenses }: { expenses: PrepaidExpense[] }) {
+   579→  const monthlyData = useMemo(() => {
+   580→    const map = new Map<string, { month: string; total: number; count: number }>();
+   581→    expenses.forEach((e) => {
+   582→      const start = new Date(e.startDate);
+   583→      if (isNaN(start.getTime())) return;
+   584→      const monthly = getMonthlyInstallment(e.totalAmount, e.monthsCount);
+   585→      for (let i = 0; i < e.monthsCount; i++) {
+   586→        const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
+   587→        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+   588→        const label = d.toLocaleDateString('ar-SA', { year: 'numeric', month: 'short' });
+   589→        const existing = map.get(key) || { month: label, total: 0, count: 0 };
+   590→        existing.total += monthly;
+   591→        existing.count += 1;
+   592→        map.set(key, existing);
+   593→      }
+   594→    });
+   595→    return Array.from(map.entries())
+   596→      .sort(([a], [b]) => a.localeCompare(b))
+   597→      .map(([, v]) => v);
+   598→  }, [expenses]);
+   599→
+   600→  const maxTotal = Math.max(1, ...monthlyData.map((d) => d.total));
+   601→
+   602→  if (monthlyData.length === 0) {
+   603→    return (
+   604→      <div className="rounded-2xl border border-dashed border-border/60 py-12 text-center">
+   605→        <BarChart3 className="h-8 w-8 text-muted-foreground/30 mx-auto mb-3" />
+   606→        <p className="text-sm text-muted-foreground">لا توجد بيانات كافية لعرض التوزيع الشهري</p>
+   607→      </div>
+   608→    );
+   609→  }
+   610→
+   611→  return (
+   612→    <div className="rounded-2xl border border-border/50 bg-card/40 backdrop-blur-sm p-5">
+   613→      <div className="flex items-center justify-between mb-5">
+   614→        <div>
+   615→          <h3 className="text-sm font-bold flex items-center gap-2">
+   616→            <CalendarRange className="h-4 w-4 text-emerald-500" />
+   617→            التوزيع الشهري للمصروفات
+   618→          </h3>
+   619→          <p className="text-[11px] text-muted-foreground mt-0.5">إجمالي القسط الشهري لكل فترة</p>
+   620→        </div>
+   621→        <Badge variant="outline" className="rounded-md text-[10px]">{monthlyData.length} شهر</Badge>
+   622→      </div>
+   623→      <div className="space-y-2">
+   624→        {monthlyData.map((d, idx) => (
+   625→          <div key={idx} className="flex items-center gap-3">
+   626→            <span className="text-[11px] text-muted-foreground font-medium w-28 text-left shrink-0">{d.month}</span>
+   627→            <div className="flex-1 h-7 rounded-lg bg-muted/20 overflow-hidden relative">
+   628→              <div
+   629→                className="h-full rounded-lg bg-gradient-to-l from-emerald-500 to-teal-500 transition-all flex items-center justify-start pr-2"
+   630→                style={{ width: `${Math.max(8, (d.total / maxTotal) * 100)}%` }}
+   631→              >
+   632→                <span className="text-[10px] font-bold text-white whitespace-nowrap">
+   633→                  {formatSAR(d.total)}
+   634→                </span>
+   635→              </div>
+   636→            </div>
+   637→            <span className="text-[10px] text-muted-foreground w-12 text-left shrink-0">{d.count} مصروف</span>
+   638→          </div>
+   639→        ))}
+   640→      </div>
+   641→    </div>
+   642→  );
+   643→}
+   644→
+   645→function AnalyticsView({ expenses }: { expenses: PrepaidExpense[] }) {
+   646→  const byYear = useMemo(() => {
+   647→    const map = new Map<number, { year: number; total: number; monthly: number; count: number }>();
+   648→    expenses.forEach((e) => {
+   649→      const year = new Date(e.startDate).getFullYear();
+   650→      if (isNaN(year)) return;
+   651→      const existing = map.get(year) || { year, total: 0, monthly: 0, count: 0 };
+   652→      existing.total += e.totalAmount;
+   653→      existing.monthly += getMonthlyInstallment(e.totalAmount, e.monthsCount);
+   654→      existing.count += 1;
+   655→      map.set(year, existing);
+   656→    });
+   657→    return Array.from(map.values()).sort((a, b) => b.year - a.year);
+   658→  }, [expenses]);
+   659→
+   660→  const byCategory = useMemo(() => {
+   661→    const map = new Map<PrepaidCategory, { category: PrepaidCategory; total: number; count: number }>();
+   662→    expenses.forEach((e) => {
+   663→      const existing = map.get(e.category) || { category: e.category, total: 0, count: 0 };
+   664→      existing.total += e.totalAmount;
+   665→      existing.count += 1;
+   666→      map.set(e.category, existing);
+   667→    });
+   668→    return Array.from(map.values()).sort((a, b) => b.total - a.total);
+   669→  }, [expenses]);
+   670→
+   671→  const totalAll = byYear.reduce((s, y) => s + y.total, 0);
+   672→
+   673→  return (
+   674→    <div className="space-y-4">
+   675→      {/* Yearly table */}
+   676→      <div className="rounded-2xl border border-border/50 bg-card/40 backdrop-blur-sm overflow-hidden">
+   677→        <div className="px-5 py-3 border-b border-border/40 bg-muted/20">
+   678→          <h3 className="text-sm font-bold flex items-center gap-2">
+   679→            <FileBarChart className="h-4 w-4 text-emerald-500" />
+   680→            ملخص سنوي
+   681→          </h3>
+   682→        </div>
+   683→        <div className="overflow-x-auto">
+   684→          <table className="w-full text-xs">
+   685→            <thead>
+   686→              <tr className="border-b border-border/40 bg-muted/10">
+   687→                <th className="text-right font-bold uppercase tracking-wider text-muted-foreground/70 px-5 py-3">السنة</th>
+   688→                <th className="text-right font-bold uppercase tracking-wider text-muted-foreground/70 px-5 py-3">إجمالي المصروف</th>
+   689→                <th className="text-right font-bold uppercase tracking-wider text-muted-foreground/70 px-5 py-3">القسط الشهري</th>
+   690→                <th className="text-right font-bold uppercase tracking-wider text-muted-foreground/70 px-5 py-3">عدد المصروفات</th>
+   691→              </tr>
+   692→            </thead>
+   693→            <tbody className="divide-y divide-border/20">
+   694→              {byYear.map((y) => (
+   695→                <tr key={y.year} className="hover:bg-muted/15 transition-colors">
+   696→                  <td className="px-5 py-3 font-bold tabular-nums">{y.year}</td>
+   697→                  <td className="px-5 py-3 font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">{formatSAR(y.total)}</td>
+   698→                  <td className="px-5 py-3 tabular-nums text-muted-foreground">{formatSAR(y.monthly)}</td>
+   699→                  <td className="px-5 py-3 tabular-nums text-muted-foreground">{y.count}</td>
+   700→                </tr>
+   701→              ))}
+   702→              {byYear.length === 0 && (
+   703→                <tr>
+   704→                  <td colSpan={4} className="px-5 py-8 text-center text-muted-foreground">لا توجد بيانات</td>
+   705→                </tr>
+   706→              )}
+   707→            </tbody>
+   708→            {byYear.length > 0 && (
+   709→              <tfoot>
+   710→                <tr className="border-t-2 border-border/40 bg-muted/15 font-bold">
+   711→                  <td className="px-5 py-3">الإجمالي</td>
+   712→                  <td className="px-5 py-3 tabular-nums text-emerald-700 dark:text-emerald-400">{formatSAR(totalAll)}</td>
+   713→                  <td colSpan={2} className="px-5 py-3"></td>
+   714→                </tr>
+   715→              </tfoot>
+   716→            )}
+   717→          </table>
+   718→        </div>
+   719→      </div>
+   720→
+   721→      {/* Category breakdown */}
+   722→      <div className="rounded-2xl border border-border/50 bg-card/40 backdrop-blur-sm p-5">
+   723→        <h3 className="text-sm font-bold flex items-center gap-2 mb-4">
+   724→          <PieChart className="h-4 w-4 text-emerald-500" />
+   725→          التوزيع حسب التصنيف
+   726→        </h3>
+   727→        <div className="space-y-2.5">
+   728→          {byCategory.map((c) => {
+   729→            const cat = getCategoryInfo(c.category);
+   730→            const pct = totalAll > 0 ? (c.total / totalAll) * 100 : 0;
+   731→            return (
+   732→              <div key={c.category}>
+   733→                <div className="flex items-center justify-between text-xs mb-1">
+   734→                  <span className="flex items-center gap-2">
+   735→                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
+   736→                    <span className="font-medium">{cat.labelAr}</span>
+   737→                    <span className="text-[10px] text-muted-foreground">({c.count})</span>
+   738→                  </span>
+   739→                  <span className="font-bold tabular-nums">{formatSAR(c.total)} · {pct.toFixed(0)}%</span>
+   740→                </div>
+   741→                <div className="h-2 rounded-full bg-muted/30 overflow-hidden">
+   742→                  <div
+   743→                    className="h-full rounded-full transition-all"
+   744→                    style={{ width: `${pct}%`, backgroundColor: cat.color }}
+   745→                  />
+   746→                </div>
+   747→              </div>
+   748→            );
+   749→          })}
+   750→        </div>
+   751→      </div>
+   752→    </div>
+   753→  );
+   754→}
+   755→
+   756→// ─── Company Dialog (simplified — name only, color auto-assigned) ─────────
+   757→function CompanyDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+   758→  const { addStandaloneCompany, standaloneCompanyNames } = usePrepaidStore();
+   759→  const pnlCompanies = usePnLStore((s) => s.companies);
+   760→  const { toast } = useToast();
+   761→  const [name, setName] = useState('');
+   762→
+   763→  useEffect(() => {
+   764→    if (open) setName('');
+   765→  }, [open]);
+   766→
+   767→  const existingNames = useMemo(() => {
+   768→    const set = new Set<string>();
+   769→    pnlCompanies.forEach((c) => set.add(c.companyName));
+   770→    standaloneCompanyNames.forEach((n) => set.add(n));
+   771→    return set;
+   772→  }, [pnlCompanies, standaloneCompanyNames]);
+   773→
+   774→  const handleSubmit = () => {
+   775→    const trimmed = name.trim();
+   776→    if (!trimmed) {
+   777→      toast({ variant: 'destructive', title: 'الاسم مطلوب' });
+   778→      return;
+   779→    }
+   780→    if (existingNames.has(trimmed)) {
+   781→      toast({ variant: 'destructive', title: 'الشركة موجودة مسبقاً', description: `"${trimmed}" موجودة في القائمة الموحدة` });
+   782→      return;
+   783→    }
+   784→    addStandaloneCompany(trimmed);
+   785→    toast({ title: 'تمت الإضافة', description: `تمت إضافة "${trimmed}" للقائمة الموحدة للشركات` });
+   786→    onClose();
+   787→  };
+   788→
+   789→  return (
+   790→    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+   791→      <DialogContent className="!max-w-md p-0 gap-0 overflow-hidden rounded-3xl border-0 shadow-2xl" dir="rtl" aria-describedby={undefined}>
+   792→        <DialogTitle className="sr-only">إضافة شركة</DialogTitle>
+   793→        <DialogDescription className="sr-only">إضافة شركة جديدة للقائمة الموحدة</DialogDescription>
+   794→
+   795→        <div className="relative overflow-hidden px-6 py-5">
+   796→          <div className="absolute inset-0 bg-gradient-to-bl from-emerald-600 to-teal-600" />
+   797→          <div className="absolute -top-6 -left-6 h-24 w-24 rounded-full bg-white/5 blur-xl" />
+   798→          <div className="relative flex items-center gap-3">
+   799→            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 backdrop-blur-md border border-white/10">
+   800→              <Building2 className="h-5 w-5 text-white" />
+   801→            </div>
+   802→            <div>
+   803→              <h2 className="text-lg font-bold text-white">إضافة شركة</h2>
+   804→              <p className="text-white/70 text-[11px]">سيتم إضافتها للقائمة الموحدة (مع شركات P&L إن وجدت)</p>
+   805→            </div>
+   806→          </div>
+   807→        </div>
+   808→
+   809→        <div className="p-6 space-y-3">
+   810→          <div className="space-y-1.5">
+   811→            <Label htmlFor="co-name" className="text-xs font-semibold">اسم الشركة <span className="text-destructive">*</span></Label>
+   812→            <Input
+   813→              id="co-name"
+   814→              value={name}
+   815→              onChange={(e) => setName(e.target.value)}
+   816→              onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+   817→              placeholder="مثال: شركة النور للتجارة"
+   818→              className="rounded-xl"
+   819→              autoFocus
+   820→            />
+   821→            <p className="text-[10px] text-muted-foreground">
+   822→              اللون يُعيّن تلقائياً بشكل موحّد مع لوحة P&L
+   823→            </p>
+   824→          </div>
+   825→        </div>
+   826→
+   827→        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t bg-muted/20">
+   828→          <Button variant="ghost" size="sm" className="text-xs rounded-xl" onClick={onClose}>إلغاء</Button>
+   829→          <Button
+   830→            size="sm"
+   831→            className="text-xs gap-1.5 rounded-xl bg-gradient-to-l from-emerald-600 to-teal-600"
+   832→            onClick={handleSubmit}
+   833→          >
+   834→            <CheckCircle2 className="h-3.5 w-3.5" />
+   835→            إضافة
+   836→          </Button>
+   837→        </div>
+   838→      </DialogContent>
+   839→    </Dialog>
+   840→  );
+   841→}
+   842→
+   843→function ExpenseDialog({
+   844→  open, onClose, editing, allCompanyNames, companyColorMap,
+   845→}: {
+   846→  open: boolean;
+   847→  onClose: () => void;
+   848→  editing: PrepaidExpense | null;
+   849→  allCompanyNames: string[];
+   850→  companyColorMap: Map<string, string>;
+   851→}) {
+   852→  const { addExpense, updateExpense } = usePrepaidStore();
+   853→  const { toast } = useToast();
+   854→
+   855→  const [name, setName] = useState('');
+   856→  const [companyName, setCompanyName] = useState('');
+   857→  const [category, setCategory] = useState<PrepaidCategory>('rent');
+   858→  const [status, setStatus] = useState<PrepaidStatus>('active');
+   859→  const [totalAmount, setTotalAmount] = useState('');
+   860→  const [startDate, setStartDate] = useState(todayISO());
+   861→  const [endDate, setEndDate] = useState(todayISO());
+   862→  const [notes, setNotes] = useState('');
+   863→
+   864→  const monthsCount = useMemo(() => monthsBetween(startDate, endDate), [startDate, endDate]);
+   865→  const monthly = useMemo(() => getMonthlyInstallment(Number(totalAmount) || 0, monthsCount), [totalAmount, monthsCount]);
+   866→
+   867→  useEffect(() => {
+   868→    if (open) {
+   869→      if (editing) {
+   870→        setName(editing.name);
+   871→        setCompanyName(editing.companyName);
+   872→        setCategory(editing.category);
+   873→        setStatus(editing.status);
+   874→        setTotalAmount(String(editing.totalAmount));
+   875→        setStartDate(editing.startDate);
+   876→        setEndDate(editing.endDate);
+   877→        setNotes(editing.notes || '');
+   878→      } else {
+   879→        setName('');
+   880→        setCompanyName(allCompanyNames[0] || '');
+   881→        setCategory('rent');
+   882→        setStatus('active');
+   883→        setTotalAmount('');
+   884→        setStartDate(todayISO());
+   885→        setEndDate(addMonthsISO(todayISO(), 12));
+   886→        setNotes('');
+   887→      }
+   888→    }
+   889→  }, [open, editing, allCompanyNames]);
+   890→
+   891→  const handleMonthsChange = (m: number) => {
+   892→    setEndDate(addMonthsISO(startDate, Math.max(1, m)));
+   893→  };
+   894→
+   895→  const handleSubmit = () => {
+   896→    if (!name.trim()) {
+   897→      toast({ variant: 'destructive', title: 'الاسم مطلوب' });
+   898→      return;
+   899→    }
+   900→    if (!companyName) {
+   901→      toast({ variant: 'destructive', title: 'اختر شركة' });
+   902→      return;
+   903→    }
+   904→    const amount = Number(totalAmount);
+   905→    if (!amount || amount <= 0) {
+   906→      toast({ variant: 'destructive', title: 'المبلغ غير صحيح' });
+   907→      return;
+   908→    }
+   909→    if (monthsCount < 1) {
+   910→      toast({ variant: 'destructive', title: 'فترة غير صحيحة' });
+   911→      return;
+   912→    }
+   913→
+   914→    const payload = {
+   915→      name: name.trim(),
+   916→      companyName,
+   917→      category,
+   918→      status,
+   919→      totalAmount: amount,
+   920→      startDate,
+   921→      endDate,
+   922→      monthsCount,
+   923→      notes: notes.trim(),
+   924→    };
+   925→
+   926→    if (editing) {
+   927→      updateExpense(editing.id, payload);
+   928→      toast({ title: 'تم التحديث', description: `تم تحديث "${name.trim()}"` });
+   929→    } else {
+   930→      addExpense(payload);
+   931→      toast({ title: 'تمت الإضافة', description: `تمت إضافة "${name.trim()}"` });
+   932→    }
+   933→    onClose();
+   934→  };
+   935→
+   936→  return (
+   937→    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+   938→      <DialogContent className="!max-w-lg p-0 gap-0 overflow-hidden rounded-3xl border-0 shadow-2xl" dir="rtl" aria-describedby={undefined}>
+   939→        <DialogTitle className="sr-only">{editing ? 'تعديل مصروف مقدم' : 'إضافة مصروف مقدم جديد'}</DialogTitle>
+   940→        <DialogDescription className="sr-only">نموذج إدارة المصروف المقدم</DialogDescription>
+   941→
+   942→        <div className="relative overflow-hidden px-6 py-5">
+   943→          <div className="absolute inset-0 bg-gradient-to-bl from-emerald-600 via-teal-600 to-cyan-600" />
+   944→          <div className="absolute -top-6 -left-6 h-24 w-24 rounded-full bg-white/5 blur-xl" />
+   945→          <div className="relative flex items-center gap-3">
+   946→            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 backdrop-blur-md border border-white/10">
+   947→              <Wallet className="h-5 w-5 text-white" />
+   948→            </div>
+   949→            <div>
+   950→              <h2 className="text-lg font-bold text-white">{editing ? 'تعديل المصروف المقدم' : 'مصروف مقدم جديد'}</h2>
+   951→              <p className="text-white/70 text-[11px]">سيتم حساب القسط الشهري والمستهلك تلقائياً</p>
+   952→            </div>
+   953→          </div>
+   954→        </div>
+   955→
+   956→        <ScrollArea className="max-h-[60vh]">
+   957→          <div className="p-6 space-y-4">
+   958→            <div className="space-y-1.5">
+   959→              <Label htmlFor="ex-name" className="text-xs font-semibold">اسم المصروف <span className="text-destructive">*</span></Label>
+   960→              <Input
+   961→                id="ex-name"
+   962→                value={name}
+   963→                onChange={(e) => setName(e.target.value)}
+   964→                placeholder="مثال: إيجار سنوي"
+   965→                className="rounded-xl"
+   966→              />
+   967→            </div>
+   968→
+   969→            <div className="grid grid-cols-2 gap-3">
+   970→              <div className="space-y-1.5">
+   971→                <Label className="text-xs font-semibold">الشركة <span className="text-destructive">*</span></Label>
+   972→                <select
+   973→                  value={companyName}
+   974→                  onChange={(e) => setCompanyName(e.target.value)}
+   975→                  className="w-full h-9 text-xs rounded-xl border border-border/50 bg-background px-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+   976→                >
+   977→                  {allCompanyNames.map((n) => (
+   978→                    <option key={n} value={n}>{n}</option>
+   979→                  ))}
+   980→                </select>
+   981→              </div>
+   982→              <div className="space-y-1.5">
+   983→                <Label className="text-xs font-semibold">التصنيف</Label>
+   984→                <select
+   985→                  value={category}
+   986→                  onChange={(e) => setCategory(e.target.value as PrepaidCategory)}
+   987→                  className="w-full h-9 text-xs rounded-xl border border-border/50 bg-background px-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+   988→                >
+   989→                  {PREPAID_CATEGORIES.map((c) => (
+   990→                    <option key={c.value} value={c.value}>{c.labelAr}</option>
+   991→                  ))}
+   992→                </select>
+   993→              </div>
+   994→            </div>
+   995→
+   996→            <div className="grid grid-cols-2 gap-3">
+   997→              <div className="space-y-1.5">
+   998→                <Label className="text-xs font-semibold">الحالة</Label>
+   999→                <select
+  1000→                  value={status}
+  1001→                  onChange={(e) => setStatus(e.target.value as PrepaidStatus)}
+  1002→                  className="w-full h-9 text-xs rounded-xl border border-border/50 bg-background px-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+  1003→                >
+  1004→                  {PREPAID_STATUSES.map((s) => (
+  1005→                    <option key={s.value} value={s.value}>{s.labelAr}</option>
+  1006→                  ))}
+  1007→                </select>
+  1008→              </div>
+  1009→              <div className="space-y-1.5">
+  1010→                <Label htmlFor="ex-amount" className="text-xs font-semibold">المبلغ الإجمالي (ر.س) <span className="text-destructive">*</span></Label>
+  1011→                <Input
+  1012→                  id="ex-amount"
+  1013→                  type="number"
+  1014→                  value={totalAmount}
+  1015→                  onChange={(e) => setTotalAmount(e.target.value)}
+  1016→                  placeholder="0.00"
+  1017→                  className="rounded-xl tabular-nums"
+  1018→                  min={0}
+  1019→                  step={0.01}
+  1020→                />
+  1021→              </div>
+  1022→            </div>
+  1023→
+  1024→            <div className="grid grid-cols-2 gap-3">
+  1025→              <div className="space-y-1.5">
+  1026→                <Label htmlFor="ex-start" className="text-xs font-semibold">تاريخ البداية <span className="text-destructive">*</span></Label>
+  1027→                <Input
+  1028→                  id="ex-start"
+  1029→                  type="date"
+  1030→                  value={startDate}
+  1031→                  onChange={(e) => setStartDate(e.target.value)}
+  1032→                  className="rounded-xl"
+  1033→                />
+  1034→              </div>
+  1035→              <div className="space-y-1.5">
+  1036→                <Label htmlFor="ex-end" className="text-xs font-semibold">تاريخ النهاية <span className="text-destructive">*</span></Label>
+  1037→                <Input
+  1038→                  id="ex-end"
+  1039→                  type="date"
+  1040→                  value={endDate}
+  1041→                  onChange={(e) => setEndDate(e.target.value)}
+  1042→                  className="rounded-xl"
+  1043→                />
+  1044→              </div>
+  1045→            </div>
+  1046→
+  1047→            <div className="space-y-1.5">
+  1048→              <Label className="text-xs font-semibold">عدد الأشهر</Label>
+  1049→              <div className="flex items-center gap-2">
+  1050→                <Input
+  1051→                  type="number"
+  1052→                  value={monthsCount}
+  1053→                  onChange={(e) => handleMonthsChange(Number(e.target.value) || 1)}
+  1054→                  className="rounded-xl tabular-nums w-24"
+  1055→                  min={1}
+  1056→                />
+  1057→                <span className="text-[11px] text-muted-foreground">شهر</span>
+  1058→                <div className="flex-1 rounded-xl bg-emerald-500/5 border border-emerald-500/15 px-3 py-2 text-xs">
+  1059→                  <span className="text-muted-foreground">القسط الشهري: </span>
+  1060→                  <span className="font-bold tabular-nums text-emerald-700 dark:text-emerald-400">{formatSAR(monthly)}</span>
+  1061→                </div>
+  1062→              </div>
+  1063→            </div>
+  1064→
+  1065→            <div className="space-y-1.5">
+  1066→              <Label htmlFor="ex-notes" className="text-xs font-semibold">ملاحظات</Label>
+  1067→              <Textarea
+  1068→                id="ex-notes"
+  1069→                value={notes}
+  1070→                onChange={(e) => setNotes(e.target.value)}
+  1071→                placeholder="ملاحظات إضافية..."
+  1072→                rows={2}
+  1073→                className="rounded-xl resize-none"
+  1074→              />
+  1075→            </div>
+  1076→          </div>
+  1077→        </ScrollArea>
+  1078→
+  1079→        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t bg-muted/20">
+  1080→          <Button variant="ghost" size="sm" className="text-xs rounded-xl" onClick={onClose}>إلغاء</Button>
+  1081→          <Button
+  1082→            size="sm"
+  1083→            className="text-xs gap-1.5 rounded-xl bg-gradient-to-l from-emerald-600 to-teal-600"
+  1084→            onClick={handleSubmit}
+  1085→          >
+  1086→            <CheckCircle2 className="h-3.5 w-3.5" />
+  1087→            {editing ? 'تحديث' : 'إضافة المصروف'}
+  1088→          </Button>
+  1089→        </div>
+  1090→      </DialogContent>
+  1091→    </Dialog>
+  1092→  );
+  1093→}
+  1094→

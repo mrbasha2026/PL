@@ -273,3 +273,29 @@ Stage Summary:
 - All saved datasets are listed in a modern dialog with stats and timestamps
 - Delete button with confirmation prompt prevents accidental loss
 - Toast notifications provide feedback for all operations
+
+---
+Task ID: 9
+Agent: Main Agent
+Task: Finalize unification of P&L and Prepaid-Expenses company lists + small UX refinements
+
+Work Log:
+- Verified that the unification between `pnl-store.ts` and `prepaid-store.ts` is fully in place:
+  - Prepaid expenses reference companies by NAME (not id)
+  - `allCompanyNames` in PrepaidExpenses merges unique P&L `companyName`s with standalone names
+  - Color assignment uses the same `COMPANY_COLORS` array as P&L dashboard
+  - `getFilteredExpenses()` filters to only valid companies (those in the unified list)
+  - Migration logic in `prepaid-store.ts` converts old `companyId` → `companyName` for v1 users
+  - Delete button only shown for standalone companies (P&L companies managed via P&L upload)
+- Added small UX refinements to `PrepaidExpenses.tsx` to make the unification more discoverable:
+  1. Source breakdown in the company-list sidebar header — shows "X من P&L · Y مستقلة" with colored dots when P&L data exists
+  2. "Add Company" button now adapts to context — becomes dashed/secondary with label "شركة مستقلة" and tooltip when P&L companies already exist; otherwise primary "إضافة شركة"
+  3. Standalone badge now has an `Info` icon and a tooltip explaining "شركة أُضيفت يدوياً هنا (وليست من بيانات P&L)"
+- Cleared corrupted `.next` cache and restarted dev server — page now returns HTTP 200 with no compile errors
+- TypeScript check: all errors are pre-existing in unrelated files (examples/, skills/, AISummary.tsx, Forecasting.tsx) — none from this task
+
+Stage Summary:
+- The same company no longer needs to be added twice — adding it once (via P&L upload OR via the prepaid "Add Company" button) makes it visible in both views automatically
+- Color of a company is consistent across P&L dashboard and Prepaid Expenses tab
+- Users can clearly see which companies come from P&L vs which were added standalone, via the new breakdown header and the "مستقلة" badge with tooltip
+- Dev server running clean on http://localhost:3000

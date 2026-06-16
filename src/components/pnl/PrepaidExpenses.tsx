@@ -18,7 +18,7 @@ import {
   Building2, Plus, Pencil, Trash2, Search, Filter, X,
   Wallet, Calendar, TrendingUp, TrendingDown, PieChart,
   BarChart3, Clock, CheckCircle2, AlertCircle,
-  LayoutGrid, CalendarRange, FileBarChart,
+  LayoutGrid, CalendarRange, FileBarChart, Info,
 } from 'lucide-react';
 import {
   usePrepaidStore,
@@ -120,6 +120,8 @@ export function PrepaidExpenses() {
   }, [expenses]);
 
   const totalCount = expenses.filter((e) => allCompanyNames.includes(e.companyName)).length;
+  const pnlCompanyCount = useMemo(() => new Set(pnlCompanies.map((c) => c.companyName)).size, [pnlCompanies]);
+  const standaloneCount = allCompanyNames.length - pnlCompanyCount;
   const totalAmount = expenses
     .filter((e) => allCompanyNames.includes(e.companyName))
     .reduce((s, e) => s + e.totalAmount, 0);
@@ -155,11 +157,12 @@ export function PrepaidExpenses() {
             <Button
               variant="outline"
               size="sm"
-              className="gap-1.5 rounded-xl text-xs h-9"
+              className={`gap-1.5 rounded-xl text-xs h-9 ${pnlCompanyCount > 0 ? 'border-dashed text-muted-foreground' : ''}`}
               onClick={() => setCompanyDialogOpen(true)}
+              title={pnlCompanyCount > 0 ? 'الشركات موحّدة مع P&L — يمكنك أيضاً إضافة شركة مستقلة هنا' : 'أضف شركة جديدة لتتبع مصروفاتها المقدمة'}
             >
               <Building2 className="h-3.5 w-3.5" />
-              إضافة شركة
+              {pnlCompanyCount > 0 ? 'شركة مستقلة' : 'إضافة شركة'}
             </Button>
             <Button
               size="sm"
@@ -192,8 +195,11 @@ export function PrepaidExpenses() {
                 <Badge variant="outline" className="text-[10px] rounded-md">{allCompanyNames.length}</Badge>
               </div>
               <p className="text-[10px] text-muted-foreground/70 mt-1">
-                {pnlCompanies.length > 0
-                  ? 'موحّدة مع بيانات P&L'
+                {pnlCompanyCount > 0
+                  ? <span className="inline-flex items-center gap-1.5">
+                      <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />{pnlCompanyCount} من P&L</span>
+                      {standaloneCount > 0 && <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" />{standaloneCount} مستقلة</span>}
+                    </span>
                   : 'أضف شركات مباشرة أو ارفع ملف P&L'}
               </p>
             </div>
@@ -251,7 +257,8 @@ export function PrepaidExpenses() {
                             {name}
                           </span>
                           {isStandalone && (
-                            <Badge variant="outline" className="text-[8px] px-1 py-0 rounded h-3.5 shrink-0 text-muted-foreground/70">
+                            <Badge variant="outline" className="text-[8px] px-1 py-0 rounded h-3.5 shrink-0 text-muted-foreground/70 inline-flex items-center gap-0.5" title="شركة أُضيفت يدوياً هنا (وليست من بيانات P&L)">
+                              <Info className="h-2 w-2" />
                               مستقلة
                             </Badge>
                           )}
