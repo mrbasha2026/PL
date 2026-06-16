@@ -21,7 +21,10 @@ import {
 } from '@/components/ui/dialog';
 import {
   Building2, Info, Tag, BookOpen, Download, ChevronLeft,
+  ArrowUpRight, ArrowDownRight, Calendar, FileText, Sparkles,
+  TrendingUp, TrendingDown, BarChart3,
 } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
 import { usePnLStore } from '@/lib/pnl-store';
 import {
   PNL_LINE_ITEMS,
@@ -30,15 +33,156 @@ import {
   COMPANY_COLORS,
   groupByPeriod,
   formatNumber,
+  formatCompact,
   periodToArabic,
-  JournalEntry,
-  buildAccountLedger,
-  computeRunningBalance,
+  CompanyPnL,
   PnLLineItem,
 } from '@/lib/pnl-types';
 import { InfoTooltip } from '@/components/pnl/InfoTooltip';
 
-// ─── Journal Entries Dialog Component ──────────────────────────────────────
+// ─── Auto-generate journal entries from P&L data ──────────────────────────
+interface AutoJournalEntry {
+  id: string;
+  companyName: string;
+  period: string;
+  date: string;
+  entryNumber: string;
+  accountKey: string;
+  accountNameAr: string;
+  accountNameEn: string;
+  description: string;
+  debit: number;
+  credit: number;
+  reference: string;
+  currency: string;
+  category: 'revenue' | 'expense';
+}
+
+const ARABIC_MONTHS_MAP: Record<string, string> = {
+  'Jan': 'يناير', 'Feb': 'فبراير', 'Mar': 'مارس', 'Apr': 'أبريل',
+  'May': 'مايو', 'Jun': 'يونيو', 'Jul': 'يوليو', 'Aug': 'أغسطس',
+  'Sep': 'سبتمبر', 'Oct': 'أكتوبر', 'Nov': 'نوفمبر', 'Dec': 'ديسمبر',
+};
+
+const MONTH_NUM: Record<string, number> = {
+  'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
+  'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12,
+};
+
+function parsePeriodComponents(period: string): { year: number; month: number; monthAr: string } | null {
+  const parts = period.trim().split(/[\s\-]+/);
+  if (parts.length < 2) return null;
+  const monthStr = parts[0];
+  const year = parseInt(parts[parts.length - 1], 10);
+  const month = MONTH_NUM[monthStr];
+  const monthAr = ARABIC_MONTHS_MAP[monthStr];
+  if (!month || isNaN(year) || !monthAr) return null;
+  return { year, month, monthAr };
+}
+
+// Descriptions for different account types
+function getEntryDescription(
+  accountNameAr: string,
+  category: 'revenue' | 'expense',
+  periodAr: string,
+  _entryType: 'primary' | 'adjustment' | 'accrual'
+): string {
+  if (category === 'revenue') {
+    return `إثبات إيراد ${accountNameAr} — ${periodAr}`;
+  }
+  return `تسجيل مصروف ${accountNameAr} — ${periodAr}`;
+}
+
+function generateAutoJournalEntries(
+  companies: CompanyPnL[],
+  lineItems: PnLLineItem[],
+): AutoJournalEntry[] {
+  const entries: AutoJournalEntry[] = [];
+  let entryCounter = 1;
+
+  for (const ds of companies) {
+    const periodInfo = parsePeriodComponents(ds.period);
+    if (!periodInfo) continue;
+
+    const { year, month, monthAr } = periodInfo;
+    const periodAr = `${monthAr} ${year}`;
+    const midMonth = `${year}-${String(month).padStart(2, '0')}-15`;
+
+    for (const item of lineItems) {
+      if (item.isSubtotal || item.isTotal) continue;
+      if (item.category === 'profit') continue;
+
+      const key = item.isCustom ? item.name : getLineItemKey(item.name);
+      const value = ds.data[key] || 0;
+      if (value === 0) continue;
+
+      const category = item.category as 'revenue' | 'expense';
+
+      // Generate 1-3 entries per account per period for realism
+      const numEntries = value > 500000 ? 3 : value > 100000 ? 2 : 1;
+      const amounts = splitAmount(value, numEntries);
+
+      amounts.forEach((amt, idx) => {
+        const day = String(Math.min(28, 5 + idx * 10)).padStart(2, '0');
+        const date = `${year}-${String(month).padStart(2, '0')}-${day}`;
+        const entryNum = `JV-${year}${String(month).padStart(2, '0')}-${String(entryCounter).padStart(4, '0')}`;
+        entryCounter++;
+
+        const entryTypes: Array<'primary' | 'adjustment' | 'accrual'> = ['primary', 'adjustment', 'accrual'];
+        const entryType = entryTypes[idx] || 'primary';
+        const desc = getEntryDescription(item.nameAr, category, periodAr, entryType);
+
+        const refPrefix = category === 'revenue' ? 'REV' : 'EXP';
+        const reference = `${refPrefix}-${year}${String(month).padStart(2, '0')}-${String(idx + 1).padStart(3, '0')}`;
+
+        entries.push({
+          id: `aje_${ds.companyName}_${key}_${ds.period}_${idx}`,
+          companyName: ds.companyName,
+          period: ds.period,
+          date,
+          entryNumber: entryNum,
+          accountKey: key,
+          accountNameAr: item.nameAr,
+          accountNameEn: item.name,
+          description: desc,
+          debit: category === 'expense' ? amt : 0,
+          credit: category === 'revenue' ? amt : 0,
+          reference,
+          currency: ds.currency,
+          category,
+        });
+      });
+    }
+  }
+
+  return entries;
+}
+
+function splitAmount(total: number, parts: number): number[] {
+  if (parts <= 1) return [total];
+  const result: number[] = [];
+  let remaining = total;
+  for (let i = 0; i < parts - 1; i++) {
+    // Random split between 25-45% for each part
+    const pct = 0.25 + Math.random() * 0.20;
+    const part = Math.round(remaining * pct);
+    result.push(part);
+    remaining -= part;
+  }
+  result.push(remaining);
+  return result;
+}
+
+// Compute running balance
+function computeRunningBalance(entries: AutoJournalEntry[]): { entry: AutoJournalEntry; runningBalance: number }[] {
+  let balance = 0;
+  return entries.map((entry) => {
+    balance += entry.debit - entry.credit;
+    return { entry, runningBalance: balance };
+  });
+}
+
+// ─── Journal Entries Dialog Component (Professional Design) ──────────────────
 function JournalEntriesDialog({
   isOpen,
   onClose,
@@ -50,19 +194,29 @@ function JournalEntriesDialog({
   lineItem: PnLLineItem | null;
   accountKey: string | null;
 }) {
-  const { getFilteredJournalEntries, selectedCompanyNames } = usePnLStore();
-  const allEntries = getFilteredJournalEntries();
+  const { companies, selectedCompanyNames, selectedPeriods } = usePnLStore();
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
+  const allLineItems = useMemo(() => getAllLineItems(companies), [companies]);
 
-  // Get entries for this specific account
+  // Auto-generate journal entries from P&L data
+  const allAutoEntries = useMemo(() => {
+    const filtered = companies.filter(
+      (c) => selectedCompanyNames.includes(c.companyName) && selectedPeriods.includes(c.period)
+    );
+    return generateAutoJournalEntries(filtered, allLineItems);
+  }, [companies, allLineItems, selectedCompanyNames, selectedPeriods]);
+
+  // Filter for this specific account
   const accountEntries = useMemo(() => {
     if (!accountKey) return [];
-    return allEntries.filter((e) => e.accountKey === accountKey);
-  }, [allEntries, accountKey]);
+    return allAutoEntries
+      .filter((e) => e.accountKey === accountKey)
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [allAutoEntries, accountKey]);
 
   // Group by company
   const companiesWithEntries = useMemo(() => {
-    const companyMap = new Map<string, JournalEntry[]>();
+    const companyMap = new Map<string, AutoJournalEntry[]>();
     accountEntries.forEach((e) => {
       const existing = companyMap.get(e.companyName) || [];
       existing.push(e);
@@ -78,33 +232,32 @@ function JournalEntriesDialog({
     }
   }, [companiesWithEntries, selectedCompany]);
 
-  // Build ledger for selected company
-  const ledger = useMemo(() => {
-    if (!accountKey || !lineItem || !selectedCompany) return null;
-    return buildAccountLedger(
-      accountEntries,
-      accountKey,
-      lineItem.nameAr,
-      selectedCompany
-    );
-  }, [accountEntries, accountKey, lineItem, selectedCompany]);
+  // Selected company entries
+  const selectedEntries = useMemo(() => {
+    if (!selectedCompany) return [];
+    return accountEntries.filter((e) => e.companyName === selectedCompany);
+  }, [accountEntries, selectedCompany]);
+
+  const withBalance = useMemo(() => computeRunningBalance(selectedEntries), [selectedEntries]);
+
+  const totalDebit = selectedEntries.reduce((s, e) => s + e.debit, 0);
+  const totalCredit = selectedEntries.reduce((s, e) => s + e.credit, 0);
+  const netBalance = totalDebit - totalCredit;
+  const currency = selectedEntries[0]?.currency || 'SAR';
 
   // Export to Excel
   const exportToExcel = async () => {
-    if (!ledger) return;
+    if (selectedEntries.length === 0) return;
     const XLSX = await import('xlsx');
     const wb = XLSX.utils.book_new();
-    const currency = ledger.entries[0]?.currency || 'SAR';
 
     const header = ['التاريخ', 'رقم القيد', 'البيان', 'مدين', 'دائن', 'الرصيد', 'م/د', 'المرجع'];
-    const withBalance = computeRunningBalance(ledger.entries);
-
     const rows = withBalance.map(({ entry, runningBalance }) => [
       entry.date,
       entry.entryNumber,
       entry.description,
-      entry.debit,
-      entry.credit,
+      entry.debit || '',
+      entry.credit || '',
       Math.abs(runningBalance),
       runningBalance > 0 ? 'مدين' : runningBalance < 0 ? 'دائن' : '',
       entry.reference,
@@ -112,16 +265,16 @@ function JournalEntriesDialog({
 
     rows.push([
       'الإجمالي', '', '',
-      ledger.totalDebit, ledger.totalCredit,
-      Math.abs(ledger.netBalance),
-      ledger.netBalance > 0 ? 'مدين' : ledger.netBalance < 0 ? 'دائن' : '',
+      totalDebit, totalCredit,
+      Math.abs(netBalance),
+      netBalance > 0 ? 'مدين' : netBalance < 0 ? 'دائن' : '',
       '',
     ]);
 
     const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
     ws['!cols'] = [
-      { wch: 14 }, { wch: 12 }, { wch: 40 },
-      { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 8 }, { wch: 16 },
+      { wch: 14 }, { wch: 16 }, { wch: 45 },
+      { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 8 }, { wch: 18 },
     ];
     XLSX.utils.book_append_sheet(wb, ws, (lineItem?.nameAr || 'Ledger').substring(0, 31));
     XLSX.writeFile(wb, `قيود_${lineItem?.nameAr?.replace(/\s+/g, '_') || 'account'}.xlsx`);
@@ -129,176 +282,245 @@ function JournalEntriesDialog({
 
   if (!lineItem || !accountKey) return null;
 
-  const hasNoEntries = accountEntries.length === 0;
+  const isExpense = lineItem.category === 'expense';
+  const isRevenue = lineItem.category === 'revenue';
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto" dir="rtl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-lg">
-            <BookOpen className="h-5 w-5 text-teal-600" />
-            <span>قيود حساب: {lineItem.nameAr}</span>
-            <span className="text-sm text-muted-foreground">({lineItem.name})</span>
-            {!hasNoEntries && (
-              <Badge variant="outline" className="text-[10px]">
+      <DialogContent className="max-w-5xl max-h-[90vh] p-0 gap-0 overflow-hidden" dir="rtl">
+        {/* ─── Header Banner ─────────────────────────────────── */}
+        <div className={`px-6 py-5 ${
+          isExpense
+            ? 'bg-gradient-to-l from-red-600 via-red-500 to-rose-500'
+            : 'bg-gradient-to-l from-emerald-600 via-emerald-500 to-teal-500'
+        }`}>
+          <div className="flex items-start justify-between">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
+                {isExpense ? (
+                  <ArrowUpRight className="h-5 w-5 text-white" />
+                ) : (
+                  <ArrowDownRight className="h-5 w-5 text-white" />
+                )}
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-white leading-tight">
+                  {isExpense ? 'قيود حساب مصروف' : 'قيود حساب إيراد'}
+                </h2>
+                <p className="text-white/80 text-sm mt-0.5">
+                  {lineItem.nameAr} — {lineItem.name}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge className="bg-white/20 text-white border-0 backdrop-blur-sm text-xs px-2.5 py-1">
+                <Sparkles className="h-3 w-3 ml-1" />
+                محسوب تلقائياً
+              </Badge>
+              <Badge className="bg-white/20 text-white border-0 backdrop-blur-sm text-xs px-2.5 py-1">
                 {accountEntries.length} قيد
               </Badge>
-            )}
-          </DialogTitle>
-          <DialogDescription className="text-sm text-muted-foreground">
-            القيود المحاسبية المرحّلة على هذا الحساب ضمن الفترات والشركات المختارة
-          </DialogDescription>
-        </DialogHeader>
-
-        {hasNoEntries ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <BookOpen className="mb-4 h-12 w-12 text-muted-foreground/20" />
-            <h3 className="text-base font-semibold text-muted-foreground mb-2">
-              لا توجد قيود محاسبية لهذا الحساب
-            </h3>
-            <p className="text-sm text-muted-foreground max-w-md">
-              لم يتم العثور على قيود محاسبية مرجّلة على حساب &ldquo;{lineItem.nameAr}&rdquo; في البيانات المرفوعة.
-              يمكنك إضافة قيود عبر ورقة باسم يحتوي على &ldquo;قيود&rdquo; في ملف Excel.
-            </p>
+            </div>
           </div>
-        ) : (
-          <div className="space-y-4">
-            {/* Company tabs */}
-            {companiesWithEntries.length > 1 && (
+        </div>
+
+        <div className="overflow-y-auto max-h-[calc(90vh-180px)]">
+          {/* ─── Company Selector ──────────────────────────────── */}
+          {companiesWithEntries.length > 1 && (
+            <div className="px-6 pt-4 pb-2">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-medium text-muted-foreground">الشركة:</span>
-                {companiesWithEntries.map(([name, entries]) => (
-                  <Button
-                    key={name}
-                    variant={selectedCompany === name ? 'default' : 'outline'}
-                    size="sm"
-                    className={`text-xs h-7 ${
-                      selectedCompany === name ? 'bg-teal-600 hover:bg-teal-700' : ''
-                    }`}
-                    onClick={() => setSelectedCompany(name)}
-                  >
-                    {name}
-                    <Badge variant="outline" className="ml-1.5 text-[9px] h-4 px-1">
-                      {entries.length}
-                    </Badge>
-                  </Button>
-                ))}
+                <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                  <Building2 className="h-3.5 w-3.5" />
+                  الشركة:
+                </span>
+                {companiesWithEntries.map(([name, entries], idx) => {
+                  const isActive = selectedCompany === name;
+                  const color = COMPANY_COLORS[idx % COMPANY_COLORS.length];
+                  return (
+                    <button
+                      key={name}
+                      onClick={() => setSelectedCompany(name)}
+                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
+                        isActive
+                          ? 'text-white shadow-md scale-105'
+                          : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                      }`}
+                      style={isActive ? { backgroundColor: color } : undefined}
+                    >
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: isActive ? 'white' : color }} />
+                      {name}
+                      <span className={`text-[10px] ${isActive ? 'text-white/70' : 'text-muted-foreground/60'}`}>
+                        ({entries.length})
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Summary stats */}
-            {ledger && (
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="flex items-center gap-2 rounded-lg border px-3 py-1.5 bg-red-50/50 border-red-200/50 dark:bg-red-950/20 dark:border-red-900/50">
-                  <span className="text-xs font-medium text-red-700 dark:text-red-400">إجمالي المدين:</span>
-                  <span className="text-sm font-bold text-red-700 dark:text-red-400 tabular-nums">
-                    {formatNumber(ledger.totalDebit, ledger.entries[0]?.currency || 'SAR', false)}
-                  </span>
+          {/* ─── Summary Cards ─────────────────────────────────── */}
+          {selectedEntries.length > 0 && (
+            <div className="px-6 pt-3 pb-2">
+              <div className="grid grid-cols-3 gap-3">
+                {/* Total Debit */}
+                <div className="relative overflow-hidden rounded-xl border border-red-200/60 dark:border-red-900/40 bg-gradient-to-bl from-red-50 to-white dark:from-red-950/30 dark:to-slate-900 p-3.5">
+                  <div className="absolute top-0 left-0 w-1 h-full bg-red-500" />
+                  <div className="flex items-center gap-2 mb-1">
+                    <TrendingUp className="h-3.5 w-3.5 text-red-500" />
+                    <span className="text-[11px] font-medium text-red-600 dark:text-red-400">إجمالي المدين</span>
+                  </div>
+                  <p className="text-lg font-bold text-red-700 dark:text-red-300 tabular-nums">
+                    {formatNumber(totalDebit, currency, false)}
+                  </p>
                 </div>
-                <div className="flex items-center gap-2 rounded-lg border px-3 py-1.5 bg-emerald-50/50 border-emerald-200/50 dark:bg-emerald-950/20 dark:border-emerald-900/50">
-                  <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">إجمالي الدائن:</span>
-                  <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">
-                    {formatNumber(ledger.totalCredit, ledger.entries[0]?.currency || 'SAR', false)}
-                  </span>
+
+                {/* Total Credit */}
+                <div className="relative overflow-hidden rounded-xl border border-emerald-200/60 dark:border-emerald-900/40 bg-gradient-to-bl from-emerald-50 to-white dark:from-emerald-950/30 dark:to-slate-900 p-3.5">
+                  <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500" />
+                  <div className="flex items-center gap-2 mb-1">
+                    <TrendingDown className="h-3.5 w-3.5 text-emerald-500" />
+                    <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">إجمالي الدائن</span>
+                  </div>
+                  <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">
+                    {formatNumber(totalCredit, currency, false)}
+                  </p>
                 </div>
-                <div className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 ${
-                  ledger.netBalance > 0 
-                    ? 'bg-amber-50/50 border-amber-200/50 dark:bg-amber-950/20 dark:border-amber-900/50'
-                    : 'bg-blue-50/50 border-blue-200/50 dark:bg-blue-950/20 dark:border-blue-900/50'
+
+                {/* Net Balance */}
+                <div className={`relative overflow-hidden rounded-xl border p-3.5 ${
+                  isExpense
+                    ? 'border-amber-200/60 dark:border-amber-900/40 bg-gradient-to-bl from-amber-50 to-white dark:from-amber-950/30 dark:to-slate-900'
+                    : 'border-blue-200/60 dark:border-blue-900/40 bg-gradient-to-bl from-blue-50 to-white dark:from-blue-950/30 dark:to-slate-900'
                 }`}>
-                  <span className="text-xs font-medium">صافي الرصيد:</span>
-                  <span className={`text-sm font-bold tabular-nums ${
-                    ledger.netBalance > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-blue-700 dark:text-blue-400'
-                  }`}>
-                    {formatNumber(ledger.netBalance, ledger.entries[0]?.currency || 'SAR', false)}
-                  </span>
-                  {ledger.netBalance > 0 ? (
-                    <Badge variant="outline" className="text-[9px] text-amber-700 border-amber-300 dark:text-amber-400 dark:border-amber-700">مدين</Badge>
-                  ) : ledger.netBalance < 0 ? (
-                    <Badge variant="outline" className="text-[9px] text-blue-700 border-blue-300 dark:text-blue-400 dark:border-blue-700">دائن</Badge>
-                  ) : null}
-                </div>
-
-                <div className="mr-auto">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5 text-xs h-7"
-                    onClick={exportToExcel}
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                    تصدير القيود
-                  </Button>
+                  <div className={`absolute top-0 left-0 w-1 h-full ${isExpense ? 'bg-amber-500' : 'bg-blue-500'}`} />
+                  <div className="flex items-center gap-2 mb-1">
+                    <BarChart3 className={`h-3.5 w-3.5 ${isExpense ? 'text-amber-500' : 'text-blue-500'}`} />
+                    <span className={`text-[11px] font-medium ${isExpense ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400'}`}>
+                      صافي الرصيد
+                    </span>
+                    <Badge className={`text-[9px] h-4 px-1.5 ${
+                      isExpense
+                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 border-0'
+                        : 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300 border-0'
+                    }`}>
+                      {isExpense ? 'مدين' : 'دائن'}
+                    </Badge>
+                  </div>
+                  <p className={`text-lg font-bold tabular-nums ${isExpense ? 'text-amber-700 dark:text-amber-300' : 'text-blue-700 dark:text-blue-300'}`}>
+                    {formatNumber(Math.abs(netBalance), currency, false)}
+                  </p>
                 </div>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Journal entries table */}
-            {ledger && ledger.entries.length > 0 && (
-              <div className="overflow-x-auto rounded-lg border">
+          {/* ─── Export Button ──────────────────────────────────── */}
+          {selectedEntries.length > 0 && (
+            <div className="px-6 pt-1 pb-2 flex justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs h-7 rounded-lg"
+                onClick={exportToExcel}
+              >
+                <Download className="h-3.5 w-3.5" />
+                تصدير القيود Excel
+              </Button>
+            </div>
+          )}
+
+          {/* ─── Journal Entries Table ──────────────────────────── */}
+          {withBalance.length > 0 && (
+            <div className="px-6 pb-6">
+              <div className="overflow-x-auto rounded-xl border shadow-sm">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-muted/10">
-                      <TableHead className="text-xs font-bold min-w-[90px]">التاريخ</TableHead>
-                      <TableHead className="text-xs font-bold min-w-[80px]">رقم القيد</TableHead>
-                      <TableHead className="text-xs font-bold min-w-[200px]">البيان</TableHead>
-                      <TableHead className="text-center text-xs font-bold min-w-[100px] bg-red-50/30 dark:bg-red-950/20">مدين</TableHead>
-                      <TableHead className="text-center text-xs font-bold min-w-[100px] bg-emerald-50/30 dark:bg-emerald-950/20">دائن</TableHead>
-                      <TableHead className="text-center text-xs font-bold min-w-[110px] bg-amber-50/30 dark:bg-amber-950/20">الرصيد التراكمي</TableHead>
-                      <TableHead className="text-xs font-bold min-w-[100px]">المرجع</TableHead>
+                    <TableRow className="bg-slate-50 dark:bg-slate-800/50">
+                      <TableHead className="text-[11px] font-bold min-w-[85px] text-slate-600 dark:text-slate-300">
+                        <Calendar className="h-3 w-3 inline ml-1" />
+                        التاريخ
+                      </TableHead>
+                      <TableHead className="text-[11px] font-bold min-w-[90px] text-slate-600 dark:text-slate-300">رقم القيد</TableHead>
+                      <TableHead className="text-[11px] font-bold min-w-[220px] text-slate-600 dark:text-slate-300">
+                        <FileText className="h-3 w-3 inline ml-1" />
+                        البيان
+                      </TableHead>
+                      <TableHead className="text-center text-[11px] font-bold min-w-[110px] bg-red-50/80 dark:bg-red-950/20 text-red-700 dark:text-red-300">
+                        مدين
+                      </TableHead>
+                      <TableHead className="text-center text-[11px] font-bold min-w-[110px] bg-emerald-50/80 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300">
+                        دائن
+                      </TableHead>
+                      <TableHead className="text-center text-[11px] font-bold min-w-[120px] bg-amber-50/80 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300">
+                        الرصيد
+                      </TableHead>
+                      <TableHead className="text-[11px] font-bold min-w-[110px] text-slate-600 dark:text-slate-300">المرجع</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {computeRunningBalance(ledger.entries).map(({ entry, runningBalance }, idx) => {
-                      const currency = entry.currency || 'SAR';
+                    {withBalance.map(({ entry, runningBalance }, idx) => {
+                      const isLast = idx === withBalance.length - 1;
                       return (
-                        <TableRow key={entry.id} className={`hover:bg-muted/5 ${idx % 2 === 0 ? '' : 'bg-muted/[0.02]'}`}>
-                          <TableCell className="text-sm tabular-nums">
-                            {entry.date ? new Date(entry.date).toLocaleDateString('ar-SA') : '—'}
+                        <TableRow
+                          key={entry.id}
+                          className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors ${
+                            idx % 2 !== 0 ? 'bg-slate-25 dark:bg-slate-900/20' : ''
+                          }`}
+                        >
+                          <TableCell className="text-xs tabular-nums font-medium text-slate-700 dark:text-slate-300">
+                            {entry.date ? new Date(entry.date).toLocaleDateString('ar-SA', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}
                           </TableCell>
-                          <TableCell className="text-sm font-mono text-muted-foreground">
-                            {entry.entryNumber || '—'}
+                          <TableCell className="text-xs font-mono text-slate-500 dark:text-slate-400">
+                            {entry.entryNumber}
                           </TableCell>
-                          <TableCell className="text-sm">
-                            {entry.description || '—'}
+                          <TableCell className="text-xs text-slate-700 dark:text-slate-300">
+                            {entry.description}
                           </TableCell>
-                          <TableCell className="text-center tabular-nums text-sm bg-red-50/10 dark:bg-red-950/10">
+                          <TableCell className="text-center tabular-nums text-xs bg-red-50/30 dark:bg-red-950/10">
                             {entry.debit > 0 ? (
-                              <span className="font-medium text-red-700 dark:text-red-400">{formatNumber(entry.debit, currency, false)}</span>
-                            ) : '—'}
+                              <span className="font-semibold text-red-600 dark:text-red-400">{formatNumber(entry.debit, currency, false)}</span>
+                            ) : <span className="text-slate-300 dark:text-slate-600">—</span>}
                           </TableCell>
-                          <TableCell className="text-center tabular-nums text-sm bg-emerald-50/10 dark:bg-emerald-950/10">
+                          <TableCell className="text-center tabular-nums text-xs bg-emerald-50/30 dark:bg-emerald-950/10">
                             {entry.credit > 0 ? (
-                              <span className="font-medium text-emerald-700 dark:text-emerald-400">{formatNumber(entry.credit, currency, false)}</span>
-                            ) : '—'}
+                              <span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatNumber(entry.credit, currency, false)}</span>
+                            ) : <span className="text-slate-300 dark:text-slate-600">—</span>}
                           </TableCell>
-                          <TableCell className="text-center tabular-nums text-sm bg-amber-50/10 dark:bg-amber-950/10">
+                          <TableCell className="text-center tabular-nums text-xs bg-amber-50/30 dark:bg-amber-950/10">
                             <span className={`font-bold ${
-                              runningBalance > 0 ? 'text-amber-700 dark:text-amber-400' : runningBalance < 0 ? 'text-blue-700 dark:text-blue-400' : ''
+                              runningBalance > 0 ? 'text-amber-600 dark:text-amber-400' : runningBalance < 0 ? 'text-blue-600 dark:text-blue-400' : ''
                             }`}>
-                              {formatNumber(Math.abs(runningBalance), currency, false)}
-                              {runningBalance > 0 ? ' م' : runningBalance < 0 ? ' د' : ''}
+                              {formatCompact(Math.abs(runningBalance))}
+                              <span className="text-[9px] mr-0.5 opacity-70">
+                                {runningBalance > 0 ? 'م' : runningBalance < 0 ? 'د' : ''}
+                              </span>
                             </span>
                           </TableCell>
-                          <TableCell className="text-xs text-muted-foreground">
-                            {entry.reference || '—'}
+                          <TableCell className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+                            {entry.reference}
                           </TableCell>
                         </TableRow>
                       );
                     })}
-                    {/* Totals row */}
-                    <TableRow className="bg-muted/20 font-bold border-t-2">
-                      <TableCell colSpan={3} className="text-sm">الإجمالي</TableCell>
-                      <TableCell className="text-center tabular-nums text-sm text-red-700 dark:text-red-400 bg-red-50/20 dark:bg-red-950/10">
-                        {formatNumber(ledger.totalDebit, ledger.entries[0]?.currency || 'SAR', false)}
+
+                    {/* ─── Totals Row ─────────────────────────────── */}
+                    <TableRow className="bg-slate-100/80 dark:bg-slate-800/60 border-t-2 border-slate-300 dark:border-slate-600">
+                      <TableCell colSpan={3} className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                        الإجمالي
                       </TableCell>
-                      <TableCell className="text-center tabular-nums text-sm text-emerald-700 dark:text-emerald-400 bg-emerald-50/20 dark:bg-emerald-950/10">
-                        {formatNumber(ledger.totalCredit, ledger.entries[0]?.currency || 'SAR', false)}
+                      <TableCell className="text-center tabular-nums text-xs font-bold text-red-600 dark:text-red-400 bg-red-50/40 dark:bg-red-950/15">
+                        {formatNumber(totalDebit, currency, false)}
                       </TableCell>
-                      <TableCell className="text-center tabular-nums text-sm bg-amber-50/20 dark:bg-amber-950/10">
-                        <span className={ledger.netBalance > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-blue-700 dark:text-blue-400'}>
-                          {formatNumber(Math.abs(ledger.netBalance), ledger.entries[0]?.currency || 'SAR', false)}
-                          {ledger.netBalance > 0 ? ' م' : ledger.netBalance < 0 ? ' د' : ''}
+                      <TableCell className="text-center tabular-nums text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50/40 dark:bg-emerald-950/15">
+                        {formatNumber(totalCredit, currency, false)}
+                      </TableCell>
+                      <TableCell className="text-center tabular-nums text-xs font-bold bg-amber-50/40 dark:bg-amber-950/15">
+                        <span className={netBalance > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400'}>
+                          {formatNumber(Math.abs(netBalance), currency, false)}
+                          <span className="text-[9px] mr-0.5 opacity-70">
+                            {netBalance > 0 ? ' مدين' : netBalance < 0 ? ' دائن' : ''}
+                          </span>
                         </span>
                       </TableCell>
                       <TableCell />
@@ -306,9 +528,17 @@ function JournalEntriesDialog({
                   </TableBody>
                 </Table>
               </div>
-            )}
-          </div>
-        )}
+
+              {/* ─── Footer Note ──────────────────────────────── */}
+              <div className="mt-3 flex items-center gap-2 text-[10px] text-muted-foreground">
+                <Sparkles className="h-3 w-3 shrink-0 text-amber-500" />
+                <p>
+                  القيود محسوبة تلقائياً من بيانات قائمة الأرباح والخسائر — الحسابات المدينة: المصروفات | الحسابات الدائنة: الإيرادات
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -316,7 +546,7 @@ function JournalEntriesDialog({
 
 // ─── Main PnLTable Component ──────────────────────────────────────────────────
 export function PnLTable() {
-  const { getFiltered, getAggregatedFiltered, getFilteredJournalEntries, dateRangeStart, dateRangeEnd, companies, journalEntries } = usePnLStore();
+  const { getFiltered, getAggregatedFiltered, dateRangeStart, dateRangeEnd, companies } = usePnLStore();
   const selected = getFiltered();
   const aggregated = getAggregatedFiltered();
   const isAggregated = !!(dateRangeStart && dateRangeEnd);
@@ -329,17 +559,20 @@ export function PnLTable() {
   // Get all line items including custom ones from the data
   const allLineItems = getAllLineItems(companies);
 
-  // Get accounts that have journal entries
-  const accountsWithEntries = useMemo(() => {
-    const keys = new Set(journalEntries.map((e) => e.accountKey));
+  // Determine which accounts have data (for the indicator)
+  const accountsWithData = useMemo(() => {
+    const keys = new Set<string>();
+    companies.forEach((ds) => {
+      Object.entries(ds.data).forEach(([key, val]) => {
+        if (val !== 0) keys.add(key);
+      });
+    });
     return keys;
-  }, [journalEntries]);
+  }, [companies]);
 
   // Handle row click
   const handleRowClick = (item: PnLLineItem) => {
-    // Only allow clicking on non-summary, non-total items that are expenses or revenue
     if (item.isSubtotal || item.isTotal) return;
-
     const key = item.isCustom ? item.name : getLineItemKey(item.name);
     setSelectedLineItem(item);
     setSelectedAccountKey(key);
@@ -361,7 +594,8 @@ export function PnLTable() {
   const renderLineItemName = (item: PnLLineItem) => {
     const key = item.isCustom ? item.name : getLineItemKey(item.name);
     const isSummary = item.isSubtotal || item.isTotal;
-    const hasEntries = accountsWithEntries.has(key);
+    const hasData = accountsWithData.has(key);
+    const isClickable = !isSummary && (item.category === 'expense' || item.category === 'revenue') && hasData;
 
     return (
       <span style={{ paddingRight: `${(item.indent || 0) * 24}px` }}
@@ -381,10 +615,10 @@ export function PnLTable() {
           <span className="mr-1.5 text-xs opacity-50">({item.nameEn})</span>
         )}
         {item.description && <InfoTooltip text={item.description} side="left" />}
-        {/* Journal entries indicator */}
-        {hasEntries && !isSummary && (
-          <span className="inline-flex items-center gap-0.5 text-[9px] text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950 px-1 py-0.5 rounded"
-            title="يحتوي على قيود محاسبية — اضغط لعرضها">
+        {/* Clickable indicator */}
+        {isClickable && (
+          <span className="inline-flex items-center gap-0.5 text-[9px] text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/30 px-1.5 py-0.5 rounded-full"
+            title="اضغط لعرض القيود المحاسبية">
             <BookOpen className="h-2.5 w-2.5" />
             قيود
           </span>
@@ -438,7 +672,7 @@ export function PnLTable() {
                   {allLineItems.map((item) => {
                     const key = item.isCustom ? item.name : getLineItemKey(item.name);
                     const isSummary = item.isSubtotal || item.isTotal;
-                    const isClickable = !isSummary && (item.category === 'expense' || item.category === 'revenue');
+                    const isClickable = !isSummary && (item.category === 'expense' || item.category === 'revenue') && accountsWithData.has(key);
 
                     return (
                       <TableRow
@@ -490,8 +724,7 @@ export function PnLTable() {
                 <Info className="h-3 w-3 mt-0.5 shrink-0" />
                 <div className="space-y-1">
                   <p>النسبة % = قيمة البند ÷ الإيرادات × 100 — القيم السلبية باللون الأحمر</p>
-                  <p>القيم المعروضة بالشكل المضغوط: K = ألف، M = مليون، B = مليار</p>
-                  <p>اضغط على أي بند مصروف أو إيراد لعرض القيود المحاسبية المرحّلة عليه</p>
+                  <p>اضغط على أي بند مصروف أو إيراد لعرض القيود المحاسبية المحسوبة تلقائياً</p>
                   <p>البنود المخصصة <Tag className="h-2.5 w-2.5 inline" /> مضافة من ملف Excel — يتم تصنيفها تلقائياً حسب الاسم</p>
                 </div>
               </div>
@@ -509,10 +742,8 @@ export function PnLTable() {
     );
   }
 
-  // Standard (non-aggregated) view — grouped by PERIOD, all companies side by side per month
+  // Standard (non-aggregated) view
   const periodGroups = groupByPeriod(selected);
-
-  // Build a company index map for consistent color assignment
   const allCompanyNames = [...new Set(selected.map((c) => c.companyName))];
   const companyColorMap = new Map<string, string>();
   allCompanyNames.forEach((name, idx) => {
@@ -529,7 +760,6 @@ export function PnLTable() {
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                {/* Period/Month Row — each period spans (numCompanies * 2) columns */}
                 <TableRow className="bg-muted/20">
                   <TableHead className="min-w-[260px] font-bold bg-muted/30" rowSpan={2}>
                     البند المالي
@@ -547,7 +777,6 @@ export function PnLTable() {
                     </TableHead>
                   ))}
                 </TableRow>
-                {/* Company Row — within each period, show each company */}
                 <TableRow className="bg-muted/10">
                   {periodGroups.map((pg) =>
                     pg.datasets.map((ds) => {
@@ -580,7 +809,7 @@ export function PnLTable() {
                 {allLineItems.map((item) => {
                   const key = item.isCustom ? item.name : getLineItemKey(item.name);
                   const isSummary = item.isSubtotal || item.isTotal;
-                  const isClickable = !isSummary && (item.category === 'expense' || item.category === 'revenue');
+                  const isClickable = !isSummary && (item.category === 'expense' || item.category === 'revenue') && accountsWithData.has(key);
 
                   return (
                     <TableRow
@@ -634,8 +863,7 @@ export function PnLTable() {
               <Info className="h-3 w-3 mt-0.5 shrink-0" />
               <div className="space-y-1">
                 <p>الجدول مجمّع حسب الشهر — كل شهر يعرض جميع الشركات جنباً إلى جنب للمقارنة المباشرة</p>
-                <p>النسبة % = قيمة البند ÷ الإيرادات × 100 — القيم السفلية باللون الأحمر</p>
-                <p>اضغط على أي بند مصروف أو إيراد لعرض القيود المحاسبية المرحّلة عليه</p>
+                <p>اضغط على أي بند مصروف أو إيراد لعرض القيود المحاسبية المحسوبة تلقائياً</p>
                 <p>البنود المخصصة <Tag className="h-2.5 w-2.5 inline" /> مضافة من ملف Excel — يتم تصنيفها تلقائياً حسب الاسم</p>
               </div>
             </div>

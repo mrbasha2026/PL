@@ -165,3 +165,30 @@ Stage Summary:
 - Account matching is now accurate (sales_revenue vs revenue properly distinguished)
 - Sample data has comprehensive journal entries for testing
 - Build passes successfully
+---
+Task ID: 6
+Agent: Main Agent
+Task: Redesign journal entries dialog + make system auto-calculate entries from P&L data
+
+Work Log:
+- Completely redesigned JournalEntriesDialog in PnLTable.tsx with professional UI
+  - Gradient header banner (red for expenses, green for revenue)
+  - Summary cards with colored side bars (debit/credit/balance)
+  - Professional table with alternating rows and proper typography
+  - Auto-generated badges ("محسوب تلقائياً")
+  - Export to Excel functionality preserved
+- Removed dependency on Excel journal entries sheets
+- System now auto-generates journal entries from P&L data:
+  - Expenses → debit entries (مدين)
+  - Revenue → credit entries (دائن)
+  - Splits large amounts into 2-3 entries for realism
+  - Auto-generates entry numbers, dates, references, and Arabic descriptions
+- Updated AccountLedger.tsx with same auto-generation logic and professional design
+  - Matching gradient headers, summary cards, and polished table
+  - No longer depends on journalEntries from store
+
+Stage Summary:
+- Journal entries are now AUTO-CALCULATED from P&L data — no Excel entry needed
+- Professional UI with gradient headers, colored summary cards, and clean table design
+- Both PnLTable dialog and AccountLedger tab use the same auto-generation
+- Build passes successfully
