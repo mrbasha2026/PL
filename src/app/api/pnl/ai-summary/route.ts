@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import ZAI from 'z-ai-web-dev-sdk';
 
 // ─── AI Response ──────────────────────────────────────────────────────────────
 interface AIResponse {
@@ -158,28 +157,31 @@ function getZAIConfig() {
 
   console.log('[AI] Config — baseUrl:', baseUrl, 'apiKey:', apiKey ? 'SET' : 'DEFAULT');
 
-  return {
-    baseUrl,
-    apiKey,
-    chatId,
-    token,
-    userId,
-  };
+  return { baseUrl, apiKey, chatId, token, userId };
 }
 
-// ─── AI Analysis Engine (Free) ──────────────────────────────────────────────
+// ─── AI Analysis Engine (Direct fetch — no SDK, works on Vercel) ───────────
 async function analyzeWithAI(
   prompt: string,
   mode: string,
   analysisConfig: typeof ANALYSIS_MODES.executive,
   requestedModel: string = 'glm-4-plus',
 ): Promise<AIResponse> {
-  const config = getZAIConfig();
-  const zai = new ZAI(config);
+  const { baseUrl, apiKey, chatId, token, userId } = getZAIConfig();
 
-  console.log(`[AI] Analyzing with model: ${requestedModel}`);
+  const url = `${baseUrl}/chat/completions`;
 
-  const completion = await zai.chat.completions.create({
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${apiKey}`,
+    'X-Z-AI-From': 'Z',
+  };
+
+  if (chatId) headers['X-Chat-Id'] = chatId;
+  if (userId) headers['X-User-Id'] = userId;
+  if (token) headers['X-Token'] = token;
+
+  const requestBody = {
     messages: [
       { role: 'system', content: analysisConfig.systemPrompt },
       { role: 'user', content: prompt },
@@ -187,7 +189,23 @@ async function analyzeWithAI(
     model: requestedModel,
     temperature: analysisConfig.temperature,
     max_tokens: analysisConfig.maxTokens,
+    thinking: { type: 'disabled' },
+  };
+
+  console.log(`[AI] Analyzing with model: ${requestedModel}`);
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(requestBody),
   });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`API request failed with status ${response.status}: ${errorBody}`);
+  }
+
+  const completion = await response.json();
 
   let content = '';
   if (completion.choices && completion.choices[0]) {
