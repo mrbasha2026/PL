@@ -126,3 +126,23 @@ Stage Summary:
 - Hydration warnings fixed with suppressHydrationWarning
 - AI analysis now works on Vercel (env vars instead of file system)
 - For Vercel deployment, need to set env vars: ZAI_BASE_URL, ZAI_API_KEY, ZAI_CHAT_ID, ZAI_TOKEN, ZAI_USER_ID
+
+---
+Task ID: 5
+Agent: Main
+Task: Fix Vercel deployment failure caused by z-ai-web-dev-sdk using fs/path/os
+
+Work Log:
+- Diagnosed root cause: z-ai-web-dev-sdk uses `import fs from 'fs/promises'`, `import path from 'path'`, `import os from 'os'` at module level — these Node.js built-in modules don't work correctly in Vercel's serverless/edge environment
+- Rewrote /api/pnl/ai-summary/route.ts to use native `fetch()` directly instead of the SDK
+- The direct fetch implementation replicates the same API call pattern (headers, request body, response parsing) that the SDK was doing
+- Removed `z-ai-web-dev-sdk` from package.json dependencies since it's no longer used anywhere
+- Build succeeded locally
+- AI API tested and working with glm-4-flash and glm-4-plus models
+- Changes committed and pushed to GitHub (Vercel will auto-deploy)
+
+Stage Summary:
+- z-ai-web-dev-sdk completely removed — no more fs/path/os imports
+- AI analysis still works identically via direct fetch to Z-AI API
+- Vercel deployment should now succeed without Node.js built-in module issues
+- Environment variables (ZAI_BASE_URL, ZAI_API_KEY, ZAI_CHAT_ID, ZAI_TOKEN, ZAI_USER_ID) still required in Vercel
