@@ -1,0 +1,45 @@
+{
+  "name": "Dealz Tree — نظام الإدارة المالية",
+  "short_name": "Dealz Tree",
+  "description": "نظام إدارة مالية متكامل — قوائم الأرباح والخسائر، المصروفات المقدمة، التحليلات والتنبؤات",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#4CAF50",
+  "lang": "ar",
+  "dir": "rtl",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "لوحة المعلومات",
+      "short_name": "لوحة",
+      "url": "/?view=dashboard"
+    },
+    {
+      "name": "الشركات",
+      "short_name": "شركات",
+      "url": "/?view=companies"
+    },
+    {
+      "name": "P&L",
+      "short_name": "P&L",
+      "url": "/?view=pnl"
+    }
+  ]
+}
