@@ -8,11 +8,10 @@ import {
   Sparkles, Calculator, FileText, TrendingUp, Database, Clock,
   CalendarDays, BookOpen, StickyNote, Layers, Download, Brain,
   Sun, Moon, AlertTriangle, ArrowUpDown, LineChart, ScrollText,
+  Zap,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
 import { usePnLStore } from '@/lib/pnl-store';
 import { PnLUpload } from '@/components/pnl/PnLUpload';
 import { FilterBar } from '@/components/pnl/FilterBar';
@@ -41,7 +40,7 @@ function ThemeToggle() {
 
   if (!mounted) {
     return (
-      <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+      <Button variant="ghost" size="sm" className="h-9 w-9 p-0 rounded-xl">
         <Sun className="h-4 w-4" />
       </Button>
     );
@@ -51,11 +50,11 @@ function ThemeToggle() {
     <Button
       variant="ghost"
       size="sm"
-      className="h-7 w-7 p-0 hover:bg-muted"
+      className="h-9 w-9 p-0 rounded-xl hover:bg-primary/8"
       onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
       title={theme === 'dark' ? 'الوضع النهاري' : 'الوضع الليلي'}
     >
-      {theme === 'dark' ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4 text-slate-600" />}
+      {theme === 'dark' ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4 text-primary" />}
     </Button>
   );
 }
@@ -66,7 +65,6 @@ export default function Home() {
   const companyCount = new Set(companies.map((c) => c.companyName)).size;
   const periodCount = new Set(companies.map((c) => c.period)).size;
 
-  // Define all tabs for the scrollable tab bar
   const tabs = [
     { value: 'summary', icon: FileText, label: 'الملخص التنفيذي', short: 'ملخص' },
     { value: 'table', icon: Table2, label: 'الجدول المفصل', short: 'جدول' },
@@ -88,127 +86,189 @@ export default function Home() {
   ];
 
   return (
-    <div className="flex min-h-screen flex-col bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b bg-white/90 dark:bg-slate-950/90 backdrop-blur-lg shadow-sm no-print">
-        <div className="mx-auto flex h-14 max-w-[1600px] items-center justify-between px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <Image
-              src="/logo.png"
-              alt="Dealz Tree"
-              width={36}
-              height={36}
-              className="h-9 w-auto"
-              priority
-            />
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-base font-bold leading-tight tracking-tight text-[#4CAF50]">
-                  ديلز تري
-                </h1>
-                <span className="text-xs text-muted-foreground font-medium">Dealz Tree</span>
-              </div>
-              <p className="text-[10px] text-muted-foreground tracking-wide">
-                لوحة مقارنة الأرباح والخسائر — P&L COMPARISON DASHBOARD
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {hasData && (
-              <>
-                <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
-                  <Database className="h-3.5 w-3.5" />
-                  <span className="rounded-full bg-[#4CAF50]/10 px-2 py-0.5 text-[10px] font-semibold text-[#4CAF50]">
-                    {companyCount} {companyCount === 1 ? 'شركة' : 'شركات'}
-                  </span>
-                  <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-700 dark:text-slate-300">
-                    {periodCount} {periodCount === 1 ? 'فترة' : 'فترات'}
-                  </span>
-                  {lastUpdated && (
-                    <span className="flex items-center gap-1 text-[10px] opacity-60">
-                      <Clock className="h-3 w-3" />
-                      {new Date(lastUpdated).toLocaleString('ar-SA')}
-                    </span>
-                  )}
+    <div className="flex min-h-screen flex-col">
+      {/* ─── Modern Glassmorphic Header ─────────────────────────── */}
+      <header className="sticky top-0 z-50 no-print">
+        <div className="backdrop-blur-xl bg-background/70 border-b border-border/40 shadow-sm shadow-primary/5">
+          <div className="mx-auto flex h-16 max-w-[1600px] items-center justify-between px-4 sm:px-6 lg:px-8">
+            {/* Logo + Title */}
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary to-chart-2 blur-md opacity-30" />
+                <div className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-chart-4 overflow-hidden">
+                  <Image
+                    src="/logo.png"
+                    alt="Dealz Tree"
+                    width={28}
+                    height={28}
+                    className="h-7 w-auto"
+                    priority
+                  />
                 </div>
-                <Separator orientation="vertical" className="h-6" />
-              </>
-            )}
-            <ThemeToggle />
-            {hasData && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs text-red-600 hover:bg-red-50 hover:text-red-700 h-7"
-                onClick={clearAll}
-              >
-                مسح الكل
-              </Button>
-            )}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-base font-bold leading-tight tracking-tight bg-gradient-to-l from-primary to-chart-4 bg-clip-text text-transparent">
+                    ديلز تري
+                  </h1>
+                  <span className="text-[10px] text-muted-foreground font-medium tracking-wide">Dealz Tree</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground/70 tracking-wide font-medium">
+                  لوحة مقارنة الأرباح والخسائر
+                </p>
+              </div>
+            </div>
+
+            {/* Right side */}
+            <div className="flex items-center gap-2">
+              {hasData && (
+                <>
+                  <div className="hidden sm:flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 rounded-xl bg-primary/8 border border-primary/15 px-3 py-1.5">
+                      <Database className="h-3.5 w-3.5 text-primary" />
+                      <span className="text-xs font-semibold text-primary">
+                        {companyCount} {companyCount === 1 ? 'شركة' : 'شركات'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 rounded-xl bg-muted/40 border border-border/40 px-3 py-1.5">
+                      <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-xs font-semibold text-muted-foreground">
+                        {periodCount} {periodCount === 1 ? 'فترة' : 'فترات'}
+                      </span>
+                    </div>
+                    {lastUpdated && (
+                      <div className="hidden lg:flex items-center gap-1 text-[10px] text-muted-foreground/60">
+                        <Clock className="h-3 w-3" />
+                        {new Date(lastUpdated).toLocaleString('ar-SA')}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+              <ThemeToggle />
+              {hasData && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-destructive hover:bg-destructive/8 hover:text-destructive h-9 rounded-xl font-medium"
+                  onClick={clearAll}
+                >
+                  مسح الكل
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </header>
 
-      {/* Main */}
-      <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6 lg:px-8">
+      {/* ─── Main ──────────────────────────────────────────────── */}
+      <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-8 sm:px-6 lg:px-8">
 
-        {/* === EMPTY STATE: Upload + Steps === */}
+        {/* === EMPTY STATE === */}
         {!hasData && (
           <div className="mb-10">
-            <div className="mb-8 text-center">
-              <div className="mb-4 inline-flex items-center gap-1.5 rounded-full bg-[#4CAF50]/10 px-4 py-1.5 text-xs font-semibold text-[#4CAF50]">
-                <Sparkles className="h-3.5 w-3.5" />
+            {/* Hero Section */}
+            <div className="mb-10 text-center">
+              <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-gradient-to-l from-primary/10 to-chart-4/10 border border-primary/20 px-4 py-1.5 text-xs font-semibold text-primary">
+                <Zap className="h-3.5 w-3.5" />
                 منصة تحليل مالي احترافية
               </div>
-              <h2 className="mb-3 text-3xl font-bold tracking-tight">
-                قم برفع ومقارنة بيانات الأرباح والخسائر
+              <h2 className="mb-4 text-4xl font-bold tracking-tight">
+                <span className="bg-gradient-to-l from-primary via-chart-4 to-chart-2 bg-clip-text text-transparent">
+                  قم برفع ومقارنة
+                </span>
+                <br />
+                <span className="text-foreground">بيانات الأرباح والخسائر</span>
               </h2>
-              <p className="mx-auto max-w-2xl text-muted-foreground leading-relaxed">
+              <p className="mx-auto max-w-2xl text-muted-foreground leading-relaxed text-base">
                 ارفع ملف Excel يحتوي على بيانات P&L لشركة واحدة أو أكثر عبر فترات شهرية متعددة،
                 ثم حلّل وقارن بينها باستخدام تقارير تفاعلية احترافية
               </p>
             </div>
 
-            <div className="mx-auto max-w-2xl">
+            {/* Upload Card */}
+            <div className="mx-auto max-w-2xl mb-10">
               <PnLUpload />
             </div>
 
-            <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-3">
+            {/* 3-Step Guide */}
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-3 max-w-5xl mx-auto">
               {[
-                { step: 1, title: 'حمّل القالب', desc: 'نزّل قالب Excel المقترح واملأ بيانات الشركات والفترات الشهرية', color: 'bg-[#4CAF50]/10', numColor: 'text-[#4CAF50]' },
-                { step: 2, title: 'ارفع الملف', desc: 'ارفع ملف Excel — كل ورقة تمثل شركة وكل عمود يمثل شهر', color: 'bg-amber-100', numColor: 'text-amber-700' },
-                { step: 3, title: 'حلّل وقارن', desc: 'استخدم الملخص التنفيذي والجداول والرسوم البيانية والنسب المالية والتحليل الذكي', color: 'bg-violet-100', numColor: 'text-violet-700' },
+                {
+                  step: 1,
+                  title: 'حمّل القالب',
+                  desc: 'نزّل قالب Excel المقترح واملأ بيانات الشركات والفترات الشهرية',
+                  icon: Download,
+                  gradient: 'from-primary/15 to-primary/5',
+                  iconBg: 'from-primary to-primary/70',
+                },
+                {
+                  step: 2,
+                  title: 'ارفع الملف',
+                  desc: 'ارفع ملف Excel — كل ورقة تمثل شركة وكل عمود يمثل شهر',
+                  icon: FileText,
+                  gradient: 'from-chart-4/15 to-chart-4/5',
+                  iconBg: 'from-chart-4 to-chart-4/70',
+                },
+                {
+                  step: 3,
+                  title: 'حلّل وقارن',
+                  desc: 'استخدم الملخص التنفيذي والجداول والرسوم البيانية والنسب المالية والتحليل الذكي',
+                  icon: Sparkles,
+                  gradient: 'from-chart-2/15 to-chart-2/5',
+                  iconBg: 'from-chart-2 to-chart-2/70',
+                },
               ].map((item) => (
-                <Card key={item.step} className="border-dashed hover:border-solid transition-all">
-                  <CardContent className="flex flex-col items-center p-8 text-center">
-                    <div className={`mb-4 flex h-14 w-14 items-center justify-center rounded-2xl ${item.color}`}>
-                      <span className={`text-2xl font-bold ${item.numColor}`}>{item.step}</span>
+                <div
+                  key={item.step}
+                  className={`group relative overflow-hidden rounded-3xl border border-border/50 bg-gradient-to-br ${item.gradient} backdrop-blur-sm p-6 transition-all hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-1`}
+                >
+                  <div className="absolute top-4 left-4 text-7xl font-bold text-foreground/5 select-none">
+                    {item.step}
+                  </div>
+                  <div className="relative">
+                    <div className={`mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br ${item.iconBg} shadow-lg`}>
+                      <item.icon className="h-7 w-7 text-white" />
                     </div>
-                    <h3 className="mb-2 text-base font-bold">{item.title}</h3>
+                    <h3 className="mb-2 text-lg font-bold">{item.title}</h3>
                     <p className="text-sm leading-relaxed text-muted-foreground">{item.desc}</p>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               ))}
+            </div>
+
+            {/* Features grid */}
+            <div className="mt-16 max-w-5xl mx-auto">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { icon: BarChart3, label: 'رسوم بيانية تفاعلية', color: 'text-chart-1' },
+                  { icon: Calculator, label: 'نسب مالية محسوبة', color: 'text-chart-2' },
+                  { icon: Brain, label: 'تحليل ذكي بالـ AI', color: 'text-chart-4' },
+                  { icon: BookOpen, label: 'قيود محاسبية تلقائية', color: 'text-chart-5' },
+                ].map((feat) => (
+                  <div key={feat.label} className="flex items-center gap-2.5 rounded-2xl border border-border/40 bg-card/50 backdrop-blur-sm px-4 py-3">
+                    <feat.icon className={`h-4 w-4 ${feat.color}`} />
+                    <span className="text-xs font-medium">{feat.label}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
 
-        {/* === DATA LOADED: Filters + Reports === */}
+        {/* === DATA LOADED === */}
         {hasData && (
-          <div className="space-y-5">
-            {/* Unified Filter Bar */}
+          <div className="space-y-6">
             <FilterBar />
 
-            {/* Report Tabs — scrollable on mobile */}
             <Tabs defaultValue="summary" className="w-full">
               <div className="overflow-x-auto no-print -mx-4 px-4 sm:mx-0 sm:px-0">
-                <TabsList className="mb-5 inline-flex h-auto w-max min-w-full gap-1 rounded-xl bg-muted/50 p-1">
+                <TabsList className="mb-6 inline-flex h-auto w-max min-w-full gap-1.5 rounded-2xl bg-muted/30 border border-border/40 p-1.5 backdrop-blur-sm">
                   {tabs.map((tab) => (
                     <TabsTrigger
                       key={tab.value}
                       value={tab.value}
-                      className="gap-1.5 rounded-lg text-xs whitespace-nowrap data-[state=active]:bg-white data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-800 px-3 py-2"
+                      className="gap-2 rounded-xl text-xs whitespace-nowrap data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-primary/25 px-3.5 py-2.5 font-medium transition-all"
                     >
                       <tab.icon className="h-3.5 w-3.5 shrink-0" />
                       <span className="hidden lg:inline">{tab.label}</span>
@@ -240,13 +300,16 @@ export default function Home() {
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="mt-auto border-t bg-slate-50 dark:bg-slate-950 py-5 no-print">
+      {/* ─── Modern Footer ──────────────────────────────────────── */}
+      <footer className="mt-auto no-print border-t border-border/40 bg-muted/20 backdrop-blur-sm py-6">
         <div className="mx-auto max-w-[1600px] px-4 text-center sm:px-6 lg:px-8">
-          <p className="text-xs text-muted-foreground">
-            ديلز تري — Dealz Tree | لوحة مقارنة الأرباح والخسائر — Profit & Loss Comparison Dashboard
+          <p className="text-sm font-medium bg-gradient-to-l from-primary to-chart-4 bg-clip-text text-transparent inline-block">
+            ديلز تري — Dealz Tree
           </p>
-          <p className="mt-1 text-[10px] text-muted-foreground/50">
+          <span className="mx-2 text-muted-foreground/30">|</span>
+          <span className="text-sm text-muted-foreground">لوحة مقارنة الأرباح والخسائر — P&L Comparison Dashboard</span>
+          <p className="mt-2 text-[11px] text-muted-foreground/60 flex items-center justify-center gap-1.5">
+            <Database className="h-3 w-3" />
             البيانات محفوظة تلقائياً في المتصفح — لا تُرسل لأي خادم خارجي
           </p>
         </div>

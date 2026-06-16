@@ -3,7 +3,6 @@
 import React, { useCallback, useState } from 'react';
 import { Upload, Download, FileSpreadsheet, Loader2, AlertCircle, CheckCircle2, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { usePnLStore } from '@/lib/pnl-store';
@@ -130,98 +129,96 @@ export function PnLUpload() {
   const datasetCount = companies.length;
 
   return (
-    <Card className="border-dashed">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <FileSpreadsheet className="h-5 w-5 text-teal-600" />
-          رفع بيانات الأرباح والخسائر
-        </CardTitle>
-        <CardDescription>
-          ارفع ملف Excel يحتوي على بيانات P&L — يدعم عدة شركات وفترات مالية
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {error && (
-          <Alert variant="destructive" className="animate-in fade-in duration-300">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-        {success && (
-          <Alert className="border-teal-200 bg-teal-50 text-teal-800 animate-in fade-in duration-300">
-            <CheckCircle2 className="h-4 w-4" />
-            <AlertDescription>{success}</AlertDescription>
-          </Alert>
-        )}
+    <div className="space-y-4">
+      {error && (
+        <Alert variant="destructive" className="animate-in fade-in duration-300 rounded-2xl border-destructive/30">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      {success && (
+        <Alert className="border-emerald-500/30 bg-emerald-500/8 text-emerald-700 dark:text-emerald-400 animate-in fade-in duration-300 rounded-2xl">
+          <CheckCircle2 className="h-4 w-4" />
+          <AlertDescription>{success}</AlertDescription>
+        </Alert>
+      )}
 
-        <div
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          className={`relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-8 text-center transition-all duration-200 ${
-            isDragging
-              ? 'border-teal-500 bg-teal-50 scale-[1.01]'
-              : 'border-muted-foreground/20 hover:border-teal-400 hover:bg-muted/30'
-          }`}
-        >
-          {isUploading ? (
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 className="h-10 w-10 animate-spin text-teal-600" />
-              <p className="text-sm text-muted-foreground">جارٍ تحليل الملف...</p>
+      {/* Drop Zone */}
+      <div
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        className={`relative overflow-hidden rounded-3xl border-2 border-dashed p-10 text-center transition-all duration-300 ${
+          isDragging
+            ? 'border-primary bg-primary/8 scale-[1.01] shadow-lg shadow-primary/10'
+            : 'border-border/60 hover:border-primary/50 hover:bg-primary/3'
+        }`}
+      >
+        {/* Decorative gradient corners */}
+        <div className="absolute -top-12 -left-12 h-32 w-32 rounded-full bg-primary/8 blur-3xl" />
+        <div className="absolute -bottom-12 -right-12 h-32 w-32 rounded-full bg-chart-4/8 blur-3xl" />
+
+        {isUploading ? (
+          <div className="relative flex flex-col items-center gap-3">
+            <div className="relative">
+              <div className="absolute inset-0 rounded-full bg-primary/20 blur-xl animate-pulse" />
+              <Loader2 className="relative h-12 w-12 animate-spin text-primary" />
             </div>
-          ) : (
+            <p className="text-sm font-medium text-muted-foreground">جارٍ تحليل الملف...</p>
+          </div>
+        ) : (
+          <div className="relative">
+            <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-chart-4 shadow-lg shadow-primary/25">
+              <Upload className="h-7 w-7 text-white" />
+            </div>
+            <p className="mb-1 text-base font-bold">اسحب وأفلت ملف Excel هنا</p>
+            <p className="mb-4 text-xs text-muted-foreground">أو اضغط لاختيار ملف من جهازك</p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="cursor-pointer gap-1.5 rounded-xl border-primary/30 text-primary hover:bg-primary/8"
+              onClick={() => document.getElementById('pnl-file-upload')?.click()}
+            >
+              <Upload className="h-3.5 w-3.5" />
+              اختر ملف
+            </Button>
+            <input
+              id="pnl-file-upload"
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={handleInputChange}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Status Bar */}
+      <div className="flex items-center justify-between gap-4 px-2">
+        <div className="flex items-center gap-2">
+          {datasetCount > 0 && (
             <>
-              <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-teal-100">
-                <Upload className="h-6 w-6 text-teal-600" />
-              </div>
-              <p className="mb-1 text-sm font-semibold">اسحب وأفلت ملف Excel هنا</p>
-              <p className="mb-3 text-xs text-muted-foreground">أو اضغط لاختيار ملف</p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="cursor-pointer gap-1.5"
-                onClick={() => document.getElementById('pnl-file-upload')?.click()}
-              >
-                <Upload className="h-3.5 w-3.5" />
-                اختر ملف
-              </Button>
-              <input
-                id="pnl-file-upload"
-                type="file"
-                accept=".xlsx,.xls"
-                className="hidden"
-                onChange={handleInputChange}
-              />
+              <Badge variant="outline" className="gap-1.5 text-xs rounded-xl border-primary/30 bg-primary/5 text-primary">
+                <Database className="h-3 w-3" />
+                {companyCount} {companyCount === 1 ? 'شركة' : 'شركات'}
+              </Badge>
+              <Badge variant="outline" className="text-xs rounded-xl">
+                {datasetCount} {datasetCount === 1 ? 'فترة' : 'فترة'}
+              </Badge>
             </>
           )}
         </div>
-
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            {datasetCount > 0 && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Database className="h-3.5 w-3.5" />
-                <Badge variant="secondary" className="gap-1 text-xs">
-                  {companyCount} {companyCount === 1 ? 'شركة' : 'شركات'}
-                </Badge>
-                <Badge variant="outline" className="text-xs">
-                  {datasetCount} {datasetCount === 1 ? 'فترة' : 'فترة'}
-                </Badge>
-              </div>
-            )}
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1.5 text-teal-700 hover:text-teal-800"
-            onClick={handleDownloadTemplate}
-          >
-            <Download className="h-4 w-4" />
-            تحميل القالب
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="gap-1.5 text-primary hover:bg-primary/8 rounded-xl"
+          onClick={handleDownloadTemplate}
+        >
+          <Download className="h-4 w-4" />
+          تحميل القالب
+        </Button>
+      </div>
+    </div>
   );
 }
