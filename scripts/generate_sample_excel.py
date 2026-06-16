@@ -667,6 +667,243 @@ def write_movement_sheet(wb, sheet_name, company_data, currency="SAR"):
     return ws
 
 
+# ─── Journal Entries Sheets (القيود المحاسبية) ───────────────────────────────
+# Sample journal entries showing individual transactions posted to P&L accounts
+
+JE_HEADER_FILL = PatternFill(start_color="4A148C", end_color="4A148C", fill_type="solid")
+JE_HEADER_FONT = Font(name="Arial", bold=True, color="FFFFFF", size=10)
+JE_ALT_ROW = PatternFill(start_color="F3E5F5", end_color="F3E5F5", fill_type="solid")
+JE_NORMAL_FONT = Font(name="Arial", size=10)
+JE_DATE_FONT = Font(name="Arial", size=10, color="1565C0")
+JE_DEBIT_FONT = Font(name="Arial", size=10, color="C62828", bold=True)
+JE_CREDIT_FONT = Font(name="Arial", size=10, color="2E7D32", bold=True)
+
+import random
+from datetime import datetime, timedelta
+
+def generate_sample_journal_entries(company_data, company_name, months_data):
+    """Generate realistic journal entries for a company from its monthly P&L data.
+    
+    Each monthly total is broken down into 2-5 individual journal entries
+    representing the actual transactions that sum up to the monthly figure.
+    """
+    entries = []
+    je_counter = 1
+    
+    # Key accounts to generate entries for
+    entry_accounts = [
+        ("Sales Revenue", "إيرادات المبيعات", "credit"),
+        ("Service Revenue", "إيرادات الخدمات", "credit"),
+        ("Cost of Goods Sold", "تكلفة البضاعة المباعة", "debit"),
+        ("Salaries & Wages", "الرواتب والأجور", "debit"),
+        ("Rent Expense", "الإيجارات", "debit"),
+        ("Utilities", "المرافق (كهرباء وماء وغاز)", "debit"),
+        ("Advertising", "الإعلان والترويج", "debit"),
+        ("Sales Commissions", "عمولات المبيعات", "debit"),
+        ("Finance Cost", "تكلفة التمويل", "debit"),
+        ("Zakat Expense", "مصروف الزكاة", "debit"),
+    ]
+    
+    for period_idx, period in enumerate(PERIODS):
+        year = int(period.split()[-1])
+        month_num = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].index(period.split()[0]) + 1
+        
+        for account_en, account_ar, side in entry_accounts:
+            monthly_value = company_data.get(account_en, [0]*len(PERIODS))[period_idx]
+            if monthly_value == 0:
+                continue
+            
+            # Split monthly total into 2-4 entries
+            num_entries = random.randint(2, 4)
+            remaining = monthly_value
+            
+            for i in range(num_entries):
+                if i == num_entries - 1:
+                    amount = remaining
+                else:
+                    # Random split
+                    fraction = random.uniform(0.15, 0.5)
+                    amount = round(remaining * fraction, -2)
+                    remaining -= amount
+                
+                if amount <= 0:
+                    continue
+                
+                # Random date within the month
+                day = random.randint(1, 28)
+                date_str = f"{year}-{month_num:02d}-{day:02d}"
+                
+                entry_num = f"JV-{year}{month_idx_to_str(month_num)}-{je_counter:04d}"
+                je_counter += 1
+                
+                # Generate description
+                descriptions = {
+                    "Sales Revenue": [
+                        "إيراد مبيعات فاتورة رقم",
+                        "مبيعات بضاعة - فاتورة",
+                        "إيراد مبيعات شهرية - فاتورة",
+                    ],
+                    "Service Revenue": [
+                        "إيراد خدمات استشارية - عقد",
+                        "أتعاب خدمات - فاتورة",
+                    ],
+                    "Cost of Goods Sold": [
+                        "تكلفة بضاعة مباعة - شحنة",
+                        "مصروف تكلفة مبيعات - أمر",
+                    ],
+                    "Salaries & Wages": [
+                        "رواتب موظفين شهر",
+                        "صرف رواتب - تحويل بنكي",
+                    ],
+                    "Rent Expense": [
+                        "إيجار مقر الشركة - شهر",
+                        "سداد إيجار مستودع",
+                    ],
+                    "Utilities": [
+                        "فاتورة كهرباء وماء",
+                        "سداد فاتورة مرافق",
+                    ],
+                    "Advertising": [
+                        "مصروف إعلان حملة تسويقية",
+                        "تكلفة إعلان رقمي",
+                    ],
+                    "Sales Commissions": [
+                        "عمولة مبيعات مندوبين",
+                        "صرف عمولات مبيعات",
+                    ],
+                    "Finance Cost": [
+                        "تكلفة تمويل مرابحة - قسط",
+                        "رسوم تمويل إجارة",
+                    ],
+                    "Zakat Expense": [
+                        "مخصص الزكاة الشرعية",
+                        "سداد مستحق الزكاة",
+                    ],
+                }
+                
+                desc_list = descriptions.get(account_en, ["قيد محاسبي"])
+                desc = random.choice(desc_list)
+                ref_num = f"INV-{random.randint(1000, 9999)}"
+                
+                debit = amount if side == "debit" else 0
+                credit = amount if side == "credit" else 0
+                
+                entries.append({
+                    'date': date_str,
+                    'entry_number': entry_num,
+                    'account': account_en,
+                    'account_ar': account_ar,
+                    'description': desc,
+                    'debit': debit,
+                    'credit': credit,
+                    'reference': ref_num,
+                    'period': period,
+                    'currency': 'SAR',
+                })
+    
+    return entries
+
+def month_idx_to_str(m):
+    months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+    return months[m-1]
+
+def write_journal_entries_sheet(wb, sheet_name, entries):
+    """Write a Journal Entries sheet with individual accounting transactions."""
+    ws = wb.create_sheet(sheet_name)
+    ws.sheet_properties.tabColor = "4A148C"  # Purple tab for journal entries
+    
+    # Header
+    headers = [
+        ("التاريخ", 14),
+        ("رقم القيد", 18),
+        ("الحساب", 30),
+        ("اسم الحساب عربي", 28),
+        ("البيان", 45),
+        ("المدين", 15),
+        ("الدائن", 15),
+        ("المرجع", 16),
+        ("الفترة", 14),
+        ("العملة", 10),
+    ]
+    
+    for col_idx, (header, width) in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_idx, value=header)
+        cell.font = JE_HEADER_FONT
+        cell.fill = JE_HEADER_FILL
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        ws.column_dimensions[get_column_letter(col_idx)].width = width
+    
+    # Freeze panes
+    ws.freeze_panes = 'A2'
+    ws.auto_filter.ref = f"A1:J{len(entries) + 1}"
+    
+    # Data rows
+    for idx, entry in enumerate(entries, 2):
+        alt_fill = JE_ALT_ROW if idx % 2 == 0 else None
+        
+        # Date
+        cell = ws.cell(row=idx, column=1, value=entry['date'])
+        cell.font = JE_DATE_FONT
+        cell.number_format = 'YYYY-MM-DD'
+        cell.alignment = Alignment(horizontal='center')
+        if alt_fill: cell.fill = alt_fill
+        
+        # Entry number
+        cell = ws.cell(row=idx, column=2, value=entry['entry_number'])
+        cell.font = JE_NORMAL_FONT
+        cell.alignment = Alignment(horizontal='center')
+        if alt_fill: cell.fill = alt_fill
+        
+        # Account
+        cell = ws.cell(row=idx, column=3, value=entry['account'])
+        cell.font = JE_NORMAL_FONT
+        if alt_fill: cell.fill = alt_fill
+        
+        # Account Arabic
+        cell = ws.cell(row=idx, column=4, value=entry['account_ar'])
+        cell.font = JE_NORMAL_FONT
+        cell.alignment = Alignment(horizontal='right')
+        if alt_fill: cell.fill = alt_fill
+        
+        # Description
+        cell = ws.cell(row=idx, column=5, value=entry['description'])
+        cell.font = JE_NORMAL_FONT
+        cell.alignment = Alignment(horizontal='right')
+        if alt_fill: cell.fill = alt_fill
+        
+        # Debit
+        cell = ws.cell(row=idx, column=6, value=entry['debit'] if entry['debit'] > 0 else None)
+        cell.font = JE_DEBIT_FONT
+        cell.number_format = NUMBER_FMT
+        cell.alignment = Alignment(horizontal='center')
+        if alt_fill: cell.fill = alt_fill
+        
+        # Credit
+        cell = ws.cell(row=idx, column=7, value=entry['credit'] if entry['credit'] > 0 else None)
+        cell.font = JE_CREDIT_FONT
+        cell.number_format = NUMBER_FMT
+        cell.alignment = Alignment(horizontal='center')
+        if alt_fill: cell.fill = alt_fill
+        
+        # Reference
+        cell = ws.cell(row=idx, column=8, value=entry['reference'])
+        cell.font = JE_NORMAL_FONT
+        cell.alignment = Alignment(horizontal='center')
+        if alt_fill: cell.fill = alt_fill
+        
+        # Period
+        cell = ws.cell(row=idx, column=9, value=entry['period'])
+        cell.font = JE_NORMAL_FONT
+        cell.alignment = Alignment(horizontal='center')
+        if alt_fill: cell.fill = alt_fill
+        
+        # Currency
+        cell = ws.cell(row=idx, column=10, value=entry['currency'])
+        cell.font = JE_NORMAL_FONT
+        cell.alignment = Alignment(horizontal='center')
+        if alt_fill: cell.fill = alt_fill
+
+
 # ─── Write Company Sheets ────────────────────────────────────────────────────
 write_company_sheet(wb, "النخبة التجارية", al_nukhba)
 write_company_sheet(wb, "الأفق للخدمات", al_ufuq)
@@ -677,11 +914,22 @@ write_movement_sheet(wb, "حركات النخبة", al_nukhba)
 write_movement_sheet(wb, "حركات الأفق", al_ufuq)
 write_movement_sheet(wb, "حركات البناء", al_bina)
 
+# ─── Write Journal Entries Sheets ────────────────────────────────────────────
+random.seed(42)  # Reproducible results
+nukhba_entries = generate_sample_journal_entries(al_nukhba, "النخبة التجارية", None)
+ufuq_entries = generate_sample_journal_entries(al_ufuq, "الأفق للخدمات", None)
+bina_entries = generate_sample_journal_entries(al_bina, "البناء الحديث", None)
+
+write_journal_entries_sheet(wb, "قيود النخبة", nukhba_entries)
+write_journal_entries_sheet(wb, "قيود الأفق", ufuq_entries)
+write_journal_entries_sheet(wb, "قيود البناء", bina_entries)
+
 # ─── Save ─────────────────────────────────────────────────────────────────────
 output_path = "/home/z/my-project/download/PnL_Sample_Data.xlsx"
 wb.save(output_path)
 print(f"✅ File saved to: {output_path}")
 print(f"   Sheets: {wb.sheetnames}")
-print(f"   Companies: 3 (+ 3 movement sheets)")
+print(f"   Companies: 3 (+ 3 movement + 3 journal entries sheets)")
+print(f"   Journal entries: {len(nukhba_entries)} + {len(ufuq_entries)} + {len(bina_entries)}")
 print(f"   Periods per company: 12 (Jan-Jun 2025 + Jan-Jun 2026)")
 print(f"   YoY growth: النخبة ~14% | الأفق ~12% | البناء ~19%")

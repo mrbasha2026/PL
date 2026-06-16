@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
-import { PNL_LINE_ITEMS, getLineItemKey, detectCategory } from '@/lib/pnl-types';
+import { PNL_LINE_ITEMS, getLineItemKey, detectCategory, JournalEntry } from '@/lib/pnl-types';
 
 // GET: Download Excel template — Islamic Business Format with comprehensive expense categories
 export async function GET() {
@@ -23,6 +23,11 @@ export async function GET() {
       ['ملاحظة: لا توجد ضريبة دخل — نظام الزكاة الشرعية'],
       ['يمكنك ترك أي بند فارغ أو بصفر إذا لا ينطبق'],
       [''],
+      ['لإضافة القيود المحاسبية (حركات الحسابات):'],
+      ['أنشئ ورقة باسم يحتوي على "قيود" أو "Journal"'],
+      ['أعمدة القيود: التاريخ، رقم القيد، الحساب، البيان، المدين، الدائن، المرجع، الفترة'],
+      ['كل صف = قيد محاسبي واحد مرحّل على حساب P&L'],
+      [''],
       ['English:'],
       ['Fill each company data in a separate sheet'],
       ['Sheet name = Company name (e.g., Al Rajhi)'],
@@ -33,6 +38,11 @@ export async function GET() {
       [''],
       ['Note: No income tax — Islamic Zakat system applies'],
       ['Leave any item blank or zero if not applicable'],
+      [''],
+      ['To add journal entries (account movements/transactions):'],
+      ['Create a sheet with name containing "قيود" or "Journal"'],
+      ['Columns: Date, Entry No, Account, Description, Debit, Credit, Reference, Period'],
+      ['Each row = one journal entry posted to a P&L account'],
     ];
     const instructionsWs = XLSX.utils.aoa_to_sheet(instructionsData);
     instructionsWs['!cols'] = [{ wch: 60 }];
@@ -132,6 +142,25 @@ export async function GET() {
 
     XLSX.utils.book_append_sheet(wb, templateWs, 'شركة نموذجية Sample Co');
 
+    // Journal Entries template sheet
+    const jeHeaders = ['التاريخ', 'رقم القيد', 'الحساب', 'اسم الحساب عربي', 'البيان', 'المدين', 'الدائن', 'المرجع', 'الفترة', 'العملة'];
+    const jeSampleData = [
+      ['2026-01-05', 'JV-2026Jan-0001', 'Sales Revenue', 'إيرادات المبيعات', 'إيراد مبيعات فاتورة رقم 1001', '', '150000', 'INV-1001', 'Jan 2026', 'SAR'],
+      ['2026-01-05', 'JV-2026Jan-0001', 'Cost of Goods Sold', 'تكلفة البضاعة المباعة', 'تكلفة بضاعة مباعة - شحنة 1001', '82500', '', 'INV-1001', 'Jan 2026', 'SAR'],
+      ['2026-01-15', 'JV-2026Jan-0002', 'Salaries & Wages', 'الرواتب والأجور', 'صرف رواتب موظفين يناير', '540000', '', 'PAY-2026-01', 'Jan 2026', 'SAR'],
+      ['2026-01-15', 'JV-2026Jan-0002', 'Rent Expense', 'الإيجارات', 'إيجار مقر الشركة يناير', '120000', '', 'LEASE-001', 'Jan 2026', 'SAR'],
+      ['2026-01-20', 'JV-2026Jan-0003', 'Service Revenue', 'إيرادات الخدمات', 'إيراد خدمات استشارية - عقد C-200', '', '50000', 'CTR-200', 'Jan 2026', 'SAR'],
+      ['2026-01-25', 'JV-2026Jan-0004', 'Utilities', 'المرافق (كهرباء وماء وغاز)', 'فاتورة كهرباء وماء يناير', '45000', '', 'UTIL-2026-01', 'Jan 2026', 'SAR'],
+      ['2026-01-28', 'JV-2026Jan-0005', 'Advertising', 'الإعلان والترويج', 'مصروف إعلان حملة تسويقية', '144000', '', 'ADV-2026-01', 'Jan 2026', 'SAR'],
+    ];
+    const jeData = [jeHeaders, ...jeSampleData];
+    const jeWs = XLSX.utils.aoa_to_sheet(jeData);
+    jeWs['!cols'] = [
+      { wch: 14 }, { wch: 18 }, { wch: 30 }, { wch: 28 }, { wch: 45 },
+      { wch: 15 }, { wch: 15 }, { wch: 16 }, { wch: 14 }, { wch: 10 },
+    ];
+    XLSX.utils.book_append_sheet(wb, jeWs, 'قيود Sample Journal');
+
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 
     return new NextResponse(buffer, {
@@ -201,8 +230,124 @@ export async function POST(request: Request) {
       data: Record<string, number>;
     }[] = [];
 
+    const journalEntries: JournalEntry[] = [];
+
     wb.SheetNames.forEach((sheetName) => {
       if (sheetName.includes('Instructions') || sheetName.includes('تعليمات')) return;
+
+      // ─── Parse Journal Entries sheet (قيود / Journal / حركات) ──────────
+      if (
+        sheetName.includes('قيود') ||
+        sheetName.toLowerCase().includes('journal') ||
+        sheetName.includes('حركات')
+      ) {
+        const ws = wb.Sheets[sheetName];
+        const sheetData: (string | number)[][] = XLSX.utils.sheet_to_json(ws, {
+          header: 1,
+          defval: '',
+        });
+
+        if (sheetData.length < 2) return;
+
+        // Detect header row — look for keywords
+        const headerRow = sheetData[0].map((h) => String(h || '').trim().toLowerCase());
+        
+        // Map column indices
+        const colMap: Record<string, number> = {};
+        const headerKeywords: Record<string, string[]> = {
+          date: ['date', 'تاريخ', 'التاريخ'],
+          entryNumber: ['entry', 'رقم', 'رقم القيد', 'entry_no', 'entryno', 'jv'],
+          account: ['account', 'الحساب', 'حساب', 'accountname', 'account_name'],
+          accountNameAr: ['account_ar', 'اسم الحساب', 'الحساب عربي'],
+          description: ['description', 'البيان', 'بيان', 'desc', 'narration', 'التفصيل'],
+          debit: ['debit', 'مدين', 'المدين', 'dr'],
+          credit: ['credit', 'دائن', 'الدائن', 'cr'],
+          reference: ['reference', 'المرجع', 'مرجع', 'ref', 'invoice', 'الفاتورة'],
+          period: ['period', 'الفترة', 'فترة'],
+          currency: ['currency', 'العملة'],
+        };
+
+        for (const [field, keywords] of Object.entries(headerKeywords)) {
+          for (let i = 0; i < headerRow.length; i++) {
+            if (keywords.some((kw) => headerRow[i].includes(kw))) {
+              colMap[field] = i;
+              break;
+            }
+          }
+        }
+
+        // Parse data rows
+        for (let r = 1; r < sheetData.length; r++) {
+          const row = sheetData[r];
+          if (!row || row.length === 0) continue;
+
+          const getVal = (field: string, fallback: string = ''): string => {
+            const idx = colMap[field];
+            if (idx === undefined) return fallback;
+            return String(row[idx] || fallback).trim();
+          };
+
+          const getNum = (field: string, fallback: number = 0): number => {
+            const idx = colMap[field];
+            if (idx === undefined) return fallback;
+            const val = row[idx];
+            if (typeof val === 'number') return val;
+            return parseFloat(String(val || '0').replace(/,/g, '')) || fallback;
+          };
+
+          const accountName = getVal('account');
+          const accountNameAr = getVal('accountNameAr', accountName);
+
+          // Skip empty rows
+          if (!accountName && !accountNameAr) continue;
+          const debit = getNum('debit');
+          const credit = getNum('credit');
+          if (debit === 0 && credit === 0) continue;
+
+          // Match account to P&L line item key
+          let accountKey = '';
+          for (const item of PNL_LINE_ITEMS) {
+            if (
+              accountName.includes(item.name) ||
+              accountNameAr.includes(item.nameAr) ||
+              accountName.toLowerCase().includes(item.name.toLowerCase()) ||
+              getLineItemKey(accountName) === getLineItemKey(item.name)
+            ) {
+              accountKey = getLineItemKey(item.name);
+              break;
+            }
+          }
+          if (!accountKey) {
+            accountKey = getLineItemKey(accountName || accountNameAr);
+          }
+
+          // Extract company name from sheet name (e.g., "قيود النخبة" → "النخبة التجارية")
+          let companyName = sheetName
+            .replace(/قيود/i, '')
+            .replace(/حركات/i, '')
+            .replace(/journal/i, '')
+            .replace(/entries/i, '')
+            .trim();
+
+          journalEntries.push({
+            id: `je_${Date.now()}_${r}_${Math.random().toString(36).substr(2, 9)}`,
+            companyName,
+            date: getVal('date'),
+            entryNumber: getVal('entryNumber'),
+            accountKey,
+            accountNameAr: accountNameAr || accountName,
+            description: getVal('description'),
+            debit,
+            credit,
+            reference: getVal('reference'),
+            period: getVal('period'),
+            currency: getVal('currency', 'SAR'),
+          });
+        }
+        return; // Don't parse this sheet as P&L data
+      }
+
+      // ─── Parse P&L Data sheet ──────────────────────────────────────────
 
       const ws = wb.Sheets[sheetName];
       const sheetData: (string | number)[][] = XLSX.utils.sheet_to_json(ws, {
@@ -322,14 +467,14 @@ export async function POST(request: Request) {
       });
     });
 
-    if (companies.length === 0) {
+    if (companies.length === 0 && journalEntries.length === 0) {
       return NextResponse.json(
         { error: 'لم يتم العثور على بيانات صالحة في الملف المرفوع. تأكد من اتباع قالب Excel المطلوب.' },
         { status: 400 }
       );
     }
 
-    return NextResponse.json({ companies });
+    return NextResponse.json({ companies, journalEntries });
   } catch (error) {
     console.error('File parsing error:', error);
     return NextResponse.json(

@@ -451,3 +451,80 @@ export function calcGrowth(current: Record<string, number>, previous: Record<str
   if (!curr || !prev || prev === 0) return null;
   return ((curr - prev) / Math.abs(prev)) * 100;
 }
+
+// ─── Journal Entry Types (القيود المحاسبية) ─────────────────────────────────
+// Represents individual accounting transactions posted to P&L accounts
+
+export interface JournalEntry {
+  id: string;
+  companyName: string;
+  date: string;           // التاريخ — e.g. "2026-01-15"
+  entryNumber: string;    // رقم القيد — e.g. "JV-001"
+  accountKey: string;     // مفتاح الحساب — maps to getLineItemKey()
+  accountNameAr: string;  // اسم الحساب بالعربي
+  description: string;    // البيان — explanation of the transaction
+  debit: number;          // مدين — debit amount
+  credit: number;         // دائن — credit amount
+  reference: string;      // المرجع — invoice/contract reference
+  period: string;         // الفترة — e.g. "Jan 2026" (for filtering)
+  currency: string;       // العملة
+}
+
+// Grouped journal entries for a single account (دفتر الأستاذ)
+export interface AccountLedger {
+  accountKey: string;
+  accountNameAr: string;
+  companyName: string;
+  entries: JournalEntry[];
+  totalDebit: number;
+  totalCredit: number;
+  netBalance: number;     // totalDebit - totalCredit
+}
+
+// Get journal entries for a specific account
+export function getEntriesForAccount(
+  entries: JournalEntry[],
+  accountKey: string,
+  companyName?: string
+): JournalEntry[] {
+  return entries.filter((e) => {
+    if (e.accountKey !== accountKey) return false;
+    if (companyName && e.companyName !== companyName) return false;
+    return true;
+  });
+}
+
+// Build account ledger (دفتر الأستاذ) from journal entries
+export function buildAccountLedger(
+  entries: JournalEntry[],
+  accountKey: string,
+  accountNameAr: string,
+  companyName: string
+): AccountLedger {
+  const filtered = getEntriesForAccount(entries, accountKey, companyName);
+  const totalDebit = filtered.reduce((sum, e) => sum + e.debit, 0);
+  const totalCredit = filtered.reduce((sum, e) => sum + e.credit, 0);
+  return {
+    accountKey,
+    accountNameAr,
+    companyName,
+    entries: filtered.sort((a, b) => a.date.localeCompare(b.date)),
+    totalDebit,
+    totalCredit,
+    netBalance: totalDebit - totalCredit,
+  };
+}
+
+// Get unique accounts that have journal entries
+export function getAccountsWithEntries(entries: JournalEntry[]): string[] {
+  return [...new Set(entries.map((e) => e.accountKey))];
+}
+
+// Compute running balance for ledger entries
+export function computeRunningBalance(entries: JournalEntry[]): { entry: JournalEntry; runningBalance: number }[] {
+  let balance = 0;
+  return entries.map((entry) => {
+    balance += entry.debit - entry.credit;
+    return { entry, runningBalance: balance };
+  });
+}

@@ -31,6 +31,7 @@ import { YoYComparison } from '@/components/pnl/YoYComparison';
 import { VarianceAnalysis } from '@/components/pnl/VarianceAnalysis';
 import { Forecasting } from '@/components/pnl/Forecasting';
 import { LineItemExplorer } from '@/components/pnl/LineItemExplorer';
+import { AccountLedgerExplorer } from '@/components/pnl/AccountLedger';
 
 function ThemeToggle() {
   const { theme, setTheme } = useTheme();
@@ -77,6 +78,7 @@ export default function Home() {
     { value: 'variance', icon: AlertTriangle, label: 'تحليل الانحرافات', short: 'انحرافات' },
     { value: 'forecast', icon: LineChart, label: 'التنبؤات', short: 'تنبؤات' },
     { value: 'explorer', icon: ScrollText, label: 'حركات البنود', short: 'حركات' },
+    { value: 'ledger', icon: BookOpen, label: 'دفتر الأستاذ (القيود)', short: 'قيود' },
     { value: 'charts', icon: BarChart3, label: 'الرسوم البيانية', short: 'رسوم' },
     { value: 'trends', icon: TrendingUp, label: 'التحليل الترندي', short: 'ترند' },
     { value: 'ai', icon: Brain, label: 'التحليل الذكي', short: 'ذكي' },
@@ -226,6 +228,7 @@ export default function Home() {
               <TabsContent value="variance"><VarianceAnalysis /></TabsContent>
               <TabsContent value="forecast"><Forecasting /></TabsContent>
               <TabsContent value="explorer"><LineItemExplorer /></TabsContent>
+              <TabsContent value="ledger"><AccountLedgerExplorer /></TabsContent>
               <TabsContent value="charts"><PnLCharts /></TabsContent>
               <TabsContent value="trends"><PnLCharts forceTrends /></TabsContent>
               <TabsContent value="ai"><AISummary /></TabsContent>

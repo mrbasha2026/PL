@@ -7,10 +7,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { usePnLStore } from '@/lib/pnl-store';
-import { CompanyPnL } from '@/lib/pnl-types';
+import { CompanyPnL, JournalEntry } from '@/lib/pnl-types';
 
 export function PnLUpload() {
-  const { addCompanies, companies } = usePnLStore();
+  const { addCompanies, addJournalEntries, companies } = usePnLStore();
   const [isUploading, setIsUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +43,7 @@ export function PnLUpload() {
         }
 
         const parsed: CompanyPnL[] = result.companies;
+        const parsedEntries: JournalEntry[] = result.journalEntries || [];
         let addedCount = 0;
 
         parsed.forEach((company: CompanyPnL) => {
@@ -52,12 +53,21 @@ export function PnLUpload() {
           if (!exists) addedCount++;
         });
 
-        if (addedCount > 0) {
-          addCompanies(parsed.filter((c) => !companies.some(
-            (ex) => ex.companyName === c.companyName && ex.period === c.period
-          )));
+        if (addedCount > 0 || parsedEntries.length > 0) {
+          if (addedCount > 0) {
+            addCompanies(parsed.filter((c) => !companies.some(
+              (ex) => ex.companyName === c.companyName && ex.period === c.period
+            )));
+          }
+          if (parsedEntries.length > 0) {
+            addJournalEntries(parsedEntries);
+          }
           const uniqueCompanies = new Set(parsed.map((c) => c.companyName));
-          setSuccess(`تم إضافة ${addedCount} مجموعة بيانات من ${uniqueCompanies.size} شركة`);
+          const msg = [
+            addedCount > 0 ? `${addedCount} مجموعة بيانات من ${uniqueCompanies.size} شركة` : '',
+            parsedEntries.length > 0 ? `${parsedEntries.length} قيد محاسبي` : '',
+          ].filter(Boolean).join(' + ');
+          setSuccess(`تم إضافة ${msg}`);
         } else {
           setError('جميع البيانات في هذا الملف موجودة مسبقاً');
         }
@@ -68,7 +78,7 @@ export function PnLUpload() {
         setIsUploading(false);
       }
     },
-    [addCompanies, companies]
+    [addCompanies, addJournalEntries, companies]
   );
 
   const handleDrop = useCallback(

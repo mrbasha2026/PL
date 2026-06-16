@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { CompanyPnL, PnLLineItem, PNL_LINE_ITEMS, aggregatePeriods, periodToArabic, sortPeriods, parsePeriod } from './pnl-types';
+import { CompanyPnL, JournalEntry, PnLLineItem, PNL_LINE_ITEMS, aggregatePeriods, periodToArabic, sortPeriods, parsePeriod } from './pnl-types';
 
 interface AggregatedCompany {
   companyName: string;
@@ -14,6 +14,7 @@ interface AggregatedCompany {
 
 interface PnLStore {
   companies: CompanyPnL[];
+  journalEntries: JournalEntry[];
   lineItems: PnLLineItem[];
   selectedCompanyNames: string[];
   selectedPeriods: string[];
@@ -23,6 +24,7 @@ interface PnLStore {
   notes: Record<string, string>;
 
   addCompanies: (newCompanies: CompanyPnL[]) => void;
+  addJournalEntries: (entries: JournalEntry[]) => void;
   removeDataset: (id: string) => void;
   removeCompanyGroup: (companyName: string) => void;
   toggleCompanyName: (name: string) => void;
@@ -34,6 +36,7 @@ interface PnLStore {
   setDateRange: (start: string | null, end: string | null) => void;
   clearAll: () => void;
   getFiltered: () => CompanyPnL[];
+  getFilteredJournalEntries: () => JournalEntry[];
   getAggregatedFiltered: () => AggregatedCompany[];
   setNote: (key: string, value: string) => void;
   deleteNote: (key: string) => void;
@@ -44,6 +47,7 @@ export const usePnLStore = create<PnLStore>()(
   persist(
     (set, get) => ({
       companies: [],
+      journalEntries: [],
       lineItems: PNL_LINE_ITEMS,
       selectedCompanyNames: [],
       selectedPeriods: [],
@@ -68,6 +72,16 @@ export const usePnLStore = create<PnLStore>()(
           };
         }),
 
+      addJournalEntries: (entries) =>
+        set((state) => {
+          const existingIds = new Set(state.journalEntries.map((e) => e.id));
+          const fresh = entries.filter((e) => !existingIds.has(e.id));
+          return {
+            journalEntries: [...state.journalEntries, ...fresh],
+            lastUpdated: new Date().toISOString(),
+          };
+        }),
+
       removeDataset: (id) =>
         set((state) => {
           const remaining = state.companies.filter((c) => c.id !== id);
@@ -86,8 +100,10 @@ export const usePnLStore = create<PnLStore>()(
         set((state) => {
           const remaining = state.companies.filter((c) => c.companyName !== companyName);
           const remainingPeriods = new Set(remaining.map((c) => c.period));
+          const remainingEntries = state.journalEntries.filter((e) => e.companyName !== companyName);
           return {
             companies: remaining,
+            journalEntries: remainingEntries,
             selectedCompanyNames: state.selectedCompanyNames.filter((n) => n !== companyName),
             selectedPeriods: state.selectedPeriods.filter((p) => remainingPeriods.has(p)),
             lastUpdated: new Date().toISOString(),
@@ -122,7 +138,7 @@ export const usePnLStore = create<PnLStore>()(
         set({ dateRangeStart: start, dateRangeEnd: end }),
 
       clearAll: () =>
-        set({ companies: [], selectedCompanyNames: [], selectedPeriods: [], dateRangeStart: null, dateRangeEnd: null, lastUpdated: null, notes: {} }),
+        set({ companies: [], journalEntries: [], selectedCompanyNames: [], selectedPeriods: [], dateRangeStart: null, dateRangeEnd: null, lastUpdated: null, notes: {} }),
 
       setNote: (key, value) =>
         set((state) => {
@@ -148,6 +164,13 @@ export const usePnLStore = create<PnLStore>()(
         const state = get();
         return state.companies.filter(
           (c) => state.selectedCompanyNames.includes(c.companyName) && state.selectedPeriods.includes(c.period)
+        );
+      },
+
+      getFilteredJournalEntries: () => {
+        const state = get();
+        return state.journalEntries.filter(
+          (e) => state.selectedCompanyNames.includes(e.companyName) && state.selectedPeriods.includes(e.period)
         );
       },
 
@@ -213,6 +236,7 @@ export const usePnLStore = create<PnLStore>()(
       name: 'pnl-dashboard-storage-v2',
       partialize: (state) => ({
         companies: state.companies,
+        journalEntries: state.journalEntries,
         selectedCompanyNames: state.selectedCompanyNames,
         selectedPeriods: state.selectedPeriods,
         dateRangeStart: state.dateRangeStart,
