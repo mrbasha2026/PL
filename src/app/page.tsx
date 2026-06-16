@@ -8,7 +8,7 @@ import {
   Sparkles, Calculator, FileText, TrendingUp, Database, Clock,
   CalendarDays, BookOpen, StickyNote, Layers, Download, Brain,
   Sun, Moon, AlertTriangle, ArrowUpDown, LineChart, ScrollText,
-  Zap, HardDrive,
+  Zap, HardDrive, Wallet,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -32,6 +32,7 @@ import { Forecasting } from '@/components/pnl/Forecasting';
 import { LineItemExplorer } from '@/components/pnl/LineItemExplorer';
 import { AccountLedgerExplorer } from '@/components/pnl/AccountLedger';
 import { SaveManager } from '@/components/pnl/SaveManager';
+import { PrepaidExpenses } from '@/components/pnl/PrepaidExpenses';
 
 function ThemeToggle() {
   const { theme, setTheme } = useTheme();
@@ -66,6 +67,7 @@ export default function Home() {
   const companyCount = new Set(companies.map((c) => c.companyName)).size;
   const periodCount = new Set(companies.map((c) => c.period)).size;
   const [saveManagerOpen, setSaveManagerOpen] = React.useState(false);
+  const [view, setView] = React.useState<'pnl' | 'prepaid'>('pnl');
 
   const tabs = [
     { value: 'summary', icon: FileText, label: 'الملخص التنفيذي', short: 'ملخص' },
@@ -149,6 +151,20 @@ export default function Home() {
               )}
               <ThemeToggle />
               <Button
+                variant={view === 'prepaid' ? 'default' : 'ghost'}
+                size="sm"
+                className={`text-xs gap-1.5 h-9 rounded-xl font-medium ${
+                  view === 'prepaid'
+                    ? 'bg-gradient-to-l from-emerald-600 to-teal-600 text-white hover:from-emerald-700 hover:to-teal-700'
+                    : 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/15'
+                }`}
+                onClick={() => setView(view === 'prepaid' ? 'pnl' : 'prepaid')}
+                title="تتبع المصروفات المقدمة"
+              >
+                <Wallet className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">المصروفات المقدمة</span>
+              </Button>
+              <Button
                 variant="ghost"
                 size="sm"
                 className="text-xs gap-1.5 h-9 rounded-xl font-medium bg-gradient-to-l from-violet-500/10 to-purple-500/10 border border-violet-500/20 text-violet-700 dark:text-violet-400 hover:from-violet-500/20 hover:to-purple-500/20"
@@ -176,6 +192,11 @@ export default function Home() {
       {/* ─── Main ──────────────────────────────────────────────── */}
       <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-8 sm:px-6 lg:px-8">
 
+        {view === 'prepaid' ? (
+          /* === PREPAID EXPENSES VIEW === */
+          <PrepaidExpenses />
+        ) : (
+        <>
         {/* === EMPTY STATE === */}
         {!hasData && (
           <div className="mb-10">
@@ -309,6 +330,8 @@ export default function Home() {
               <TabsContent value="glossary"><Glossary /></TabsContent>
             </Tabs>
           </div>
+        )}
+        </>
         )}
       </main>
 
