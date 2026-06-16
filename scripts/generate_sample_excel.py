@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Generate PnL_Sample_Data.xlsx with realistic Saudi company financial data."""
+"""Generate PnL_Sample_Data.xlsx with realistic Saudi company financial data.
+Includes 2025 + 2026 data for YoY comparison."""
 
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -9,7 +10,9 @@ wb = openpyxl.Workbook()
 
 # ─── Color & Style Definitions ───────────────────────────────────────────────
 HEADER_FILL = PatternFill(start_color="1B5E20", end_color="1B5E20", fill_type="solid")
-HEADER_FONT = Font(name="Arial", bold=True, color="FFFFFF", size=12)
+HEADER_FONT = Font(name="Arial", bold=True, color="FFFFFF", size=11)
+YEAR_2025_FILL = PatternFill(start_color="0D47A1", end_color="0D47A1", fill_type="solid")
+YEAR_2025_FONT = Font(name="Arial", bold=True, color="FFFFFF", size=11)
 SUBHEADER_FILL = PatternFill(start_color="E8F5E9", end_color="E8F5E9", fill_type="solid")
 SUBHEADER_FONT = Font(name="Arial", bold=True, color="1B5E20", size=11)
 SECTION_FILL = PatternFill(start_color="C8E6C9", end_color="C8E6C9", fill_type="solid")
@@ -34,20 +37,16 @@ LINE_ITEMS = [
     ("Sales Revenue", "إيرادات المبيعات", 1, False, False, False),
     ("Service Revenue", "إيرادات الخدمات", 1, False, False, False),
     ("Other Revenue", "إيرادات أخرى", 1, False, False, False),
-
     # COST OF SALES
     ("Cost of Goods Sold", "تكلفة البضاعة المباعة", 1, True, False, False),
     ("Raw Materials", "المواد الخام", 2, False, False, False),
     ("Direct Labor", "العمالة المباشرة", 2, False, False, False),
     ("Manufacturing Overhead", "مصروفات التصنيع غير المباشرة", 2, False, False, False),
     ("Purchases", "المشتريات", 2, False, False, False),
-
     # GROSS PROFIT
     ("Gross Profit", "إجمالي الربح", 0, False, False, True),
-
     # OPERATING EXPENSES
     ("Operating Expenses", "المصروفات التشغيلية", 0, True, True, False),
-
     # Selling & Marketing
     ("Selling Expenses", "مصروفات البيع والتسويق", 1, True, False, False),
     ("Sales Commissions", "عمولات المبيعات", 2, False, False, False),
@@ -55,7 +54,6 @@ LINE_ITEMS = [
     ("Marketing Expenses", "مصروفات التسويق", 2, False, False, False),
     ("Delivery & Shipping", "التوصيل والشحن", 2, False, False, False),
     ("Customer Service", "خدمة العملاء", 2, False, False, False),
-
     # G&A
     ("General & Administrative", "المصروفات الإدارية والعمومية", 1, True, False, False),
     ("Salaries & Wages", "الرواتب والأجور", 2, False, False, False),
@@ -73,39 +71,40 @@ LINE_ITEMS = [
     ("Subscriptions & Software", "الاشتراكات والبرمجيات", 2, False, False, False),
     ("Bad Debts", "الديون المعدومة", 2, False, False, False),
     ("Miscellaneous Expenses", "مصروفات متنوعة", 2, False, False, False),
-
     # Depreciation
     ("Depreciation & Amortization", "الإهلاك والاستنفاد", 1, True, False, False),
     ("Depreciation of Buildings", "إهلاك المباني", 2, False, False, False),
     ("Depreciation of Equipment", "إهلاك المعدات والأجهزة", 2, False, False, False),
     ("Depreciation of Vehicles", "إهلاك السيارات", 2, False, False, False),
     ("Amortization of Intangibles", "استنفاد الأصول غير الملموسة", 2, False, False, False),
-
     # OPERATING INCOME
     ("Operating Income (EBIT)", "الدخل التشغيلي", 0, False, False, True),
-
     # NON-OPERATING
     ("Interest Income", "إيرادات الاستثمارات", 1, False, False, False),
     ("Finance Cost", "تكلفة التمويل", 1, False, False, False),
     ("Other Income", "إيرادات أخرى", 1, False, False, False),
     ("Other Expenses", "مصروفات أخرى", 1, False, False, False),
-
     # INCOME BEFORE ZAKAT
     ("Income Before Zakat", "الدخل قبل الزكاة", 0, False, False, True),
-
     # ZAKAT
     ("Zakat Expense", "مصروف الزكاة", 1, False, False, False),
-
     # NET INCOME
     ("Net Income", "صافي الدخل", 0, False, True, True),
 ]
 
-PERIODS = ["Jan 2026", "Feb 2026", "Mar 2026", "Apr 2026", "May 2026", "Jun 2026"]
+# 12 months: Jan-Jun 2025 + Jan-Jun 2026
+PERIODS = [
+    "Jan 2025", "Feb 2025", "Mar 2025", "Apr 2025", "May 2025", "Jun 2025",
+    "Jan 2026", "Feb 2026", "Mar 2026", "Apr 2026", "May 2026", "Jun 2026",
+]
 
-# ─── Sample Data for 3 Companies ─────────────────────────────────────────────
+# ─── Helper: scale a list by a factor ────────────────────────────────────────
+def scale(vals, factor):
+    return [round(v * factor) for v in vals]
 
-# Company 1: شركة النخبة التجارية — Trading company, ~8M SAR/month
-al_nukhba = {
+# ─── 2026 data (same as before) ──────────────────────────────────────────────
+# Company 1: شركة النخبة التجارية — Trading, ~8M/month in 2026
+nukhba_2026 = {
     "Revenue":                          [7200000, 7500000, 7800000, 8100000, 8500000, 8900000],
     "Sales Revenue":                    [6500000, 6800000, 7000000, 7300000, 7700000, 8000000],
     "Service Revenue":                  [500000, 520000, 550000, 570000, 550000, 600000],
@@ -154,8 +153,8 @@ al_nukhba = {
     "Net Income":                       [643500, 666900, 722475, 755625, 797550, 859950],
 }
 
-# Company 2: شركة الأفق للخدمات — Services company, ~4.5M SAR/month
-al_ufuq = {
+# Company 2: شركة الأفق للخدمات — Services, ~4.5M/month in 2026
+ufuq_2026 = {
     "Revenue":                          [4200000, 4350000, 4500000, 4650000, 4800000, 4950000],
     "Sales Revenue":                    [1200000, 1250000, 1300000, 1350000, 1400000, 1450000],
     "Service Revenue":                  [2800000, 2900000, 3000000, 3100000, 3200000, 3300000],
@@ -204,8 +203,8 @@ al_ufuq = {
     "Net Income":                       [565500, 588413, 615225, 643013, 668850, 699563],
 }
 
-# Company 3: شركة البناء الحديث — Construction/Manufacturing, ~12M SAR/month
-al_bina = {
+# Company 3: شركة البناء الحديث — Construction, ~12M/month in 2026
+bina_2026 = {
     "Revenue":                          [11500000, 12000000, 11800000, 12500000, 13000000, 13500000],
     "Sales Revenue":                    [10500000, 11000000, 10800000, 11500000, 12000000, 12500000],
     "Service Revenue":                  [800000, 800000, 800000, 800000, 800000, 800000],
@@ -254,33 +253,100 @@ al_bina = {
     "Net Income":                       [1243125, 1291875, 1302600, 1384500, 1443000, 1535625],
 }
 
+# ─── 2025 data: ~12-18% lower than 2026 (YoY growth story) ──────────────────
+# Fixed costs (rent, salaries) stay similar; variable costs scale with revenue
+# Finance costs are higher in 2025 (paying down debt)
+
+def make_2025(data_2026, revenue_factor=0.85, variable_factor=0.85, fixed_factor=0.95):
+    """Generate 2025 data from 2026 with realistic YoY differences.
+    - Revenue & variable costs: scaled by revenue_factor
+    - Fixed costs (salaries, rent, insurance, depreciation): scaled by fixed_factor  
+    - Finance cost: higher in 2025 (more debt)
+    - Bad debts: higher in 2025 (weaker collection)
+    """
+    # Items that are mostly fixed (don't scale much with revenue)
+    FIXED_ITEMS = {
+        "Salaries & Wages", "Employee Benefits", "GOSI Contributions",
+        "Rent Expense", "Insurance Expense", "Telecommunications",
+        "Subscriptions & Software", "Depreciation of Buildings",
+        "Depreciation of Equipment", "Depreciation of Vehicles",
+        "Amortization of Intangibles",
+    }
+    # Items that should be HIGHER in 2025 (worse performance)
+    HIGHER_ITEMS = {
+        "Finance Cost", "Bad Debts",
+    }
+    # Computed/subtotal items that need special handling
+    SUBTOTAL_ITEMS = {
+        "Revenue", "Cost of Goods Sold", "Gross Profit", "Operating Expenses",
+        "Selling Expenses", "General & Administrative",
+        "Depreciation & Amortization",
+        "Operating Income (EBIT)", "Income Before Zakat", "Net Income",
+    }
+
+    result = {}
+    for key, vals in data_2026.items():
+        if key in FIXED_ITEMS:
+            result[key] = scale(vals, fixed_factor)
+        elif key in HIGHER_ITEMS:
+            # ~15-25% higher in 2025
+            result[key] = scale(vals, 1.20)
+        elif key in SUBTOTAL_ITEMS:
+            # These will be recalculated, but for simplicity use revenue_factor
+            # The app recalculates them anyway
+            if key in ("Operating Income (EBIT)", "Income Before Zakat", "Net Income", "Gross Profit"):
+                result[key] = scale(vals, revenue_factor * 0.9)  # Profits grow faster
+            else:
+                result[key] = scale(vals, revenue_factor)
+        else:
+            result[key] = scale(vals, variable_factor)
+    return result
+
+nukhba_2025 = make_2025(nukhba_2026, revenue_factor=0.86, variable_factor=0.86, fixed_factor=0.95)
+ufuq_2025   = make_2025(ufuq_2026,   revenue_factor=0.88, variable_factor=0.88, fixed_factor=0.96)
+bina_2025   = make_2025(bina_2026,   revenue_factor=0.84, variable_factor=0.84, fixed_factor=0.94)
+
+# Merge 2025 + 2026 into single 12-month arrays
+def merge_years(d2025, d2026):
+    return {k: d2025[k] + d2026[k] for k in d2026}
+
+al_nukhba = merge_years(nukhba_2025, nukhba_2026)
+al_ufuq   = merge_years(ufuq_2025, ufuq_2026)
+al_bina   = merge_years(bina_2025, bina_2026)
+
 
 def write_company_sheet(wb, sheet_name, company_data, currency="SAR"):
-    """Write a company sheet with formatted P&L data."""
+    """Write a company sheet with formatted P&L data for 12 months."""
     ws = wb.create_sheet(sheet_name)
     ws.sheet_properties.tabColor = "1B5E20"
 
+    num_cols = len(PERIODS) + 1  # label + 12 periods
+
     # Column widths
     ws.column_dimensions['A'].width = 50
-    for col_idx in range(2, 8):
-        ws.column_dimensions[get_column_letter(col_idx)].width = 18
+    for col_idx in range(2, num_cols + 1):
+        ws.column_dimensions[get_column_letter(col_idx)].width = 15
 
-    # Row 1: Header (Periods)
+    # Row 1: Header (Periods) — 2025 in blue, 2026 in green
     cell = ws.cell(row=1, column=1, value="البند Line Item")
     cell.font = HEADER_FONT
     cell.fill = HEADER_FILL
     cell.alignment = Alignment(horizontal='center', vertical='center')
     for col_idx, period in enumerate(PERIODS, 2):
         cell = ws.cell(row=1, column=col_idx, value=period)
-        cell.font = HEADER_FONT
-        cell.fill = HEADER_FILL
+        if "2025" in period:
+            cell.font = YEAR_2025_FONT
+            cell.fill = YEAR_2025_FILL
+        else:
+            cell.font = HEADER_FONT
+            cell.fill = HEADER_FILL
         cell.alignment = Alignment(horizontal='center', vertical='center')
 
     # Row 2: Currency
     cell = ws.cell(row=2, column=1, value="العملة Currency")
     cell.font = SUBHEADER_FONT
     cell.fill = SUBHEADER_FILL
-    for col_idx in range(2, 8):
+    for col_idx in range(2, num_cols + 1):
         cell = ws.cell(row=2, column=col_idx, value=currency)
         cell.font = SUBHEADER_FONT
         cell.fill = SUBHEADER_FILL
@@ -295,17 +361,16 @@ def write_company_sheet(wb, sheet_name, company_data, currency="SAR"):
         label = f"{'  ' * indent}{nameAr} - {nameEn}"
         cell_label = ws.cell(row=row, column=1, value=label)
 
-        # Determine style
-        if isProfit and isTotal:  # Net Income
+        if isProfit and isTotal:
             label_font = NET_INCOME_FONT
             label_fill = NET_INCOME_FILL
-        elif isProfit:  # Gross Profit, EBIT, Income Before Zakat
+        elif isProfit:
             label_font = PROFIT_FONT
             label_fill = PROFIT_FILL
-        elif isTotal:  # Operating Expenses total, Revenue total
+        elif isTotal:
             label_font = TOTAL_FONT
             label_fill = TOTAL_FILL
-        elif isSection:  # Section headers like COGS, Selling, G&A
+        elif isSection:
             label_font = SECTION_FONT
             label_fill = SECTION_FILL
         elif indent > 0:
@@ -319,8 +384,7 @@ def write_company_sheet(wb, sheet_name, company_data, currency="SAR"):
         if label_fill:
             cell_label.fill = label_fill
 
-        # Write values
-        values = company_data.get(nameEn, [0] * 6)
+        values = company_data.get(nameEn, [0] * len(PERIODS))
         for col_idx, val in enumerate(values, 2):
             cell = ws.cell(row=row, column=col_idx, value=val)
             cell.number_format = NUMBER_FMT
@@ -328,14 +392,11 @@ def write_company_sheet(wb, sheet_name, company_data, currency="SAR"):
             cell.font = label_font
             if label_fill:
                 cell.fill = label_fill
-
-            # Borders
             if isProfit or isTotal:
                 cell.border = BOTTOM_BORDER
             else:
                 cell.border = THIN_BORDER
 
-        # Label border
         if isProfit or isTotal:
             cell_label.border = BOTTOM_BORDER
         else:
@@ -347,36 +408,38 @@ def write_company_sheet(wb, sheet_name, company_data, currency="SAR"):
 # ─── Instructions Sheet ──────────────────────────────────────────────────────
 ws_instr = wb.active
 ws_instr.title = "تعليمات Instructions"
-ws_instr.column_dimensions['A'].width = 85
+ws_instr.column_dimensions['A'].width = 90
 ws_instr.sheet_properties.tabColor = "1B5E20"
 
 instructions = [
     ("تعليمات - Instructions", Font(name="Arial", bold=True, size=14, color="1B5E20")),
     ("", None),
     ("العربية:", Font(name="Arial", bold=True, size=11, color="1B5E20")),
-    ("  هذا الملف يحتوي على بيانات نموذجية لثلاث شركات سعودية", None),
-    ("  كل ورقة تمثل شركة مستقلة ببيانات 6 أشهر (يناير - يونيو 2026)", None),
+    ("  هذا الملف يحتوي على بيانات نموذجية لثلاث شركات سعودية لسنتين (2025 + 2026)", None),
+    ("  كل ورقة تمثل شركة مستقلة ببيانات 12 شهر (يناير - يونيو 2025 + يناير - يونيو 2026)", None),
+    ("  الأعمدة الزرقاء = 2025 | الأعمدة الخضراء = 2026 — لدعم المقارنة السنوية", None),
     ("  يمكنك تعديل الأرقام أو إضافة شركات أخرى بأوراق جديدة", None),
     ("  اسم الورقة = اسم الشركة", None),
-    ("  الصف 1: الفترات المالية  |  الصف 2: العملة  |  عمود A = اسم البند  |  الأعمدة B-G = القيم", None),
+    ("  الصف 1: الفترات المالية  |  الصف 2: العملة  |  عمود A = اسم البند", None),
     ("", None),
     ("  ملاحظة: لا توجد ضريبة دخل — نظام الزكاة الشرعية ينطبق", Font(name="Arial", bold=True, size=10, color="D32F2F")),
     ("  البنود باللون الأخضر = أرباح | باللون الأصفر = إجماليات | بالأخضر الفاتح = أقسام", None),
     ("", None),
     ("English:", Font(name="Arial", bold=True, size=11, color="1B5E20")),
-    ("  This file contains sample data for three Saudi companies", None),
-    ("  Each sheet represents one company with 6 months of data (Jan-Jun 2026)", None),
+    ("  This file contains sample data for three Saudi companies for 2 years (2025 + 2026)", None),
+    ("  Each sheet = one company with 12 months (Jan-Jun 2025 + Jan-Jun 2026)", None),
+    ("  Blue columns = 2025 | Green columns = 2026 — enables year-over-year comparison", None),
     ("  You can edit numbers or add more companies in new sheets", None),
     ("  Sheet name = Company name", None),
-    ("  Row 1: Periods  |  Row 2: Currency  |  Column A = Item name  |  Columns B-G = Values", None),
+    ("  Row 1: Periods  |  Row 2: Currency  |  Column A = Item name", None),
     ("", None),
     ("  Note: No income tax — Islamic Zakat system applies", Font(name="Arial", bold=True, size=10, color="D32F2F")),
     ("  Green cells = Profits | Yellow cells = Totals | Light green = Sections", None),
     ("", None),
     ("الشركات النموذجية / Sample Companies:", Font(name="Arial", bold=True, size=11, color="1B5E20")),
-    ("  1. شركة النخبة التجارية — شركة تجارية (~8M ريال/شهر) — Trading company", None),
-    ("  2. شركة الأفق للخدمات — شركة خدماتية (~4.5M ريال/شهر) — Services company", None),
-    ("  3. شركة البناء الحديث — شركة صناعية/إنشائية (~12M ريال/شهر) — Construction company", None),
+    ("  1. شركة النخبة التجارية — تجارية (~7M→8M ريال/شهر) — Trading (~14% YoY growth)", None),
+    ("  2. شركة الأفق للخدمات — خدماتية (~4M→4.5M ريال/شهر) — Services (~12% YoY growth)", None),
+    ("  3. شركة البناء الحديث — صناعية/إنشائية (~10M→12M ريال/شهر) — Construction (~19% YoY growth)", None),
 ]
 
 for idx, (text, font) in enumerate(instructions, 1):
@@ -398,4 +461,5 @@ wb.save(output_path)
 print(f"✅ File saved to: {output_path}")
 print(f"   Sheets: {wb.sheetnames}")
 print(f"   Companies: 3")
-print(f"   Periods: 6 (Jan-Jun 2026)")
+print(f"   Periods per company: 12 (Jan-Jun 2025 + Jan-Jun 2026)")
+print(f"   YoY growth: النخبة ~14% | الأفق ~12% | البناء ~19%")
