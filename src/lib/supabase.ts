@@ -1,6 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  // Fallback: the project URL provided by the user
+  'https://lzwspnhvqimaojtdecwt.supabase.co';
 const serviceKey =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   // Fallback: the service_role key provided by the user
