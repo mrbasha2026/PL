@@ -436,6 +436,17 @@ instructions = [
     ("  Note: No income tax — Islamic Zakat system applies", Font(name="Arial", bold=True, size=10, color="D32F2F")),
     ("  Green cells = Profits | Yellow cells = Totals | Light green = Sections", None),
     ("", None),
+    ("أوراق الحركات / Movement Sheets:", Font(name="Arial", bold=True, size=11, color="0D47A1")),
+    ("  أوراق 'حركات X' تحتوي على القيم + نسبة التغير الدوري بين كل فترة والتي قبلها", None),
+    ("  اللون الأخضر = زيادة > 2% | اللون الأحمر = انخفاض > 2% | الرمادي = تغير طفيف", None),
+    ("  المتوسط = متوسط نسبة التغير خلال كل الفترات", None),
+    ("  هذه البيانات تحسب تلقائياً في الموقع عند اختيار تبويب 'حركات البنود'", None),
+    ("", None),
+    ("  Movement sheets ('حركات X') contain values + period-over-period % change", None),
+    ("  Green = increase > 2% | Red = decrease > 2% | Grey = minor change", None),
+    ("  Average = mean % change across all periods", None),
+    ("  This data is auto-calculated on the website in the 'Line Item Movements' tab", None),
+    ("", None),
     ("الشركات النموذجية / Sample Companies:", Font(name="Arial", bold=True, size=11, color="1B5E20")),
     ("  1. شركة النخبة التجارية — تجارية (~7M→8M ريال/شهر) — Trading (~14% YoY growth)", None),
     ("  2. شركة الأفق للخدمات — خدماتية (~4M→4.5M ريال/شهر) — Services (~12% YoY growth)", None),
@@ -450,16 +461,227 @@ for idx, (text, font) in enumerate(instructions, 1):
         cell.font = Font(name="Arial", size=10)
 
 
+# ─── Movement Analysis Sheet ────────────────────────────────────────────────
+# Shows period-over-period % change for all line items per company
+
+MOVEMENT_FILL_POS = PatternFill(start_color="E8F5E9", end_color="E8F5E9", fill_type="solid")  # green for positive
+MOVEMENT_FILL_NEG = PatternFill(start_color="FFEBEE", end_color="FFEBEE", fill_type="solid")  # red for negative
+MOVEMENT_FILL_ZERO = PatternFill(start_color="F5F5F5", end_color="F5F5F5", fill_type="solid")  # grey for zero
+MOVEMENT_FONT_POS = Font(name="Arial", size=10, color="2E7D32", bold=True)
+MOVEMENT_FONT_NEG = Font(name="Arial", size=10, color="C62828", bold=True)
+MOVEMENT_FONT_ZERO = Font(name="Arial", size=10, color="757575")
+PCT_FMT = '0.0%'
+
+def write_movement_sheet(wb, sheet_name, company_data, currency="SAR"):
+    """Write a movement analysis sheet showing period-over-period % changes."""
+    ws = wb.create_sheet(sheet_name)
+    ws.sheet_properties.tabColor = "0D47A1"  # Blue tab for movement sheets
+
+    num_value_cols = len(PERIODS)
+    num_change_cols = num_value_cols - 1  # one fewer change column
+    total_cols = 1 + num_value_cols + 2 + num_change_cols + 2  # label + values + (total, avg) + changes + (avg change, total change)
+
+    # Column widths
+    ws.column_dimensions['A'].width = 50
+    for col_idx in range(2, total_cols + 1):
+        ws.column_dimensions[get_column_letter(col_idx)].width = 14
+
+    # ─── Section 1: Values ────────────────────────────────
+    # Header row
+    col = 1
+    cell = ws.cell(row=1, column=col, value="البند Line Item")
+    cell.font = HEADER_FONT
+    cell.fill = HEADER_FILL
+    cell.alignment = Alignment(horizontal='center', vertical='center')
+
+    col = 2
+    for period in PERIODS:
+        cell = ws.cell(row=1, column=col, value=period)
+        if "2025" in period:
+            cell.font = YEAR_2025_FONT
+            cell.fill = YEAR_2025_FILL
+        else:
+            cell.font = HEADER_FONT
+            cell.fill = HEADER_FILL
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        col += 1
+
+    # Total + Average
+    cell = ws.cell(row=1, column=col, value="الإجمالي")
+    cell.font = Font(name="Arial", bold=True, color="FFFFFF", size=10)
+    cell.fill = PatternFill(start_color="F57F17", end_color="F57F17", fill_type="solid")
+    cell.alignment = Alignment(horizontal='center')
+    col += 1
+    cell = ws.cell(row=1, column=col, value="المتوسط")
+    cell.font = Font(name="Arial", bold=True, color="FFFFFF", size=10)
+    cell.fill = PatternFill(start_color="F57F17", end_color="F57F17", fill_type="solid")
+    cell.alignment = Alignment(horizontal='center')
+    col += 1
+
+    # ─── Section 2: % Changes ────────────────────────────────
+    # Separator column
+    cell = ws.cell(row=1, column=col, value="")
+    cell.fill = PatternFill(start_color="E0E0E0", end_color="E0E0E0", fill_type="solid")
+    col += 1
+
+    # Change headers
+    cell = ws.cell(row=1, column=col, value="نسبة التغير الدوري %")
+    cell.font = Font(name="Arial", bold=True, color="FFFFFF", size=11)
+    cell.fill = PatternFill(start_color="0D47A1", end_color="0D47A1", fill_type="solid")
+    cell.alignment = Alignment(horizontal='center')
+    # Merge across change columns
+    ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + num_change_cols + 1)
+
+    # Sub-header for change columns
+    col = col  # stay at same col for row 2
+    change_start_col = col
+    for i in range(1, len(PERIODS)):
+        cell = ws.cell(row=2, column=col, value=f"{PERIODS[i]}\nvs\n{PERIODS[i-1]}")
+        cell.font = Font(name="Arial", bold=True, color="FFFFFF", size=9)
+        cell.fill = PatternFill(start_color="1565C0", end_color="1565C0", fill_type="solid")
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        col += 1
+
+    # Average change + Total change
+    cell = ws.cell(row=2, column=col, value="متوسط\nالتغير %")
+    cell.font = Font(name="Arial", bold=True, color="FFFFFF", size=9)
+    cell.fill = PatternFill(start_color="0D47A1", end_color="0D47A1", fill_type="solid")
+    cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    col += 1
+
+    # Row 2: sub-headers for value section
+    for c in range(1, change_start_col):
+        if ws.cell(row=2, column=c).value is None:
+            cell = ws.cell(row=2, column=c, value="")
+            cell.fill = PatternFill(start_color="E8F5E9", end_color="E8F5E9", fill_type="solid")
+
+    # Freeze panes
+    ws.freeze_panes = 'B3'
+    ws.row_dimensions[1].height = 25
+    ws.row_dimensions[2].height = 50
+
+    # Data rows
+    row = 3
+    for (nameEn, nameAr, indent, isSection, isTotal, isProfit) in LINE_ITEMS:
+        label = f"{'  ' * indent}{nameAr} - {nameEn}"
+        cell_label = ws.cell(row=row, column=1, value=label)
+
+        if isProfit and isTotal:
+            label_font = NET_INCOME_FONT
+            label_fill = NET_INCOME_FILL
+        elif isProfit:
+            label_font = PROFIT_FONT
+            label_fill = PROFIT_FILL
+        elif isTotal:
+            label_font = TOTAL_FONT
+            label_fill = TOTAL_FILL
+        elif isSection:
+            label_font = SECTION_FONT
+            label_fill = SECTION_FILL
+        elif indent > 0:
+            label_font = INDENT_FONT
+            label_fill = None
+        else:
+            label_font = NORMAL_FONT
+            label_fill = None
+
+        cell_label.font = label_font
+        if label_fill:
+            cell_label.fill = label_fill
+
+        values = company_data.get(nameEn, [0] * len(PERIODS))
+
+        # Write values
+        col = 2
+        total_val = 0
+        for val in values:
+            cell = ws.cell(row=row, column=col, value=val)
+            cell.number_format = NUMBER_FMT
+            cell.alignment = Alignment(horizontal='center')
+            cell.font = label_font
+            if label_fill:
+                cell.fill = label_fill
+            total_val += val
+            col += 1
+
+        # Total + Average
+        cell = ws.cell(row=row, column=col, value=total_val)
+        cell.number_format = NUMBER_FMT
+        cell.font = Font(name="Arial", bold=True, size=10)
+        cell.fill = PatternFill(start_color="FFF9C4", end_color="FFF9C4", fill_type="solid")
+        cell.alignment = Alignment(horizontal='center')
+        col += 1
+
+        avg_val = total_val / len(values) if values else 0
+        cell = ws.cell(row=row, column=col, value=round(avg_val))
+        cell.number_format = NUMBER_FMT
+        cell.font = Font(name="Arial", size=10)
+        cell.fill = PatternFill(start_color="FFF9C4", end_color="FFF9C4", fill_type="solid")
+        cell.alignment = Alignment(horizontal='center')
+        col += 1
+
+        # Separator
+        cell = ws.cell(row=row, column=col, value="")
+        cell.fill = PatternFill(start_color="E0E0E0", end_color="E0E0E0", fill_type="solid")
+        col += 1
+
+        # % Changes
+        pct_changes = []
+        for i in range(1, len(values)):
+            prev = values[i - 1]
+            curr = values[i]
+            if prev != 0:
+                pct = (curr - prev) / abs(prev)
+            else:
+                pct = 0
+            pct_changes.append(pct)
+
+            cell = ws.cell(row=row, column=col, value=pct)
+            cell.number_format = PCT_FMT
+            cell.alignment = Alignment(horizontal='center')
+
+            # Conditional formatting by color
+            if pct > 0.02:
+                cell.fill = MOVEMENT_FILL_POS
+                cell.font = MOVEMENT_FONT_POS
+            elif pct < -0.02:
+                cell.fill = MOVEMENT_FILL_NEG
+                cell.font = MOVEMENT_FONT_NEG
+            else:
+                cell.fill = MOVEMENT_FILL_ZERO
+                cell.font = MOVEMENT_FONT_ZERO
+            col += 1
+
+        # Average change
+        if pct_changes:
+            avg_pct = sum(pct_changes) / len(pct_changes)
+            cell = ws.cell(row=row, column=col, value=avg_pct)
+            cell.number_format = PCT_FMT
+            cell.alignment = Alignment(horizontal='center')
+            cell.font = Font(name="Arial", bold=True, size=10,
+                           color="2E7D32" if avg_pct > 0 else "C62828" if avg_pct < 0 else "757575")
+        col += 1
+
+        row += 1
+
+    return ws
+
+
 # ─── Write Company Sheets ────────────────────────────────────────────────────
 write_company_sheet(wb, "النخبة التجارية", al_nukhba)
 write_company_sheet(wb, "الأفق للخدمات", al_ufuq)
 write_company_sheet(wb, "البناء الحديث", al_bina)
+
+# ─── Write Movement Sheets ───────────────────────────────────────────────────
+write_movement_sheet(wb, "حركات النخبة", al_nukhba)
+write_movement_sheet(wb, "حركات الأفق", al_ufuq)
+write_movement_sheet(wb, "حركات البناء", al_bina)
 
 # ─── Save ─────────────────────────────────────────────────────────────────────
 output_path = "/home/z/my-project/download/PnL_Sample_Data.xlsx"
 wb.save(output_path)
 print(f"✅ File saved to: {output_path}")
 print(f"   Sheets: {wb.sheetnames}")
-print(f"   Companies: 3")
+print(f"   Companies: 3 (+ 3 movement sheets)")
 print(f"   Periods per company: 12 (Jan-Jun 2025 + Jan-Jun 2026)")
 print(f"   YoY growth: النخبة ~14% | الأفق ~12% | البناء ~19%")
