@@ -30,7 +30,7 @@ import {
   CompanyGroup,
 } from '@/lib/pnl-types';
 import { InfoTooltip } from '@/components/pnl/InfoTooltip';
-import { ClaudeInsight } from '@/components/pnl/ClaudeInsight';
+import { AIInsight } from '@/components/pnl/ClaudeInsight';
 
 // ─── Linear Regression Helper ───────────────────────────────────────────────
 function linearRegression(points: { x: number; y: number }[]): { slope: number; intercept: number; rSquared: number } {
@@ -511,9 +511,9 @@ function CompanyForecastView({
         <p>القيم المتوقعة قد تكون سالبة أو غير منطقية لبعض البنود — يرجى المراجعة قبل اتخاذ أي قرار</p>
       </div>
 
-      {/* Claude AI Forecast Insight */}
-      <ClaudeInsight
-        title={`تحليل Claude الذكي — تنبؤات ${group.name}`}
+      {/* AI Forecast Insight */}
+      <AIInsight
+        title={`تحليل AI الذكي — تنبؤات ${group.name}`}
         icon={<Brain className="h-4 w-4" />}
         systemPrompt={`أنت محلل مالي متخصص في التنبؤ والتحليل التوقعي. أجب بالعربية فقط.
 بناءً على بيانات التنبؤات المالية المقدمة، قدم تحليلاً يتضمن:

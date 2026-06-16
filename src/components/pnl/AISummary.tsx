@@ -758,7 +758,7 @@ export function AISummary() {
             <div className="flex items-start gap-2 text-[10px] text-muted-foreground">
               <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
               <div className="space-y-0.5">
-                <p>تم إنشاء هذا التحليل بواسطة Claude AI من Anthropic — يُرجى مراجعته والتحقق من دقته قبل اتخاذ أي قرارات مالية</p>
+                <p>تم إنشاء هذا التحليل بواسطة الذكاء الاصطناعي — يُرجى مراجعته والتحقق من دقته قبل اتخاذ أي قرارات مالية</p>
                 <p>التحليل مبني على البيانات المحددة في الفلاتر الحالية فقط — كلما زادت الفترات زادت دقة التحليل</p>
               </div>
             </div>
@@ -766,27 +766,8 @@ export function AISummary() {
         </div>
       )}
 
-      {/* Initial State — no API key */}
-      {!currentSummary && !loading && !error && !apiKeySaved && (
-        <Card className="shadow-sm border-2 border-dashed border-indigo-200 dark:border-indigo-800">
-          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-900/30">
-              <Key className="h-7 w-7 text-indigo-500" />
-            </div>
-            <h3 className="text-base font-semibold mb-2">أضف مفتاح Claude API للبدء</h3>
-            <p className="text-sm text-muted-foreground max-w-md mb-4">
-              لاستخدام التحليل الذكي، تحتاج إلى مفتاح API من Anthropic. اضغط على زر الإعدادات أعلاه لإضافة المفتاح.
-            </p>
-            <Button onClick={() => setShowSettings(true)} className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white">
-              <Settings className="h-4 w-4" />
-              إعداد مفتاح API
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Initial State — has API key */}
-      {!currentSummary && !loading && !error && apiKeySaved && (
+      {/* Initial State — ready to generate */}
+      {!currentSummary && !loading && !error && (
         <Card className="shadow-sm">
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-teal-50 dark:bg-teal-900/30">

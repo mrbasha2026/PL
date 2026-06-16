@@ -27,7 +27,7 @@ import {
   CompanyGroup,
 } from '@/lib/pnl-types';
 import { InfoTooltip } from '@/components/pnl/InfoTooltip';
-import { ClaudeInsight } from '@/components/pnl/ClaudeInsight';
+import { AIInsight } from '@/components/pnl/ClaudeInsight';
 
 // --- Statistical helpers ---
 
@@ -376,9 +376,9 @@ function VarianceTable({ group, color }: { group: CompanyGroup; color: string })
 
       {methodologyNote}
 
-      {/* Claude AI Variance Insight */}
-      <ClaudeInsight
-        title={`تحليل Claude الذكي — انحرافات ${group.name}`}
+      {/* AI Variance Insight */}
+      <AIInsight
+        title={`تحليل AI الذكي — انحرافات ${group.name}`}
         icon={<Brain className="h-4 w-4" />}
         systemPrompt={`أنت محلل مالي متخصص في تحليل الانحرافات والإحصاء المالي. أجب بالعربية فقط.
 بناءً على بيانات تحليل الانحرافات المقدمة، قدم تحليلاً يتضمن:

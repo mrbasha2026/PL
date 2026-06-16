@@ -18,7 +18,7 @@ interface AIInsightProps {
   temperature?: number;
 }
 
-export function ClaudeInsight({
+export function AIInsight({
   prompt,
   systemPrompt,
   title,

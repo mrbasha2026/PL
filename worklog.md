@@ -84,3 +84,26 @@ Stage Summary:
 - Three Claude models available: Sonnet 4 (default), Opus 4, 3.5 Sonnet
 - Token usage tracking displayed for each analysis
 - Forecasting and VarianceAnalysis now have inline Claude-powered insights
+---
+Task ID: 3
+Agent: Main
+Task: Fix client-side crash on Vercel deployment and remove Claude/Anthropic dependencies
+
+Work Log:
+- Diagnosed root cause: `apiKeySaved` variable referenced in AISummary.tsx (lines 770, 789) but never defined — causing ReferenceError crash on client
+- Removed undefined `apiKeySaved` conditional blocks (Claude API key prompt) and replaced with single "ready to generate" state
+- Updated AI disclaimer from "Claude AI من Anthropic" to generic "الذكاء الاصطناعي"
+- Renamed `ClaudeInsight` component to `AIInsight` in ClaudeInsight.tsx
+- Updated imports in Forecasting.tsx: `ClaudeInsight` → `AIInsight`, title "تحليل Claude الذكي" → "تحليل AI الذكي"
+- Updated imports in VarianceAnalysis.tsx: `ClaudeInsight` → `AIInsight`, title "تحليل Claude الذكي" → "تحليل AI الذكي"
+- Removed `@anthropic-ai/sdk` from package.json dependencies
+- Updated .env.example to remove ANTHROPIC references and document free GLM models
+- Build succeeded with no errors
+- AI API endpoint verified working with free GLM-4 Plus model
+
+Stage Summary:
+- Client-side crash fixed — removed undefined `apiKeySaved` reference
+- All Claude/Anthropic branding removed from UI components
+- All AI features now use free GLM models (glm-4-plus, glm-4-flash, glm-4-long) via z-ai-web-dev-sdk
+- No API key required — all models are free and work out of the box
+- Build clean, dev server working, API endpoint verified
