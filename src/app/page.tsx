@@ -7,7 +7,7 @@ import {
   Table2, BarChart3, GitCompareArrows,
   Sparkles, Calculator, FileText, TrendingUp, Database, Clock,
   CalendarDays, BookOpen, StickyNote, Layers, Download, Brain,
-  Sun, Moon, AlertTriangle, ArrowUpDown, LineChart,
+  Sun, Moon, AlertTriangle, ArrowUpDown, LineChart, ScrollText,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,7 @@ import { ExportManager } from '@/components/pnl/ExportManager';
 import { YoYComparison } from '@/components/pnl/YoYComparison';
 import { VarianceAnalysis } from '@/components/pnl/VarianceAnalysis';
 import { Forecasting } from '@/components/pnl/Forecasting';
+import { LineItemExplorer } from '@/components/pnl/LineItemExplorer';
 
 function ThemeToggle() {
   const { theme, setTheme } = useTheme();
@@ -75,6 +76,7 @@ export default function Home() {
     { value: 'quarterly', icon: Layers, label: 'تجميع ربعي', short: 'ربعي' },
     { value: 'variance', icon: AlertTriangle, label: 'تحليل الانحرافات', short: 'انحرافات' },
     { value: 'forecast', icon: LineChart, label: 'التنبؤات', short: 'تنبؤات' },
+    { value: 'explorer', icon: ScrollText, label: 'حركات البنود', short: 'حركات' },
     { value: 'charts', icon: BarChart3, label: 'الرسوم البيانية', short: 'رسوم' },
     { value: 'trends', icon: TrendingUp, label: 'التحليل الترندي', short: 'ترند' },
     { value: 'ai', icon: Brain, label: 'التحليل الذكي', short: 'ذكي' },
@@ -223,6 +225,7 @@ export default function Home() {
               <TabsContent value="quarterly"><QuarterlyAggregation /></TabsContent>
               <TabsContent value="variance"><VarianceAnalysis /></TabsContent>
               <TabsContent value="forecast"><Forecasting /></TabsContent>
+              <TabsContent value="explorer"><LineItemExplorer /></TabsContent>
               <TabsContent value="charts"><PnLCharts /></TabsContent>
               <TabsContent value="trends"><PnLCharts forceTrends /></TabsContent>
               <TabsContent value="ai"><AISummary /></TabsContent>
