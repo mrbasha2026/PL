@@ -378,3 +378,98 @@ Stage Summary:
 - Login credentials: admin@dealztree.com / admin123 (change after first login)
 - Saved datasets now have owner tracking — only owner or admin can edit/delete
 - Lint passes (only pre-existing errors in LineItemExplorer/PrepaidExpenses, not from this task)
+
+---
+Task ID: 10
+Agent: Super Z (main)
+Task: Complete system reorganization — multi-user system with Supabase DB, RBAC, all management modules, statistical forecasting, brand color design.
+
+Work Log:
+- Loaded fullstack-dev skill, explored existing project structure (Next.js 16 + Prisma + SQLite)
+- Found previous session had built auth/admin scaffolding on SQLite
+- User requested: pivot to Supabase PostgreSQL, delete existing data, build comprehensive modules
+- Set up Supabase connection via REST API (direct DB host unreachable from sandbox due to IPv6-only resolution; pooler auth failed; REST API works with service_role key)
+- Cleared all data from existing 11 Supabase tables via REST DELETE
+- Installed @supabase/supabase-js and built supabaseAdmin client
+- Created TypeScript db-types.ts matching the existing Supabase schema
+- Built comprehensive db-repo.ts data access layer (~870 lines):
+  * UserRepo, HoldingGroupRepo, CompanyRepo, CategoryRepo
+  * ExpenseRepo, PrepaidRepo, PnLRepo, AuditRepo
+  * BudgetRepo, ForecastRepo, AccessRepo
+  * ensureDefaultCompany() helper for NOT NULL companyId constraint fallback
+  * computeAmortization() — proper accounting amortization with month proration
+- Updated permissions.ts to add expenses, companies, budgets, forecasts, system.dashboard perms
+- Updated auth.ts to use supabase-js User table instead of Prisma Role table
+- Built 6 new API routes (companies, expenses, categories, prepaids, budgets, forecasts) + [id] sub-routes
+- Rewrote /api/users, /api/users/[id], /api/auth/register, /api/auth/change-password to use new repo
+- Rewrote /api/roles, /api/roles/[id] to expose in-memory DEFAULT_ROLES catalog
+- Rewrote /api/admin/audit, /api/admin/stats, /api/admin/settings to use new repos
+- Created /api/pnl/save-batch endpoint for Excel→DB persistence
+- Updated PnLUpload.tsx to POST parsed Excel data to /api/pnl/save-batch (auto-saves to Supabase)
+- Built src/lib/forecasting.ts — comprehensive statistical library:
+  * linearRegression (least squares with R², MAPE, MAE, RMSE)
+  * movingAverage, weightedMovingAverage
+  * holtExponentialSmoothing (Holt's linear trend method)
+  * cagrForecast (compound annual growth rate)
+  * bestFitForecast (tries all methods, picks highest accuracy)
+  * computeAccountingRatios (Gross/Operating/Net margin, ROA, ROE, Current ratio, Quick ratio, D/E, Asset turnover)
+  * computeVariance (Actual vs Baseline with favorable/unfavorable detection)
+- Updated globals.css with brand color palette from logo (#9fc552 leaf green):
+  * --brand-green, --brand-green-deep, --brand-ink, --brand-cream, --brand-amber
+  * Light + Dark theme variants
+  * sys-sidebar styling for system sidebar
+  * bg-brand-gradient utility class
+- Built SystemShell component — modern sidebar + topbar layout with:
+  * Collapsible sidebar (desktop) + drawer (mobile)
+  * Grouped nav: Main / Finance / Admin
+  * Permission-aware filtering of nav items
+  * User card at bottom with role badge
+  * Search bar, theme toggle, user menu
+- Built 12 modules:
+  * Dashboard — greeting hero, stats grid, module cards, recent activity, quick actions
+  * CompaniesModule — CRUD table with form dialog, holding group support, ownership tracking
+  * ExpensesModule — full CRUD with vendor/invoice/cost center, prepaid flag, summary cards
+  * CategoriesModule — tree view with parent/child, preset categories + departments buttons (16+12 presets)
+  * PnLModule — wraps existing PnL components + DB load button + auto-save on upload
+  * PrepaidModule — ONLY start/end dates (NO months count per user request), live amortization preview, schedule viewer dialog
+  * BudgetsModule — basic budget creation with revenue/COGS/expenses targets
+  * ForecastsModule — list of saved forecast models with chart viewer
+  * SmartAnalysisModule — full forecasting UI with:
+    - Method selector (Auto/Linear/MA/WMA/Holt/CAGR)
+    - Periods ahead selector (3-24)
+    - Stats display (R², MAPE, MAE, RMSE)
+    - ComposedChart with historical + forecast + 95% confidence interval
+    - Forecast values table
+    - Model parameters display
+    - Tabs: Forecast / Accounting Ratios / Variance Analysis
+  * UsersModule — full CRUD with role assignment, activate/suspend
+  * RolesModule — read-only role catalog + permission catalog (system roles are code-defined)
+  * AuditModule — paginated audit log with action filter, color-coded labels
+  * SettingsModule — read-only system info (DB provider, auth method, env vars)
+- Updated page.tsx to use SystemShell with module switching
+- Updated LoginPage with new brand gradient and messaging
+- Updated layout.tsx metadata to "نظام التحليل المالي"
+- Updated pnl-store.ts to add loadFromDB() method for loading from Supabase
+- Bootstrap script: scripts/bootstrap-users.py creates 4 default users (admin, manager, accountant, viewer)
+
+Verification:
+- Browser-tested login flow → admin lands on dashboard
+- Created test company → saved to Supabase (verified via REST query)
+- Created 16 preset categories → all saved to Supabase
+- Created prepaid expense with start/end dates → saved with 12-month amortization schedule
+- Auto-calculated monthlyAmount = 1000 SAR (12000/12)
+- 50% amortization status displayed correctly (6 months past out of 12)
+- Audit log captured 19 events with user, action, IP, timestamp
+- All API endpoints return proper 401 for unauthenticated requests
+- Dev server runs clean with no compile errors
+
+Stage Summary:
+- Complete architectural pivot from SQLite+Prisma to Supabase+REST API
+- Multi-user system with 5 default roles (admin, manager, accountant, analyst, viewer)
+- 12 functional modules covering all user requirements
+- Statistical forecasting library with 5 mathematical methods + accounting ratios
+- Brand-aligned design system using logo color #9fc552 (leaf green)
+- Excel upload now persists to Supabase database automatically
+- Prepaid expenses use ONLY start/end dates (months auto-calculated server-side)
+- Audit log captures all user actions
+- System ready for GitHub push

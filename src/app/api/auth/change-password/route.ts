@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { getServerSession } from 'next-auth';
-import { db } from '@/lib/db';
 import { authOptions } from '@/lib/auth';
+import { UserRepo, logAudit } from '@/lib/db-repo';
 
 // POST /api/auth/change-password
 // Body: { currentPassword, newPassword }
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل' }, { status: 400 });
     }
 
-    const user = await db.user.findUnique({ where: { id: session.user.id } });
+    const user = await UserRepo.findById(session.user.id);
     if (!user) {
       return NextResponse.json({ error: 'المستخدم غير موجود' }, { status: 404 });
     }
@@ -32,20 +32,15 @@ export async function POST(req: NextRequest) {
     }
 
     const newHash = await bcrypt.hash(newPassword, 10);
-    await db.user.update({
-      where: { id: user.id },
-      data: { passwordHash: newHash },
-    });
+    await UserRepo.update(user.id, { passwordHash: newHash });
 
-    await db.auditLog.create({
-      data: {
-        userId: session.user.id,
-        action: 'user.change_password',
-        targetType: 'User',
-        targetId: user.id,
-        ipAddress: req.headers.get('x-forwarded-for') || null,
-        userAgent: req.headers.get('user-agent') || null,
-      },
+    await logAudit({
+      userId: session.user.id,
+      action: 'user.change_password',
+      entityType: 'User',
+      entityId: user.id,
+      ipAddress: req.headers.get('x-forwarded-for') || null,
+      userAgent: req.headers.get('user-agent') || null,
     });
 
     return NextResponse.json({ success: true });

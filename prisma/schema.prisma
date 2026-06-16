@@ -1,13 +1,14 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// Prisma schema — PostgreSQL on Supabase
+// Learn more: https://pris.ly/d/prisma-schema
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ─── Authentication & Authorization ────────────────────────────────────────
@@ -20,27 +21,34 @@ model User {
   role         Role     @relation(fields: [roleId], references: [id])
   status       String   @default("active") // active | suspended | pending
   avatarUrl    String?
+  phone        String?
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   lastLoginAt  DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   savedDatasets SavedDataset[]
   auditLogs     AuditLog[]
+  expenses      Expense[]
+  prepaidExpenses PrepaidExpense[]
+  pnlUploads    PnLUpload[]
+  notifications Notification[]
+  sessions      UserSession[]
 
   @@index([roleId])
   @@index([status])
+  @@index([departmentId])
 }
 
 model Role {
   id             String   @id @default(cuid())
-  name           String   @unique // English key (admin, manager, accountant, viewer, custom_*)
+  name           String   @unique
   nameAr         String   @unique
   description    String?
-  // JSON-encoded array of permission strings
-  // e.g. ["pnl.view","pnl.upload","prepaid.view","users.manage", ...]
   permissionsJson String  @default("[]")
-  isSystem       Boolean  @default(false) // system roles cannot be deleted
-  color          String   @default("#6366f1")
+  isSystem       Boolean  @default(false)
+  color          String   @default("#0d9488")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -49,16 +57,30 @@ model Role {
   @@index([isSystem])
 }
 
+model UserSession {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token        String   @unique
+  ipAddress    String?
+  userAgent    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
 model AuditLog {
   id         String   @id @default(cuid())
   userId     String?
   user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  action     String   // e.g. "user.create", "role.update", "dataset.delete"
-  targetType String?  // e.g. "User", "Role", "SavedDataset"
+  action     String
+  targetType String?
   targetId   String?
   detailsJson String  @default("{}")
   ipAddress  String?
-  userAgent   String?
+  userAgent  String?
   createdAt  DateTime @default(now())
 
   @@index([userId])
@@ -72,7 +94,202 @@ model SystemSetting {
   updatedAt DateTime @updatedAt
 }
 
-// ─── Permanent PnL Storage ────────────────────────────────────────────────
+// ─── Organization: Companies, Departments ─────────────────────────────────
+model Company {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  legalName   String?
+  taxNumber   String?
+  industry    String?
+  country     String?
+  city        String?
+  address     String?
+  phone       String?
+  email       String?
+  currency    String   @default("SAR")
+  color       String   @default("#0d9488")
+  isActive    Boolean  @default(true)
+  parentId    String?
+  parent      Company? @relation("CompanyHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Company[] @relation("CompanyHierarchy")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  expenses      Expense[]
+  prepaidExpenses PrepaidExpense[]
+  pnlUploads    PnLUpload[]
+  pnlLineItems  PnLLineItem[]
+
+  @@index([parentId])
+  @@index([isActive])
+}
+
+model Department {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  nameAr      String?
+  code        String?  @unique
+  description String?
+  managerId   String?
+  parentId    String?
+  parent      Department? @relation("DeptHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Department[] @relation("DeptHierarchy")
+  costCenter  String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users      User[]
+  expenses   Expense[]
+  prepaidExpenses PrepaidExpense[]
+
+  @@index([parentId])
+  @@index([isActive])
+}
+
+// ─── Expense Management ────────────────────────────────────────────────────
+model ExpenseCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  nameAr      String?
+  code        String?  @unique
+  type        String   @default("operating") // operating | non_operating | capex | cogs
+  description String?
+  color       String   @default("#0d9488")
+  parentId    String?
+  parent      ExpenseCategory? @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children    ExpenseCategory[] @relation("CategoryHierarchy")
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  expenses Expense[]
+  prepaidExpenses PrepaidExpense[]
+
+  @@index([parentId])
+  @@index([type])
+  @@index([isActive])
+}
+
+model Expense {
+  id           String   @id @default(cuid())
+  title        String
+  description  String?
+  amount       Decimal  @db.Decimal(18, 2)
+  currency     String   @default("SAR")
+  expenseDate  DateTime
+  companyId    String?
+  company      Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  categoryId   String?
+  category     ExpenseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  isRecurring  Boolean  @default(false)
+  recurrencePattern String? // monthly | quarterly | yearly
+  vendor       String?
+  invoiceNumber String?
+  paymentMethod String?
+  status       String   @default("confirmed") // pending | confirmed | cancelled
+  notes        String?
+  createdById  String?
+  createdBy    User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([departmentId])
+  @@index([categoryId])
+  @@index([expenseDate])
+  @@index([status])
+}
+
+// ─── P&L (Profit & Loss) ───────────────────────────────────────────────────
+model PnLUpload {
+  id            String   @id @default(cuid())
+  name          String
+  description   String?
+  fileName      String?
+  fileSize      Int?
+  rowCount      Int      @default(0)
+  companyCount  Int      @default(0)
+  periodCount   Int      @default(0)
+  status        String   @default("completed") // processing | completed | failed
+  uploadedById  String?
+  uploadedBy    User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  companyId     String?
+  company       Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now())
+
+  lineItems     PnLLineItem[]
+
+  @@index([uploadedById])
+  @@index([companyId])
+  @@index([createdAt])
+}
+
+model PnLLineItem {
+  id           String   @id @default(cuid())
+  uploadId     String
+  upload       PnLUpload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  companyId    String?
+  company      Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  companyName  String
+  period       String   // "2024-01" or "2024-Q1" or "2024"
+  periodType   String   @default("monthly") // monthly | quarterly | yearly
+  lineItem     String
+  lineItemKey  String   // normalized key
+  category     String?  // Revenue | COGS | Operating Expense | etc.
+  subCategory  String?
+  amount       Decimal  @db.Decimal(18, 2) @default(0)
+  currency     String   @default("SAR")
+  notes        String?
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([uploadId])
+  @@index([companyId])
+  @@index([period])
+  @@index([lineItemKey])
+  @@index([category])
+}
+
+// ─── Prepaid Expenses (from → to only, no months count) ──────────────────
+model PrepaidExpense {
+  id              String   @id @default(cuid())
+  title           String
+  description     String?
+  amount          Decimal  @db.Decimal(18, 2)
+  currency        String   @default("SAR")
+  startDate       DateTime
+  endDate         DateTime
+  // Auto-calculated amortization
+  monthlyAmount   Decimal  @db.Decimal(18, 2) @default(0)
+  totalMonths     Int      @default(0)
+  amortizedToDate Decimal  @db.Decimal(18, 2) @default(0)
+  remainingAmount Decimal  @db.Decimal(18, 2) @default(0)
+  companyId       String?
+  company         Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  categoryId      String?
+  category        ExpenseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  departmentId    String?
+  department      Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  vendor          String?
+  invoiceNumber   String?
+  status          String   @default("active") // active | fully_amortized | cancelled
+  createdById     String?
+  createdBy       User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([startDate])
+  @@index([endDate])
+}
+
+// ─── Saved PnL Datasets (legacy / snapshot) ───────────────────────────────
 model SavedDataset {
   id          String   @id @default(cuid())
   name        String
@@ -90,5 +307,24 @@ model SavedDataset {
   updatedAt   DateTime @updatedAt
 
   @@index([ownerId])
+  @@index([createdAt])
+}
+
+// ─── Notifications ─────────────────────────────────────────────────────────
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String   @default("info") // info | success | warning | error
+  category  String   @default("system") // system | pnl | prepaid | expense | admin
+  isRead    Boolean  @default(false)
+  link      String?
+  metadataJson String @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([isRead])
   @@index([createdAt])
 }

@@ -53,3 +53,16 @@ prompt
 server.log
 # Skills directory
 /skills/
+# Dev artifacts
+/download/
+/tool-results/
+/upload/
+/scripts/
+/agent-ctx/
+/pl-fawn-content.json
+/pnl-dashboard-*.png
+/dev.log
+/server.log
+/tsconfig.tsbuildinfo
+/db/*.db
+/db/*.db-journal

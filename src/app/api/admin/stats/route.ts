@@ -1,57 +1,61 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { db } from '@/lib/db';
 import { authOptions } from '@/lib/auth';
+import {
+  UserRepo, CompanyRepo, ExpenseRepo, PrepaidRepo, PnLRepo,
+  AuditRepo, CategoryRepo, BudgetRepo, ForecastRepo,
+} from '@/lib/db-repo';
+import { DEFAULT_ROLES } from '@/lib/permissions';
 
 // GET /api/admin/stats
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     if (!session) return NextResponse.json({ error: 'غير مصرّح' }, { status: 401 });
-    // Any authenticated user can see basic stats; sensitive stats require users.view
     const canViewUsers = session.user.permissions.includes('users.view');
 
-    const [totalUsers, activeUsers, totalRoles, totalSavedDatasets, totalAuditLogs] = await Promise.all([
-      db.user.count(),
-      db.user.count({ where: { status: 'active' } }),
-      db.role.count(),
-      db.savedDataset.count(),
-      db.auditLog.count(),
+    const [
+      users, companies, expenses, prepaids, pnlDatasets,
+      auditLogs, categories, budgets, forecasts,
+    ] = await Promise.all([
+      UserRepo.list(),
+      CompanyRepo.list(),
+      ExpenseRepo.list({ limit: 1000 }),
+      PrepaidRepo.list(),
+      PnLRepo.list(),
+      AuditRepo.list(500),
+      CategoryRepo.list(),
+      BudgetRepo.list(),
+      ForecastRepo.list(),
     ]);
 
+    const activeUsers = users.filter((u) => u.isActive).length;
     const result: any = {
-      totalSavedDatasets,
-      totalAuditLogs,
+      totalSavedDatasets: pnlDatasets.length,
+      totalAuditLogs: auditLogs.length,
+      totalCompanies: companies.length,
+      activeCompanies: companies.filter((c) => c.isActive).length,
+      totalExpenses: expenses.length,
+      totalPrepaids: prepaids.length,
+      totalCategories: categories.length,
+      totalBudgets: budgets.length,
+      totalForecasts: forecasts.length,
       serverTime: new Date().toISOString(),
     };
 
     if (canViewUsers) {
-      result.totalUsers = totalUsers;
+      result.totalUsers = users.length;
       result.activeUsers = activeUsers;
-      result.suspendedUsers = totalUsers - activeUsers;
-      result.totalRoles = totalRoles;
-
-      // Recent logins (last 7 days)
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      result.recentLogins = await db.user.count({
-        where: { lastLoginAt: { gte: sevenDaysAgo } },
-      });
+      result.suspendedUsers = users.length - activeUsers;
+      result.totalRoles = DEFAULT_ROLES.length;
 
       // Users by role
-      const usersByRole = await db.user.groupBy({
-        by: ['roleId'],
-        _count: { _all: true },
-      });
-      const roles = await db.role.findMany();
-      result.usersByRole = usersByRole.map((r) => {
-        const role = roles.find((x) => x.id === r.roleId);
-        return {
-          roleNameAr: role?.nameAr || '—',
-          color: role?.color || '#64748b',
-          count: r._count._all,
-        };
-      });
+      result.usersByRole = DEFAULT_ROLES.map((r) => ({
+        roleName: r.name,
+        roleNameAr: r.nameAr,
+        color: r.color,
+        count: users.filter((u) => u.role === r.name).length,
+      }));
     }
 
     return NextResponse.json(result);

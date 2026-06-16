@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { db } from '@/lib/db';
 import { authOptions } from '@/lib/auth';
+import { AuditRepo, UserRepo } from '@/lib/db-repo';
 
 // GET /api/admin/audit — paginated audit log (requires system.audit)
 export async function GET(req: NextRequest) {
@@ -15,39 +15,47 @@ export async function GET(req: NextRequest) {
     const url = new URL(req.url);
     const page = Math.max(1, Number(url.searchParams.get('page') || '1'));
     const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') || '50')));
-    const action = url.searchParams.get('action');
-    const userId = url.searchParams.get('userId');
+    const actionFilter = url.searchParams.get('action');
+    const userIdFilter = url.searchParams.get('userId');
 
-    const where: any = {};
-    if (action) where.action = { contains: action };
-    if (userId) where.userId = userId;
+    // Fetch more than needed so we can filter in memory (PostgREST doesn't have full-text search easily)
+    const allLogs = await AuditRepo.list(500);
+    let logs = allLogs;
+    if (actionFilter) logs = logs.filter((l) => l.action.includes(actionFilter));
+    if (userIdFilter) logs = logs.filter((l) => l.userId === userIdFilter);
 
-    const [logs, total] = await Promise.all([
-      db.auditLog.findMany({
-        where,
-        include: { user: { select: { email: true, name: true } } },
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      db.auditLog.count({ where }),
-    ]);
+    const total = logs.length;
+    const paged = logs.slice((page - 1) * limit, page * limit);
+
+    // Resolve users
+    const userIds = [...new Set(paged.map((l) => l.userId).filter(Boolean))] as string[];
+    const users: Record<string, { email: string; name: string | null }> = {};
+    if (userIds.length) {
+      for (const id of userIds) {
+        const u = await UserRepo.findById(id);
+        if (u) users[id] = { email: u.email, name: u.name };
+      }
+    }
 
     return NextResponse.json({
-      logs: logs.map((l) => ({
+      logs: paged.map((l) => ({
         id: l.id,
         action: l.action,
-        targetType: l.targetType,
-        targetId: l.targetId,
-        details: l.detailsJson ? JSON.parse(l.detailsJson) : {},
+        entityType: l.entityType,
+        entityId: l.entityId,
+        details: l.changes ? safeParse(l.changes) : {},
         ipAddress: l.ipAddress,
         userAgent: l.userAgent,
         createdAt: l.createdAt,
-        user: l.user ? { email: l.user.email, name: l.user.name } : null,
+        user: l.userId ? users[l.userId] ?? null : null,
       })),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
+}
+
+function safeParse(s: string): any {
+  try { return JSON.parse(s); } catch { return {}; }
 }

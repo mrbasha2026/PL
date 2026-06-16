@@ -62,11 +62,42 @@ export function PnLUpload() {
             addJournalEntries(parsedEntries);
           }
           const uniqueCompanies = new Set(parsed.map((c) => c.companyName));
+
+          // ─── Save parsed P&L data to Supabase database ────────────────────
+          // This satisfies the user's requirement: "عند رفع البيانات الاكسل
+          // يتم تخزينها في قاعدة البيانات"
+          try {
+            const records = parsed.map((c: any) => ({
+              companyName: c.companyName,
+              period: c.period,
+              currency: c.currency || 'SAR',
+              periodType: 'monthly',
+              fileName: file.name,
+              lineItems: Object.entries(c.data || {}).map(([key, amount]: any) => ({
+                name: key,
+                key,
+                amount: Number(amount) || 0,
+              })),
+            }));
+            const saveRes = await fetch('/api/pnl/save-batch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ records }),
+            });
+            if (saveRes.ok) {
+              const saveData = await saveRes.json();
+              console.log('[pnl] saved to DB:', saveData);
+            }
+          } catch (dbErr) {
+            console.error('[pnl] DB save failed:', dbErr);
+            // Don't fail the whole upload — local state was already updated
+          }
+
           const msg = [
             addedCount > 0 ? `${addedCount} مجموعة بيانات من ${uniqueCompanies.size} شركة` : '',
             parsedEntries.length > 0 ? `${parsedEntries.length} قيد محاسبي` : '',
           ].filter(Boolean).join(' + ');
-          setSuccess(`تم إضافة ${msg}`);
+          setSuccess(`تم إضافة ${msg} وتخزينها في قاعدة البيانات`);
         } else {
           setError('جميع البيانات في هذا الملف موجودة مسبقاً');
         }

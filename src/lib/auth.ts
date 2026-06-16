@@ -1,8 +1,8 @@
 import type { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
-import { db } from './db';
-import { PERMISSION_KEYS } from './permissions';
+import { UserRepo, logAudit } from './db-repo';
+import { getRolePermissions, getRoleNameAr, getRoleColor, PERMISSION_KEYS } from './permissions';
 
 // Extend NextAuth types
 declare module 'next-auth' {
@@ -11,12 +11,10 @@ declare module 'next-auth' {
       id: string;
       email: string;
       name?: string | null;
-      roleId: string;
-      roleName: string;
+      role: string;
       roleNameAr: string;
       roleColor: string;
       permissions: string[];
-      avatarUrl?: string | null;
       status: string;
     };
   }
@@ -24,12 +22,10 @@ declare module 'next-auth' {
     id: string;
     email: string;
     name?: string | null;
-    roleId: string;
-    roleName: string;
+    role: string;
     roleNameAr: string;
     roleColor: string;
     permissions: string[];
-    avatarUrl?: string | null;
     status: string;
   }
 }
@@ -37,12 +33,10 @@ declare module 'next-auth' {
 declare module 'next-auth/jwt' {
   interface JWT {
     userId: string;
-    roleId: string;
-    roleName: string;
+    role: string;
     roleNameAr: string;
     roleColor: string;
     permissions: string[];
-    avatarUrl?: string | null;
     status: string;
   }
 }
@@ -55,21 +49,19 @@ export const authOptions: NextAuthOptions = {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password) {
           throw new Error('البريد الإلكتروني وكلمة المرور مطلوبان');
         }
 
-        const user = await db.user.findUnique({
-          where: { email: credentials.email.toLowerCase().trim() },
-          include: { role: true },
-        });
+        const email = credentials.email.toLowerCase().trim();
+        const user = await UserRepo.findByEmail(email);
 
         if (!user) {
           throw new Error('بيانات الدخول غير صحيحة');
         }
 
-        if (user.status !== 'active') {
+        if (!user.isActive) {
           throw new Error('الحساب موقوف — تواصل مع المدير');
         }
 
@@ -78,32 +70,37 @@ export const authOptions: NextAuthOptions = {
           throw new Error('بيانات الدخول غير صحيحة');
         }
 
-        // Update last login
-        await db.user.update({
-          where: { id: user.id },
-          data: { lastLoginAt: new Date() },
-        });
+        // Touch login timestamp
+        await UserRepo.touchLogin(user.id);
 
-        // Validate permissions (filter to known keys)
-        let perms: string[] = [];
-        try {
-          perms = JSON.parse(user.role.permissionsJson || '[]');
-          perms = perms.filter((p) => PERMISSION_KEYS.includes(p));
-        } catch {
-          perms = [];
-        }
+        // Compute permissions from role catalog (filter to known keys)
+        const perms = getRolePermissions(user.role).filter((p) => PERMISSION_KEYS.includes(p));
+
+        // Audit log
+        const ip =
+          (req?.headers?.['x-forwarded-for'] as string)?.split(',')[0] ||
+          (req?.headers?.['x-real-ip'] as string) ||
+          null;
+        const ua = req?.headers?.['user-agent'] || null;
+        await logAudit({
+          userId: user.id,
+          action: 'auth.login',
+          entityType: 'User',
+          entityId: user.id,
+          changes: { email: user.email, role: user.role },
+          ipAddress: ip,
+          userAgent: ua,
+        });
 
         return {
           id: user.id,
           email: user.email,
-          name: user.name,
-          roleId: user.role.id,
-          roleName: user.role.name,
-          roleNameAr: user.role.nameAr,
-          roleColor: user.role.color,
+          name: user.name || user.nameAr,
+          role: user.role,
+          roleNameAr: getRoleNameAr(user.role),
+          roleColor: getRoleColor(user.role),
           permissions: perms,
-          avatarUrl: user.avatarUrl,
-          status: user.status,
+          status: user.isActive ? 'active' : 'suspended',
         };
       },
     }),
@@ -119,12 +116,10 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.userId = user.id;
-        token.roleId = user.roleId;
-        token.roleName = user.roleName;
+        token.role = user.role;
         token.roleNameAr = user.roleNameAr;
         token.roleColor = user.roleColor;
         token.permissions = user.permissions;
-        token.avatarUrl = user.avatarUrl;
         token.status = user.status;
       }
       return token;
@@ -132,12 +127,10 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.userId;
-        session.user.roleId = token.roleId;
-        session.user.roleName = token.roleName;
+        session.user.role = token.role;
         session.user.roleNameAr = token.roleNameAr;
         session.user.roleColor = token.roleColor;
         session.user.permissions = token.permissions || [];
-        session.user.avatarUrl = token.avatarUrl;
         session.user.status = token.status;
       }
       return session;

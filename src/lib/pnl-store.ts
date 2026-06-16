@@ -35,6 +35,7 @@ interface PnLStore {
   deselectAllPeriods: () => void;
   setDateRange: (start: string | null, end: string | null) => void;
   clearAll: () => void;
+  loadFromDB: (companies: any[]) => void;
   getFiltered: () => CompanyPnL[];
   getFilteredJournalEntries: () => JournalEntry[];
   getAggregatedFiltered: () => AggregatedCompany[];
@@ -139,6 +140,23 @@ export const usePnLStore = create<PnLStore>()(
 
       clearAll: () =>
         set({ companies: [], journalEntries: [], selectedCompanyNames: [], selectedPeriods: [], dateRangeStart: null, dateRangeEnd: null, lastUpdated: null, notes: {} }),
+
+      loadFromDB: (dbCompanies) =>
+        set((state) => {
+          // Replace existing companies with DB-loaded ones
+          const companyNames = [...new Set(dbCompanies.map((c: any) => c.companyName))];
+          const periods = [...new Set(dbCompanies.map((c: any) => c.period))];
+          return {
+            companies: dbCompanies,
+            journalEntries: [],
+            selectedCompanyNames: companyNames,
+            selectedPeriods: periods,
+            dateRangeStart: null,
+            dateRangeEnd: null,
+            lastUpdated: new Date().toISOString(),
+            notes: {},
+          };
+        }),
 
       setNote: (key, value) =>
         set((state) => {

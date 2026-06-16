@@ -51,12 +51,12 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-gradient-to-bl from-primary/5 via-background to-chart-4/5">
+    <div className="min-h-screen flex flex-col lg:flex-row bg-gradient-to-bl from-[var(--brand-green-deep)]/5 via-background to-[var(--brand-green)]/5">
       {/* ─── Left/Top: Brand & Features ─── */}
-      <div className="relative flex-1 overflow-hidden bg-gradient-to-bl from-primary via-primary/90 to-chart-4 p-8 lg:p-16 text-white">
+      <div className="relative flex-1 overflow-hidden bg-gradient-to-bl from-[var(--brand-green-deep)] via-[var(--brand-green-deep)]/95 to-[var(--brand-green)] p-8 lg:p-16 text-white">
         <div className="absolute -top-20 -left-20 h-72 w-72 rounded-full bg-white/5 blur-3xl" />
-        <div className="absolute -bottom-32 -right-32 h-96 w-96 rounded-full bg-chart-4/20 blur-3xl" />
-        <div className="absolute top-1/3 right-1/4 h-40 w-40 rounded-full bg-chart-2/10 blur-2xl" />
+        <div className="absolute -bottom-32 -right-32 h-96 w-96 rounded-full bg-[var(--brand-green)]/30 blur-3xl" />
+        <div className="absolute top-1/3 right-1/4 h-40 w-40 rounded-full bg-amber-300/10 blur-2xl" />
 
         <div className="relative max-w-xl mx-auto lg:mx-0 flex flex-col h-full justify-between gap-12">
           {/* Logo + Brand */}
@@ -69,7 +69,7 @@ export function LoginPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight">ديلز تري</h1>
-              <p className="text-xs text-white/70 tracking-wider">Dealz Tree — P&L Platform</p>
+              <p className="text-xs text-white/70 tracking-wider">Dealz Tree — Financial System</p>
             </div>
           </div>
 
@@ -80,23 +80,23 @@ export function LoginPage() {
               منصة مالية مؤسسية آمنة
             </div>
             <h2 className="text-4xl lg:text-5xl font-bold leading-tight tracking-tight">
-              نظام إدارة الأرباح
+              نظام التحليل
               <br />
-              والخسائر المتكامل
+              المالي المتكامل
             </h2>
             <p className="text-white/80 text-base lg:text-lg leading-relaxed">
-              منصة متعددة المستخدمين مع نظام صلاحيات متقدم، تحليل مالي احترافي،
-              وتتبع المصروفات المقدمة — كل ذلك في مكان واحد
+              منصة موحدة لإدارة الشركات والمصروفات وقيود الأرباح والخسائر، مع تحليل ذكي
+              وتنبؤ إحصائي مبني على أسس رياضية ومحاسبية، ونظام صلاحيات متكامل
             </p>
           </div>
 
           {/* Features grid */}
           <div className="grid grid-cols-2 gap-3">
             {[
-              { icon: BarChart3, label: 'تحليل مالي متقدم' },
-              { icon: Users, label: 'إدارة مستخدمين وصلاحيات' },
-              { icon: TrendingUp, label: 'مقارنات سنوية وربعية' },
-              { icon: Zap, label: 'تحليل ذكي بالـ AI' },
+              { icon: BarChart3, label: 'إدارة P&L ومقارنات' },
+              { icon: Users, label: 'مستخدمون وصلاحيات' },
+              { icon: TrendingUp, label: 'تنبؤ إحصائي رياضي' },
+              { icon: Zap, label: 'تحليل ذكي ونسب مالية' },
             ].map((f) => (
               <div key={f.label} className="flex items-center gap-2.5 rounded-2xl bg-white/10 border border-white/15 backdrop-blur-sm px-4 py-3">
                 <f.icon className="h-4 w-4 text-white/90" />

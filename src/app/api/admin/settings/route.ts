@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { db } from '@/lib/db';
 import { authOptions } from '@/lib/auth';
+import { DEFAULT_ROLES } from '@/lib/permissions';
+import { logAudit } from '@/lib/db-repo';
 
-// GET /api/admin/settings — list all settings (requires system.settings)
+// GET /api/admin/settings
+// System settings are not stored in DB (no SystemSetting table).
+// They are read from env / config defaults. We expose them as read-only here.
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
@@ -12,20 +15,28 @@ export async function GET() {
       return NextResponse.json({ error: 'لا تملك صلاحية' }, { status: 403 });
     }
 
-    const settings = await db.systemSetting.findMany();
-    const settingsMap: Record<string, string> = {};
-    settings.forEach((s) => (settingsMap[s.key] = s.value));
+    const settings = {
+      'site.name': 'نظام التحليل المالي',
+      'site.description': 'منصة شاملة لإدارة الشركات والمصروفات و P&L',
+      'auth.allowSelfRegistration': 'false',
+      'auth.defaultRole': 'viewer',
+      'auth.sessionTimeoutMinutes': '10080', // 7 days
+      'database.provider': 'supabase',
+      'database.url': process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+    };
 
-    // Also include roles list (for default role dropdown)
-    const roles = await db.role.findMany({ select: { id: true, nameAr: true, name: true } });
-
-    return NextResponse.json({ settings: settingsMap, roles });
+    return NextResponse.json({
+      settings,
+      roles: DEFAULT_ROLES.map((r) => ({ name: r.name, nameAr: r.nameAr })),
+      readOnly: true,
+      note: 'الإعدادات مُعرَّفة في الكود وإعدادات الخادم. لتعديلها، عدّل ملف .env',
+    });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
 
-// PATCH /api/admin/settings — update one or more settings
+// PATCH /api/admin/settings — currently read-only (no DB backing)
 export async function PATCH(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -33,43 +44,18 @@ export async function PATCH(req: NextRequest) {
     if (!session.user.permissions.includes('system.settings')) {
       return NextResponse.json({ error: 'لا تملك صلاحية' }, { status: 403 });
     }
-
-    const body = await req.json();
-    const { settings } = body as { settings: Record<string, string> };
-    if (!settings || typeof settings !== 'object') {
-      return NextResponse.json({ error: 'بيانات غير صحيحة' }, { status: 400 });
-    }
-
-    // Validate known keys
-    const allowedKeys = new Set([
-      'site.name',
-      'site.description',
-      'auth.allowSelfRegistration',
-      'auth.defaultRoleId',
-      'auth.sessionTimeoutMinutes',
-    ]);
-
-    for (const [key, value] of Object.entries(settings)) {
-      if (!allowedKeys.has(key)) continue;
-      await db.systemSetting.upsert({
-        where: { key },
-        create: { key, value: String(value) },
-        update: { value: String(value) },
-      });
-    }
-
-    await db.auditLog.create({
-      data: {
-        userId: session.user.id,
-        action: 'system.settings_update',
-        targetType: 'SystemSetting',
-        detailsJson: JSON.stringify({ changedKeys: Object.keys(settings) }),
-        ipAddress: req.headers.get('x-forwarded-for') || null,
-        userAgent: req.headers.get('user-agent') || null,
-      },
+    await logAudit({
+      userId: session.user.id,
+      action: 'system.settings_attempted_update',
+      entityType: 'SystemSetting',
+      changes: { note: 'Settings are read-only at runtime' },
+      ipAddress: req.headers.get('x-forwarded-for') || null,
+      userAgent: req.headers.get('user-agent') || null,
     });
-
-    return NextResponse.json({ success: true });
+    return NextResponse.json({
+      success: false,
+      error: 'الإعدادات تُدار عبر ملف البيئة .env. لتعديلها، تحدّث مع مدير الخادم.',
+    });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }

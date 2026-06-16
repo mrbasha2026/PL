@@ -43,77 +43,103 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* ────────────────────────────────────────────────────────────────────────────
+   Brand Palette — built from the Dealz Tree logo color #9fc552 (leaf green)
+   Logo colors extracted:
+     Primary: #9fc552 → vibrant leaf green
+     Dark:    #1a1a1a → near-black
+   We extend with analogous + complementary hues for a complete design system.
+   ──────────────────────────────────────────────────────────────────────────── */
 :root {
   --radius: 0.875rem;
-  /* Modern warm cream background */
-  --background: oklch(0.99 0.005 80);
-  --foreground: oklch(0.18 0.01 240);
+  /* Light theme — warm cream background, deep ink text */
+  --background: oklch(0.99 0.008 95);        /* warm cream */
+  --foreground: oklch(0.18 0.01 95);         /* deep ink */
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.18 0.01 240);
+  --card-foreground: oklch(0.18 0.01 95);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.18 0.01 240);
-  /* Vibrant indigo primary */
-  --primary: oklch(0.55 0.22 277);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.96 0.01 277);
-  --secondary-foreground: oklch(0.30 0.05 277);
-  --muted: oklch(0.96 0.005 240);
-  --muted-foreground: oklch(0.52 0.01 240);
-  --accent: oklch(0.95 0.03 277);
-  --accent-foreground: oklch(0.30 0.05 277);
-  --destructive: oklch(0.62 0.24 27);
-  --border: oklch(0.90 0.01 240);
-  --input: oklch(0.95 0.005 240);
-  --ring: oklch(0.55 0.22 277);
-  /* Modern chart palette - vibrant gradients */
-  --chart-1: oklch(0.62 0.24 277);  /* indigo */
-  --chart-2: oklch(0.70 0.18 162);  /* emerald */
-  --chart-3: oklch(0.72 0.20 50);   /* amber */
-  --chart-4: oklch(0.65 0.22 340);  /* pink */
-  --chart-5: oklch(0.62 0.20 220);  /* sky */
-  --sidebar: oklch(0.99 0.005 80);
-  --sidebar-foreground: oklch(0.18 0.01 240);
-  --sidebar-primary: oklch(0.55 0.22 277);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.95 0.03 277);
-  --sidebar-accent-foreground: oklch(0.30 0.05 277);
-  --sidebar-border: oklch(0.90 0.01 240);
-  --sidebar-ring: oklch(0.55 0.22 277);
+  --popover-foreground: oklch(0.18 0.01 95);
+
+  /* Primary — the brand leaf-green #9fc552 in oklch (deeper variant for AA contrast) */
+  --primary: oklch(0.62 0.16 122);           /* ~ #6f9a2e — deep brand green */
+  --primary-foreground: oklch(0.99 0 0);     /* white on primary */
+  --secondary: oklch(0.95 0.04 122);
+  --secondary-foreground: oklch(0.30 0.06 122);
+  --muted: oklch(0.96 0.008 95);
+  --muted-foreground: oklch(0.50 0.015 95);
+  --accent: oklch(0.94 0.06 122);            /* tinted with brand green */
+  --accent-foreground: oklch(0.30 0.08 122);
+  --destructive: oklch(0.60 0.22 25);
+  --border: oklch(0.90 0.012 95);
+  --input: oklch(0.95 0.01 95);
+  --ring: oklch(0.62 0.16 122);
+
+  /* Chart palette — brand green first, then complementary colors */
+  --chart-1: oklch(0.70 0.17 122);           /* brand leaf green */
+  --chart-2: oklch(0.65 0.18 60);            /* amber */
+  --chart-3: oklch(0.60 0.18 220);           /* sky blue */
+  --chart-4: oklch(0.58 0.20 340);           /* rose */
+  --chart-5: oklch(0.72 0.14 200);           /* teal */
+  --chart-6: oklch(0.68 0.16 280);           /* violet */
+  --chart-7: oklch(0.75 0.18 30);            /* orange */
+
+  /* Sidebar — deep brand-green tinted panel */
+  --sidebar: oklch(0.18 0.025 145);
+  --sidebar-foreground: oklch(0.97 0.01 122);
+  --sidebar-primary: oklch(0.75 0.18 122);   /* lighter brand green for dark sidebar */
+  --sidebar-primary-foreground: oklch(0.15 0.02 145);
+  --sidebar-accent: oklch(0.25 0.04 122);
+  --sidebar-accent-foreground: oklch(0.95 0.02 122);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.75 0.18 122);
+
+  /* Brand tokens — exposed for direct use in components */
+  --brand-green: #9fc552;
+  --brand-green-deep: #6f9a2e;
+  --brand-green-dark: #4a6b1c;
+  --brand-ink: #1a1a1a;
+  --brand-cream: #fafaf5;
+  --brand-amber: #f59e0b;
 }
 
 .dark {
-  /* Deep midnight blue background */
-  --background: oklch(0.14 0.02 260);
-  --foreground: oklch(0.97 0.005 240);
-  --card: oklch(0.18 0.025 260);
-  --card-foreground: oklch(0.97 0.005 240);
-  --popover: oklch(0.18 0.025 260);
-  --popover-foreground: oklch(0.97 0.005 240);
-  --primary: oklch(0.70 0.20 277);
-  --primary-foreground: oklch(0.14 0.02 260);
-  --secondary: oklch(0.25 0.03 260);
-  --secondary-foreground: oklch(0.97 0.005 240);
-  --muted: oklch(0.25 0.02 260);
-  --muted-foreground: oklch(0.70 0.01 240);
-  --accent: oklch(0.30 0.05 277);
-  --accent-foreground: oklch(0.97 0.005 240);
-  --destructive: oklch(0.70 0.20 22);
+  /* Dark theme — rich espresso ink, brand-green accents pop */
+  --background: oklch(0.16 0.015 145);
+  --foreground: oklch(0.97 0.008 95);
+  --card: oklch(0.20 0.02 145);
+  --card-foreground: oklch(0.97 0.008 95);
+  --popover: oklch(0.20 0.02 145);
+  --popover-foreground: oklch(0.97 0.008 95);
+
+  --primary: oklch(0.78 0.18 122);           /* brighter brand green for dark mode */
+  --primary-foreground: oklch(0.15 0.02 145);
+  --secondary: oklch(0.25 0.025 145);
+  --secondary-foreground: oklch(0.97 0.008 95);
+  --muted: oklch(0.25 0.015 145);
+  --muted-foreground: oklch(0.68 0.015 95);
+  --accent: oklch(0.30 0.05 122);
+  --accent-foreground: oklch(0.97 0.008 95);
+  --destructive: oklch(0.70 0.22 25);
   --border: oklch(1 0 0 / 8%);
   --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.70 0.20 277);
-  --chart-1: oklch(0.70 0.22 277);
-  --chart-2: oklch(0.75 0.17 162);
-  --chart-3: oklch(0.78 0.18 50);
-  --chart-4: oklch(0.72 0.22 340);
-  --chart-5: oklch(0.70 0.18 220);
-  --sidebar: oklch(0.14 0.02 260);
-  --sidebar-foreground: oklch(0.97 0.005 240);
-  --sidebar-primary: oklch(0.70 0.20 277);
-  --sidebar-primary-foreground: oklch(0.14 0.02 260);
-  --sidebar-accent: oklch(0.30 0.05 277);
-  --sidebar-accent-foreground: oklch(0.97 0.005 240);
+  --ring: oklch(0.78 0.18 122);
+
+  --chart-1: oklch(0.75 0.20 122);
+  --chart-2: oklch(0.72 0.18 60);
+  --chart-3: oklch(0.68 0.18 220);
+  --chart-4: oklch(0.65 0.22 340);
+  --chart-5: oklch(0.78 0.14 200);
+  --chart-6: oklch(0.72 0.18 280);
+  --chart-7: oklch(0.78 0.18 30);
+
+  --sidebar: oklch(0.13 0.02 145);
+  --sidebar-foreground: oklch(0.97 0.008 95);
+  --sidebar-primary: oklch(0.78 0.18 122);
+  --sidebar-primary-foreground: oklch(0.15 0.02 145);
+  --sidebar-accent: oklch(0.25 0.04 122);
+  --sidebar-accent-foreground: oklch(0.97 0.008 95);
   --sidebar-border: oklch(1 0 0 / 8%);
-  --sidebar-ring: oklch(0.70 0.20 277);
+  --sidebar-ring: oklch(0.78 0.18 122);
 }
 
 @layer base {
@@ -122,20 +148,20 @@
   }
   body {
     @apply bg-background text-foreground;
-    /* Subtle background pattern */
-    background-image: 
-      radial-gradient(circle at 25% 10%, oklch(0.55 0.22 277 / 0.04) 0%, transparent 50%),
-      radial-gradient(circle at 75% 90%, oklch(0.70 0.18 162 / 0.04) 0%, transparent 50%);
+    /* Subtle brand-tinted ambient gradient */
+    background-image:
+      radial-gradient(circle at 20% 0%, oklch(0.62 0.16 122 / 0.05) 0%, transparent 45%),
+      radial-gradient(circle at 80% 95%, oklch(0.65 0.18 60 / 0.04) 0%, transparent 45%);
     background-attachment: fixed;
   }
   .dark body {
-    background-image: 
-      radial-gradient(circle at 25% 10%, oklch(0.70 0.20 277 / 0.06) 0%, transparent 50%),
-      radial-gradient(circle at 75% 90%, oklch(0.75 0.17 162 / 0.04) 0%, transparent 50%);
+    background-image:
+      radial-gradient(circle at 20% 0%, oklch(0.78 0.18 122 / 0.07) 0%, transparent 45%),
+      radial-gradient(circle at 80% 95%, oklch(0.72 0.18 60 / 0.05) 0%, transparent 45%);
   }
 }
 
-/* Custom scrollbar - Modern */
+/* Custom scrollbar — brand-tinted */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -144,28 +170,89 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: oklch(0.55 0.22 277 / 0.2);
+  background: oklch(0.62 0.16 122 / 0.25);
   border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.55 0.22 277 / 0.4);
+  background: oklch(0.62 0.16 122 / 0.45);
   background-clip: padding-box;
 }
 .dark ::-webkit-scrollbar-thumb {
-  background: oklch(0.70 0.20 277 / 0.25);
+  background: oklch(0.78 0.18 122 / 0.30);
   background-clip: padding-box;
 }
 
 /* Selection */
 ::selection {
-  background: oklch(0.55 0.22 277 / 0.15);
-  color: oklch(0.18 0.01 240);
+  background: oklch(0.62 0.16 122 / 0.20);
+  color: oklch(0.18 0.01 95);
 }
 .dark ::selection {
-  background: oklch(0.70 0.20 277 / 0.25);
-  color: oklch(0.97 0.005 240);
+  background: oklch(0.78 0.18 122 / 0.30);
+  color: oklch(0.97 0.008 95);
+}
+
+/* Brand utility classes */
+.bg-brand-gradient {
+  background-image: linear-gradient(135deg, var(--brand-green-deep) 0%, var(--brand-green) 100%);
+}
+.bg-brand-gradient-soft {
+  background-image: linear-gradient(135deg, oklch(0.62 0.16 122 / 0.08) 0%, oklch(0.70 0.17 122 / 0.04) 100%);
+}
+.text-brand {
+  color: var(--brand-green-deep);
+}
+.dark .text-brand {
+  color: var(--brand-green);
+}
+.border-brand {
+  border-color: oklch(0.62 0.16 122 / 0.3);
+}
+.dark .border-brand {
+  border-color: oklch(0.78 0.18 122 / 0.4);
+}
+
+/* Sidebar system styles */
+.sys-sidebar {
+  background: var(--sidebar);
+  color: var(--sidebar-foreground);
+}
+.sys-sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.625rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--sidebar-foreground);
+  opacity: 0.85;
+  transition: all 150ms ease;
+  cursor: pointer;
+}
+.sys-sidebar-item:hover {
+  background: var(--sidebar-accent);
+  color: var(--sidebar-accent-foreground);
+  opacity: 1;
+}
+.sys-sidebar-item.active {
+  background: var(--sidebar-primary);
+  color: var(--sidebar-primary-foreground);
+  opacity: 1;
+  font-weight: 600;
+}
+
+/* Glassmorphic cards */
+.glass-card {
+  background: oklch(1 0 0 / 0.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid oklch(0.62 0.16 122 / 0.15);
+}
+.dark .glass-card {
+  background: oklch(0.20 0.02 145 / 0.7);
+  border-color: oklch(0.78 0.18 122 / 0.2);
 }
 
 /* Print Styles */

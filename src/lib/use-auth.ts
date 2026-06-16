@@ -24,7 +24,7 @@ export function useAuth() {
     return perms.every((p) => session.user.permissions.includes(p));
   };
 
-  const isAdmin = session?.user?.roleName === 'admin';
+  const isAdmin = session?.user?.role === 'admin';
 
   return {
     session,

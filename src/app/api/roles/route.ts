@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { db } from '@/lib/db';
 import { authOptions } from '@/lib/auth';
-import { PERMISSION_KEYS, PERMISSIONS } from '@/lib/permissions';
+import { DEFAULT_ROLES, PERMISSIONS, PERMISSION_KEYS } from '@/lib/permissions';
+import { UserRepo } from '@/lib/db-repo';
 
-// GET /api/roles
+// GET /api/roles — list all system roles (roles are defined in code, not DB)
+// Returns the in-memory role catalog and permission catalog.
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
@@ -13,84 +14,34 @@ export async function GET() {
       return NextResponse.json({ error: 'لا تملك صلاحية' }, { status: 403 });
     }
 
-    const roles = await db.role.findMany({
-      include: { _count: { select: { users: true } } },
-      orderBy: [{ isSystem: 'desc' }, { name: 'asc' }],
-    });
+    const users = await UserRepo.list();
+    const rolesWithCounts = DEFAULT_ROLES.map((r) => ({
+      id: r.name,
+      name: r.name,
+      nameAr: r.nameAr,
+      description: r.description,
+      color: r.color,
+      isSystem: r.isSystem,
+      permissions: r.permissions,
+      usersCount: users.filter((u) => u.role === r.name).length,
+    }));
 
     return NextResponse.json({
-      roles: roles.map((r) => ({
-        id: r.id,
-        name: r.name,
-        nameAr: r.nameAr,
-        description: r.description,
-        color: r.color,
-        isSystem: r.isSystem,
-        permissions: JSON.parse(r.permissionsJson || '[]'),
-        usersCount: r._count.users,
-        createdAt: r.createdAt,
-      })),
+      roles: rolesWithCounts,
       permissionCatalog: PERMISSIONS,
+      permissionKeys: PERMISSION_KEYS,
     });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
 
-// POST /api/roles — create custom role
+// POST /api/roles — currently a no-op since roles are defined in code
+// Returns 200 with a note explaining the system is config-driven.
 export async function POST(req: NextRequest) {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session) return NextResponse.json({ error: 'غير مصرّح' }, { status: 401 });
-    if (!session.user.permissions.includes('roles.create')) {
-      return NextResponse.json({ error: 'لا تملك صلاحية إنشاء الأدوار' }, { status: 403 });
-    }
-
-    const { name, nameAr, description, color, permissions } = await req.json();
-    if (!name || !nameAr) {
-      return NextResponse.json({ error: 'الاسم العربي والإنجليزي مطلوبان' }, { status: 400 });
-    }
-
-    // Sanitize permissions
-    const validPerms = (permissions || []).filter((p: string) => PERMISSION_KEYS.includes(p));
-
-    // Check name uniqueness
-    const existingName = await db.role.findUnique({ where: { name } });
-    if (existingName) return NextResponse.json({ error: 'الاسم الإنجليزي مستخدم' }, { status: 409 });
-    const existingAr = await db.role.findUnique({ where: { nameAr } });
-    if (existingAr) return NextResponse.json({ error: 'الاسم العربي مستخدم' }, { status: 409 });
-
-    const role = await db.role.create({
-      data: {
-        name: name.startsWith('custom_') ? name : `custom_${name}`,
-        nameAr,
-        description: description || null,
-        color: color || '#6366f1',
-        isSystem: false,
-        permissionsJson: JSON.stringify(validPerms),
-      },
-    });
-
-    await db.auditLog.create({
-      data: {
-        userId: session.user.id,
-        action: 'role.create',
-        targetType: 'Role',
-        targetId: role.id,
-        detailsJson: JSON.stringify({ name, nameAr, permissionsCount: validPerms.length }),
-        ipAddress: req.headers.get('x-forwarded-for') || null,
-        userAgent: req.headers.get('user-agent') || null,
-      },
-    });
-
-    return NextResponse.json({
-      id: role.id,
-      name: role.name,
-      nameAr: role.nameAr,
-      color: role.color,
-      permissions: validPerms,
-    }, { status: 201 });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
-  }
+  return NextResponse.json({
+    error: 'الأدوار مُعرَّفة في كود النظام. لتعديلها، عدّل ملف src/lib/permissions.ts',
+    hint: 'Use the user PATCH endpoint to assign one of the existing roles to a user.',
+    availableRoles: DEFAULT_ROLES.map((r) => r.name),
+  }, { status: 200 });
 }
