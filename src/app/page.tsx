@@ -8,11 +8,12 @@ import {
   Sparkles, Calculator, FileText, TrendingUp, Database, Clock,
   CalendarDays, BookOpen, StickyNote, Layers, Download, Brain,
   Sun, Moon, AlertTriangle, ArrowUpDown, LineChart, ScrollText,
-  Zap, HardDrive, Wallet,
+  Zap, HardDrive, Wallet, Shield, Settings as SettingsIcon, Lock,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { usePnLStore } from '@/lib/pnl-store';
+import { useAuth } from '@/lib/use-auth';
 import { PnLUpload } from '@/components/pnl/PnLUpload';
 import { FilterBar } from '@/components/pnl/FilterBar';
 import { PnLTable } from '@/components/pnl/PnLTable';
@@ -33,6 +34,9 @@ import { LineItemExplorer } from '@/components/pnl/LineItemExplorer';
 import { AccountLedgerExplorer } from '@/components/pnl/AccountLedger';
 import { SaveManager } from '@/components/pnl/SaveManager';
 import { PrepaidExpenses } from '@/components/pnl/PrepaidExpenses';
+import { LoginPage } from '@/components/auth/LoginPage';
+import { UserMenu } from '@/components/auth/UserMenu';
+import { AdminPanel } from '@/components/admin/AdminPanel';
 
 function ThemeToggle() {
   const { theme, setTheme } = useTheme();
@@ -63,35 +67,87 @@ function ThemeToggle() {
 
 export default function Home() {
   const { companies, selectedCompanyNames, selectedPeriods, clearAll, lastUpdated } = usePnLStore();
+  const { isAuthenticated, isLoading, hasPermission, hasAnyPermission } = useAuth();
+
   const hasData = companies.length > 0;
   const companyCount = new Set(companies.map((c) => c.companyName)).size;
   const periodCount = new Set(companies.map((c) => c.period)).size;
   const [saveManagerOpen, setSaveManagerOpen] = React.useState(false);
+  const [adminOpen, setAdminOpen] = React.useState(false);
   const [view, setView] = React.useState<'pnl' | 'prepaid'>('pnl');
 
-  const tabs = [
-    { value: 'summary', icon: FileText, label: 'الملخص التنفيذي', short: 'ملخص' },
-    { value: 'table', icon: Table2, label: 'الجدول المفصل', short: 'جدول' },
-    { value: 'ratios', icon: Calculator, label: 'النسب المالية', short: 'نسب' },
-    { value: 'comparison', icon: GitCompareArrows, label: 'المقارنة', short: 'مقارنة' },
-    { value: 'mom', icon: CalendarDays, label: 'مقارنة شهرية', short: 'شهرية' },
-    { value: 'yoy', icon: ArrowUpDown, label: 'مقارنة سنوية', short: 'سنوية' },
-    { value: 'quarterly', icon: Layers, label: 'تجميع ربعي', short: 'ربعي' },
-    { value: 'variance', icon: AlertTriangle, label: 'تحليل الانحرافات', short: 'انحرافات' },
-    { value: 'forecast', icon: LineChart, label: 'التنبؤات', short: 'تنبؤات' },
-    { value: 'explorer', icon: ScrollText, label: 'حركات البنود', short: 'حركات' },
-    { value: 'ledger', icon: BookOpen, label: 'دفتر الأستاذ (القيود)', short: 'قيود' },
-    { value: 'charts', icon: BarChart3, label: 'الرسوم البيانية', short: 'رسوم' },
-    { value: 'trends', icon: TrendingUp, label: 'التحليل الترندي', short: 'ترند' },
-    { value: 'ai', icon: Brain, label: 'التحليل الذكي', short: 'ذكي' },
-    { value: 'notes', icon: StickyNote, label: 'الملاحظات', short: 'ملاحظات' },
-    { value: 'export', icon: Download, label: 'تصدير ومشاركة', short: 'تصدير' },
-    { value: 'glossary', icon: BookOpen, label: 'دليل المصطلحات', short: 'مصطلحات' },
+  // Filter tabs based on permissions
+  const allTabs = [
+    { value: 'summary', icon: FileText, label: 'الملخص التنفيذي', short: 'ملخص', perm: 'pnl.view' },
+    { value: 'table', icon: Table2, label: 'الجدول المفصل', short: 'جدول', perm: 'pnl.view' },
+    { value: 'ratios', icon: Calculator, label: 'النسب المالية', short: 'نسب', perm: 'pnl.view' },
+    { value: 'comparison', icon: GitCompareArrows, label: 'المقارنة', short: 'مقارنة', perm: 'pnl.view' },
+    { value: 'mom', icon: CalendarDays, label: 'مقارنة شهرية', short: 'شهرية', perm: 'pnl.view' },
+    { value: 'yoy', icon: ArrowUpDown, label: 'مقارنة سنوية', short: 'سنوية', perm: 'pnl.view' },
+    { value: 'quarterly', icon: Layers, label: 'تجميع ربعي', short: 'ربعي', perm: 'pnl.view' },
+    { value: 'variance', icon: AlertTriangle, label: 'تحليل الانحرافات', short: 'انحرافات', perm: 'pnl.view' },
+    { value: 'forecast', icon: LineChart, label: 'التنبؤات', short: 'تنبؤات', perm: 'pnl.view' },
+    { value: 'explorer', icon: ScrollText, label: 'حركات البنود', short: 'حركات', perm: 'pnl.view' },
+    { value: 'ledger', icon: BookOpen, label: 'دفتر الأستاذ (القيود)', short: 'قيود', perm: 'pnl.view' },
+    { value: 'charts', icon: BarChart3, label: 'الرسوم البيانية', short: 'رسوم', perm: 'pnl.view' },
+    { value: 'trends', icon: TrendingUp, label: 'التحليل الترندي', short: 'ترند', perm: 'pnl.view' },
+    { value: 'ai', icon: Brain, label: 'التحليل الذكي', short: 'ذكي', perm: 'pnl.view' },
+    { value: 'notes', icon: StickyNote, label: 'الملاحظات', short: 'ملاحظات', perm: 'pnl.view' },
+    { value: 'export', icon: Download, label: 'تصدير ومشاركة', short: 'تصدير', perm: 'pnl.export' },
+    { value: 'glossary', icon: BookOpen, label: 'دليل المصطلحات', short: 'مصطلحات', perm: 'pnl.view' },
   ];
+  const tabs = allTabs.filter((t) => hasPermission(t.perm));
+
+  // ─── Loading state ──────────────────────────────────────────────────────
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="relative mx-auto mb-4 h-14 w-14">
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary to-chart-4 blur-md opacity-40" />
+            <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-chart-4 overflow-hidden">
+              <Image src="/logo.png" alt="Dealz Tree" width={36} height={36} className="h-9 w-auto" priority />
+            </div>
+          </div>
+          <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+            <span className="h-4 w-4 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+            جاري التحميل...
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Unauthenticated: show login ────────────────────────────────────────
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
+
+  const canViewPnL = hasPermission('pnl.view');
+  const canViewPrepaid = hasPermission('prepaid.view');
+  const canAccessAdmin = hasAnyPermission(['users.view', 'roles.view', 'system.audit', 'system.settings']);
+
+  // If user has neither P&L nor prepaid access, show access denied
+  if (!canViewPnL && !canViewPrepaid) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-6">
+        <div className="max-w-md text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-500/10">
+            <Lock className="h-7 w-7 text-rose-600" />
+          </div>
+          <h2 className="text-xl font-bold mb-2">لا تملك صلاحية الوصول</h2>
+          <p className="text-sm text-muted-foreground mb-5">
+            حسابك لا يملك صلاحيات للوصول إلى أي قسم في النظام. تواصل مع المدير لمنحك الصلاحيات المناسبة.
+          </p>
+          <UserMenu />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen flex-col">
-      {/* ─── Modern Glassmorphic Header ─────────────────────────── */}
+      {/* ─── Modern Glassmorphic Header ─────────────────────────────────── */}
       <header className="sticky top-0 z-50 no-print">
         <div className="backdrop-blur-xl bg-background/70 border-b border-border/40 shadow-sm shadow-primary/5">
           <div className="mx-auto flex h-16 max-w-[1600px] items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -125,56 +181,78 @@ export default function Home() {
 
             {/* Right side */}
             <div className="flex items-center gap-2">
-              {hasData && (
-                <>
-                  <div className="hidden sm:flex items-center gap-2">
-                    <div className="flex items-center gap-1.5 rounded-xl bg-primary/8 border border-primary/15 px-3 py-1.5">
-                      <Database className="h-3.5 w-3.5 text-primary" />
-                      <span className="text-xs font-semibold text-primary">
-                        {companyCount} {companyCount === 1 ? 'شركة' : 'شركات'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5 rounded-xl bg-muted/40 border border-border/40 px-3 py-1.5">
-                      <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="text-xs font-semibold text-muted-foreground">
-                        {periodCount} {periodCount === 1 ? 'فترة' : 'فترات'}
-                      </span>
-                    </div>
-                    {lastUpdated && (
-                      <div className="hidden lg:flex items-center gap-1 text-[10px] text-muted-foreground/60">
-                        <Clock className="h-3 w-3" />
-                        {new Date(lastUpdated).toLocaleString('ar-SA')}
-                      </div>
-                    )}
+              {hasData && canViewPnL && (
+                <div className="hidden sm:flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 rounded-xl bg-primary/8 border border-primary/15 px-3 py-1.5">
+                    <Database className="h-3.5 w-3.5 text-primary" />
+                    <span className="text-xs font-semibold text-primary">
+                      {companyCount} {companyCount === 1 ? 'شركة' : 'شركات'}
+                    </span>
                   </div>
-                </>
+                  <div className="flex items-center gap-1.5 rounded-xl bg-muted/40 border border-border/40 px-3 py-1.5">
+                    <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-xs font-semibold text-muted-foreground">
+                      {periodCount} {periodCount === 1 ? 'فترة' : 'فترات'}
+                    </span>
+                  </div>
+                  {lastUpdated && (
+                    <div className="hidden lg:flex items-center gap-1 text-[10px] text-muted-foreground/60">
+                      <Clock className="h-3 w-3" />
+                      {new Date(lastUpdated).toLocaleString('ar-SA')}
+                    </div>
+                  )}
+                </div>
               )}
               <ThemeToggle />
-              <Button
-                variant={view === 'prepaid' ? 'default' : 'ghost'}
-                size="sm"
-                className={`text-xs gap-1.5 h-9 rounded-xl font-medium ${
-                  view === 'prepaid'
-                    ? 'bg-gradient-to-l from-emerald-600 to-teal-600 text-white hover:from-emerald-700 hover:to-teal-700'
-                    : 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/15'
-                }`}
-                onClick={() => setView(view === 'prepaid' ? 'pnl' : 'prepaid')}
-                title="تتبع المصروفات المقدمة"
-              >
-                <Wallet className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">المصروفات المقدمة</span>
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs gap-1.5 h-9 rounded-xl font-medium bg-gradient-to-l from-violet-500/10 to-purple-500/10 border border-violet-500/20 text-violet-700 dark:text-violet-400 hover:from-violet-500/20 hover:to-purple-500/20"
-                onClick={() => setSaveManagerOpen(true)}
-                title="حفظ دائم في قاعدة البيانات"
-              >
-                <HardDrive className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">حفظ دائم</span>
-              </Button>
-              {hasData && (
+
+              {/* View switcher: P&L ↔ Prepaid (only if user has both perms) */}
+              {canViewPnL && canViewPrepaid && (
+                <Button
+                  variant={view === 'prepaid' ? 'default' : 'ghost'}
+                  size="sm"
+                  className={`text-xs gap-1.5 h-9 rounded-xl font-medium ${
+                    view === 'prepaid'
+                      ? 'bg-gradient-to-l from-emerald-600 to-teal-600 text-white hover:from-emerald-700 hover:to-teal-700'
+                      : 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/15'
+                  }`}
+                  onClick={() => setView(view === 'prepaid' ? 'pnl' : 'prepaid')}
+                  title="تتبع المصروفات المقدمة"
+                >
+                  <Wallet className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">المصروفات المقدمة</span>
+                </Button>
+              )}
+
+              {/* Save button (only if user has save.create or save.view) */}
+              {hasAnyPermission(['save.view', 'save.create']) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs gap-1.5 h-9 rounded-xl font-medium bg-gradient-to-l from-violet-500/10 to-purple-500/10 border border-violet-500/20 text-violet-700 dark:text-violet-400 hover:from-violet-500/20 hover:to-purple-500/20"
+                  onClick={() => setSaveManagerOpen(true)}
+                  title="حفظ دائم في قاعدة البيانات"
+                >
+                  <HardDrive className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">حفظ دائم</span>
+                </Button>
+              )}
+
+              {/* Admin button */}
+              {canAccessAdmin && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs gap-1.5 h-9 rounded-xl font-medium bg-gradient-to-l from-amber-500/10 to-orange-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 hover:from-amber-500/20 hover:to-orange-500/20"
+                  onClick={() => setAdminOpen(true)}
+                  title="لوحة الإدارة"
+                >
+                  <SettingsIcon className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">الإدارة</span>
+                </Button>
+              )}
+
+              {/* Clear all (only with pnl.delete) */}
+              {hasData && hasPermission('pnl.delete') && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -184,18 +262,21 @@ export default function Home() {
                   مسح الكل
                 </Button>
               )}
+
+              {/* User menu */}
+              <UserMenu onOpenAdmin={() => setAdminOpen(true)} />
             </div>
           </div>
         </div>
       </header>
 
-      {/* ─── Main ──────────────────────────────────────────────── */}
+      {/* ─── Main ──────────────────────────────────────────────────────────── */}
       <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-8 sm:px-6 lg:px-8">
 
-        {view === 'prepaid' ? (
+        {view === 'prepaid' && canViewPrepaid ? (
           /* === PREPAID EXPENSES VIEW === */
           <PrepaidExpenses />
-        ) : (
+        ) : canViewPnL ? (
         <>
         {/* === EMPTY STATE === */}
         {!hasData && (
@@ -221,7 +302,16 @@ export default function Home() {
 
             {/* Upload Card */}
             <div className="mx-auto max-w-2xl mb-10">
-              <PnLUpload />
+              {hasPermission('pnl.upload') ? (
+                <PnLUpload />
+              ) : (
+                <div className="rounded-3xl border border-dashed border-border/60 p-8 text-center bg-muted/10">
+                  <Lock className="h-8 w-8 text-muted-foreground/40 mx-auto mb-3" />
+                  <p className="text-sm text-muted-foreground">
+                    لا تملك صلاحية رفع البيانات — يمكنك عرض البيانات المرفوعة فقط
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* 3-Step Guide */}
@@ -332,26 +422,32 @@ export default function Home() {
           </div>
         )}
         </>
+        ) : (
+          <div className="rounded-3xl border border-dashed border-border/60 p-12 text-center">
+            <Lock className="h-8 w-8 text-muted-foreground/40 mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">لا تملك صلاحية الوصول إلى لوحة P&L</p>
+          </div>
         )}
       </main>
 
-      {/* ─── Modern Footer ──────────────────────────────────────── */}
+      {/* ─── Modern Footer ──────────────────────────────────────────────────── */}
       <footer className="mt-auto no-print border-t border-border/40 bg-muted/20 backdrop-blur-sm py-6">
         <div className="mx-auto max-w-[1600px] px-4 text-center sm:px-6 lg:px-8">
           <p className="text-sm font-medium bg-gradient-to-l from-primary to-chart-4 bg-clip-text text-transparent inline-block">
             ديلز تري — Dealz Tree
           </p>
           <span className="mx-2 text-muted-foreground/30">|</span>
-          <span className="text-sm text-muted-foreground">لوحة مقارنة الأرباح والخسائر — P&L Comparison Dashboard</span>
+          <span className="text-sm text-muted-foreground">نظام إدارة الأرباح والخسائر — P&L Management System</span>
           <p className="mt-2 text-[11px] text-muted-foreground/60 flex items-center justify-center gap-1.5">
-            <Database className="h-3 w-3" />
-            البيانات محفوظة تلقائياً في المتصفح — استخدم "حفظ دائم" لحفظها في قاعدة البيانات
+            <Shield className="h-3 w-3" />
+            نظام محمي بصلاحيات متقدمة — جميع الإجراءات مسجّلة في سجل التدقيق
           </p>
         </div>
       </footer>
 
-      {/* ─── Save Manager Dialog ──────────────────────────────────── */}
+      {/* ─── Dialogs ─────────────────────────────────────────────────────────── */}
       <SaveManager isOpen={saveManagerOpen} onClose={() => setSaveManagerOpen(false)} />
+      <AdminPanel isOpen={adminOpen} onClose={() => setAdminOpen(false)} />
     </div>
   );
 }

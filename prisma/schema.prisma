@@ -1,9 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,39 +10,85 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─── Authentication & Authorization ────────────────────────────────────────
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  roleId       String
+  role         Role     @relation(fields: [roleId], references: [id])
+  status       String   @default("active") // active | suspended | pending
+  avatarUrl    String?
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  savedDatasets SavedDataset[]
+  auditLogs     AuditLog[]
+
+  @@index([roleId])
+  @@index([status])
 }
 
-model Post {
-  id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
-  createdAt DateTime @default(now())
+model Role {
+  id             String   @id @default(cuid())
+  name           String   @unique // English key (admin, manager, accountant, viewer, custom_*)
+  nameAr         String   @unique
+  description    String?
+  // JSON-encoded array of permission strings
+  // e.g. ["pnl.view","pnl.upload","prepaid.view","users.manage", ...]
+  permissionsJson String  @default("[]")
+  isSystem       Boolean  @default(false) // system roles cannot be deleted
+  color          String   @default("#6366f1")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  users User[]
+
+  @@index([isSystem])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String   // e.g. "user.create", "role.update", "dataset.delete"
+  targetType String?  // e.g. "User", "Role", "SavedDataset"
+  targetId   String?
+  detailsJson String  @default("{}")
+  ipAddress  String?
+  userAgent   String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model SystemSetting {
+  key       String   @id
+  value     String
   updatedAt DateTime @updatedAt
 }
 
 // ─── Permanent PnL Storage ────────────────────────────────────────────────
-// A named snapshot of all P&L data the user wants to save permanently.
 model SavedDataset {
   id          String   @id @default(cuid())
   name        String
   description String?
-  // JSON-encoded arrays for flexibility (SQLite has no native JSON type)
-  companiesJson    String // CompanyPnL[]
-  journalEntriesJson String // JournalEntry[]
-  notesJson   String  // Record<string, string>
+  companiesJson    String
+  journalEntriesJson String
+  notesJson   String
   companyCount Int
   periodCount  Int
   datasetCount Int
+  ownerId     String?
+  owner       User?   @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  isShared    Boolean @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  @@index([ownerId])
   @@index([createdAt])
 }

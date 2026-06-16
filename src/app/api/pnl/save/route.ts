@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
 import { db } from '@/lib/db';
+import { authOptions } from '@/lib/auth';
 import { CompanyPnL, JournalEntry } from '@/lib/pnl-types';
 
-// ─── GET: List all saved datasets ──────────────────────────────────────────
+// ─── GET: List all saved datasets (requires save.view) ──────────────────────
 export async function GET() {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session) return NextResponse.json({ error: 'غير مصرّح' }, { status: 401 });
+    if (!session.user.permissions.includes('save.view')) {
+      return NextResponse.json({ error: 'لا تملك صلاحية' }, { status: 403 });
+    }
     const datasets = await db.savedDataset.findMany({
       orderBy: { updatedAt: 'desc' },
       select: {
@@ -28,9 +35,14 @@ export async function GET() {
   }
 }
 
-// ─── POST: Save a new dataset (or update existing by name) ────────────────
+// ─── POST: Save a new dataset (or update existing by name) (requires save.create) ────
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session) return NextResponse.json({ error: 'غير مصرّح' }, { status: 401 });
+    if (!session.user.permissions.includes('save.create')) {
+      return NextResponse.json({ error: 'لا تملك صلاحية الحفظ' }, { status: 403 });
+    }
     const body = await request.json();
     const { name, description, companies, journalEntries, notes } = body as {
       name: string;
@@ -71,10 +83,15 @@ export async function POST(request: NextRequest) {
       companyCount: companyNames.size,
       periodCount: periods.size,
       datasetCount: companies.length,
+      ownerId: session!.user.id,
     };
 
     let saved;
     if (existing) {
+      // Only the owner or admin can update
+      if (existing.ownerId && existing.ownerId !== session!.user.id && !session!.user.permissions.includes('save.delete')) {
+        return NextResponse.json({ error: 'لا تملك صلاحية تعديل هذا المخزن' }, { status: 403 });
+      }
       saved = await db.savedDataset.update({
         where: { id: existing.id },
         data,
@@ -82,6 +99,17 @@ export async function POST(request: NextRequest) {
     } else {
       saved = await db.savedDataset.create({ data });
     }
+
+    // Audit log
+    await db.auditLog.create({
+      data: {
+        userId: session!.user.id,
+        action: existing ? 'dataset.update' : 'dataset.create',
+        targetType: 'SavedDataset',
+        targetId: saved.id,
+        detailsJson: JSON.stringify({ name: saved.name }),
+      },
+    });
 
     return NextResponse.json({
       success: true,

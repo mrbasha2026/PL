@@ -299,3 +299,82 @@ Stage Summary:
 - Color of a company is consistent across P&L dashboard and Prepaid Expenses tab
 - Users can clearly see which companies come from P&L vs which were added standalone, via the new breakdown header and the "مستقلة" badge with tooltip
 - Dev server running clean on http://localhost:3000
+
+---
+Task ID: 10
+Agent: Main Agent
+Task: Complete reorganization — multi-user system with authentication, roles, permissions, and admin panel
+
+Work Log:
+- Installed bcryptjs for password hashing
+- Redesigned Prisma schema:
+  - User: id, email, name, passwordHash, roleId, status, avatarUrl, lastLoginAt
+  - Role: id, name, nameAr, description, color, isSystem, permissionsJson
+  - AuditLog: id, userId, action, targetType, targetId, detailsJson, ipAddress
+  - SystemSetting: key, value
+  - Added ownerId + isShared to SavedDataset
+- Created permissions catalog (src/lib/permissions.ts):
+  - 21 permissions across 5 groups (pnl, prepaid, storage, users, system)
+  - 4 default roles: admin (21 perms), manager (11), accountant (6), viewer (3)
+- Created NextAuth config (src/lib/auth.ts):
+  - Credentials provider with bcrypt password verification
+  - JWT sessions (7-day expiry)
+  - Session includes roleId, roleName, roleNameAr, roleColor, permissions, status
+  - Updates lastLoginAt on successful login
+- Created seed script (scripts/seed.ts):
+  - Seeds 4 default system roles
+  - Creates admin user: admin@dealztree.com / admin123
+  - Initializes 5 system settings
+- Created API routes:
+  - /api/auth/[...nextauth] — NextAuth handler
+  - /api/auth/register — self-registration or admin-created user
+  - /api/auth/change-password — change own password
+  - /api/users (GET, POST) — list & create users
+  - /api/users/[id] (GET, PATCH, DELETE) — manage single user
+  - /api/roles (GET, POST) — list & create roles
+  - /api/roles/[id] (PATCH, DELETE) — manage single role
+  - /api/admin/stats — system statistics
+  - /api/admin/audit — paginated audit log
+  - /api/admin/settings (GET, PATCH) — system settings
+- Added permission checks to existing /api/pnl/save and /api/pnl/save/[id] routes
+- Created UI components:
+  - SessionProvider (wraps next-auth SessionProvider)
+  - LoginPage (split-screen: brand panel + login form with demo credentials hint)
+  - UserMenu (avatar, role badge, dropdown with admin link, change password, logout)
+  - useAuth hook (hasPermission, hasAnyPermission, isAdmin helpers)
+  - AdminPanel with 5 tabs:
+    1. Dashboard: system stats + users-by-role chart
+    2. Users: searchable/filterable table with create/edit/delete/toggle-status
+    3. Roles: card grid with permission matrix editor
+    4. Audit Log: paginated table with action filter
+    5. Settings: site info + auth settings (self-registration, default role)
+- Updated layout.tsx to wrap with SessionProvider
+- Updated page.tsx:
+  - Shows loading spinner during auth check
+  - Shows LoginPage when unauthenticated
+  - Shows "access denied" screen if user has no relevant permissions
+  - Conditionally renders header buttons based on permissions:
+    - "مسح الكل" only with pnl.delete
+    - "الإدارة" button only with admin permissions
+    - "المصروفات المقدمة" toggle only with both pnl.view & prepaid.view
+    - "حفظ دائم" only with save.view or save.create
+    - Upload card only with pnl.upload
+  - Filters P&L tabs based on permissions (e.g. "تصدير" tab needs pnl.export)
+- Verified end-to-end with Agent Browser:
+  - Login page renders correctly
+  - Admin login works → dashboard shows with all buttons
+  - Admin panel opens → all 5 tabs functional
+  - Created test user via UI → appeared in users table
+  - Audit log captured the user.create action
+  - Logged out → returned to login page
+  - Logged in as viewer → NO admin button, NO clear-all, NO upload — perfect permission isolation
+
+Stage Summary:
+- Full multi-user system implemented and tested
+- 4 default roles (admin, manager, accountant, viewer) with 21 granular permissions
+- Custom roles can be created with any permission combination via UI matrix
+- All admin actions logged in audit trail (user/role/settings changes)
+- Permission checks enforced both client-side (UI visibility) and server-side (API guards)
+- Login credentials: admin@dealztree.com / admin123 (change after first login)
+- Saved datasets now have owner tracking — only owner or admin can edit/delete
+- Lint passes (only pre-existing errors in LineItemExplorer/PrepaidExpenses, not from this task)
