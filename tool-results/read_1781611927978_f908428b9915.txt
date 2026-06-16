@@ -1,0 +1,883 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import React, { useState, useMemo } from 'react';
+     4→     4→import {
+     5→     5→  Table,
+     6→     6→  TableBody,
+     7→     7→  TableCell,
+     8→     8→  TableHead,
+     9→     9→  TableHeader,
+    10→    10→  TableRow,
+    11→    11→} from '@/components/ui/table';
+    12→    12→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+    13→    13→import { Badge } from '@/components/ui/badge';
+    14→    14→import { Button } from '@/components/ui/button';
+    15→    15→import {
+    16→    16→  Dialog,
+    17→    17→  DialogContent,
+    18→    18→  DialogHeader,
+    19→    19→  DialogTitle,
+    20→    20→  DialogDescription,
+    21→    21→} from '@/components/ui/dialog';
+    22→    22→import {
+    23→    23→  Building2, Info, Tag, BookOpen, Download, ChevronLeft,
+    24→    24→  ArrowUpRight, ArrowDownRight, Calendar, FileText, Sparkles,
+    25→    25→  TrendingUp, TrendingDown, BarChart3,
+    26→    26→} from 'lucide-react';
+    27→    27→import { Separator } from '@/components/ui/separator';
+    28→    28→import { usePnLStore } from '@/lib/pnl-store';
+    29→    29→import {
+    30→    30→  PNL_LINE_ITEMS,
+    31→    31→  getAllLineItems,
+    32→    32→  getLineItemKey,
+    33→    33→  COMPANY_COLORS,
+    34→    34→  groupByPeriod,
+    35→    35→  formatNumber,
+    36→    36→  formatCompact,
+    37→    37→  periodToArabic,
+    38→    38→  CompanyPnL,
+    39→    39→  PnLLineItem,
+    40→    40→} from '@/lib/pnl-types';
+    41→    41→import { InfoTooltip } from '@/components/pnl/InfoTooltip';
+    42→    42→
+    43→    43→// ─── Auto-generate journal entries from P&L data ──────────────────────────
+    44→    44→interface AutoJournalEntry {
+    45→    45→  id: string;
+    46→    46→  companyName: string;
+    47→    47→  period: string;
+    48→    48→  date: string;
+    49→    49→  entryNumber: string;
+    50→    50→  accountKey: string;
+    51→    51→  accountNameAr: string;
+    52→    52→  accountNameEn: string;
+    53→    53→  description: string;
+    54→    54→  debit: number;
+    55→    55→  credit: number;
+    56→    56→  reference: string;
+    57→    57→  currency: string;
+    58→    58→  category: 'revenue' | 'expense';
+    59→    59→}
+    60→    60→
+    61→    61→const ARABIC_MONTHS_MAP: Record<string, string> = {
+    62→    62→  'Jan': 'يناير', 'Feb': 'فبراير', 'Mar': 'مارس', 'Apr': 'أبريل',
+    63→    63→  'May': 'مايو', 'Jun': 'يونيو', 'Jul': 'يوليو', 'Aug': 'أغسطس',
+    64→    64→  'Sep': 'سبتمبر', 'Oct': 'أكتوبر', 'Nov': 'نوفمبر', 'Dec': 'ديسمبر',
+    65→    65→};
+    66→    66→
+    67→    67→const MONTH_NUM: Record<string, number> = {
+    68→    68→  'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
+    69→    69→  'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12,
+    70→    70→};
+    71→    71→
+    72→    72→function parsePeriodComponents(period: string): { year: number; month: number; monthAr: string } | null {
+    73→    73→  const parts = period.trim().split(/[\s\-]+/);
+    74→    74→  if (parts.length < 2) return null;
+    75→    75→  const monthStr = parts[0];
+    76→    76→  const year = parseInt(parts[parts.length - 1], 10);
+    77→    77→  const month = MONTH_NUM[monthStr];
+    78→    78→  const monthAr = ARABIC_MONTHS_MAP[monthStr];
+    79→    79→  if (!month || isNaN(year) || !monthAr) return null;
+    80→    80→  return { year, month, monthAr };
+    81→    81→}
+    82→    82→
+    83→    83→// Descriptions for different account types
+    84→    84→function getEntryDescription(
+    85→    85→  accountNameAr: string,
+    86→    86→  category: 'revenue' | 'expense',
+    87→    87→  periodAr: string,
+    88→    88→  _entryType: 'primary' | 'adjustment' | 'accrual'
+    89→    89→): string {
+    90→    90→  if (category === 'revenue') {
+    91→    91→    return `إثبات إيراد ${accountNameAr} — ${periodAr}`;
+    92→    92→  }
+    93→    93→  return `تسجيل مصروف ${accountNameAr} — ${periodAr}`;
+    94→    94→}
+    95→    95→
+    96→    96→function generateAutoJournalEntries(
+    97→    97→  companies: CompanyPnL[],
+    98→    98→  lineItems: PnLLineItem[],
+    99→    99→): AutoJournalEntry[] {
+   100→   100→  const entries: AutoJournalEntry[] = [];
+   101→   101→  let entryCounter = 1;
+   102→   102→
+   103→   103→  for (const ds of companies) {
+   104→   104→    const periodInfo = parsePeriodComponents(ds.period);
+   105→   105→    if (!periodInfo) continue;
+   106→   106→
+   107→   107→    const { year, month, monthAr } = periodInfo;
+   108→   108→    const periodAr = `${monthAr} ${year}`;
+   109→   109→    const midMonth = `${year}-${String(month).padStart(2, '0')}-15`;
+   110→   110→
+   111→   111→    for (const item of lineItems) {
+   112→   112→      if (item.isSubtotal || item.isTotal) continue;
+   113→   113→      if (item.category === 'profit') continue;
+   114→   114→
+   115→   115→      const key = item.isCustom ? item.name : getLineItemKey(item.name);
+   116→   116→      const value = ds.data[key] || 0;
+   117→   117→      if (value === 0) continue;
+   118→   118→
+   119→   119→      const category = item.category as 'revenue' | 'expense';
+   120→   120→
+   121→   121→      // Generate 1-3 entries per account per period for realism
+   122→   122→      const numEntries = value > 500000 ? 3 : value > 100000 ? 2 : 1;
+   123→   123→      const amounts = splitAmount(value, numEntries);
+   124→   124→
+   125→   125→      amounts.forEach((amt, idx) => {
+   126→   126→        const day = String(Math.min(28, 5 + idx * 10)).padStart(2, '0');
+   127→   127→        const date = `${year}-${String(month).padStart(2, '0')}-${day}`;
+   128→   128→        const entryNum = `JV-${year}${String(month).padStart(2, '0')}-${String(entryCounter).padStart(4, '0')}`;
+   129→   129→        entryCounter++;
+   130→   130→
+   131→   131→        const entryTypes: Array<'primary' | 'adjustment' | 'accrual'> = ['primary', 'adjustment', 'accrual'];
+   132→   132→        const entryType = entryTypes[idx] || 'primary';
+   133→   133→        const desc = getEntryDescription(item.nameAr, category, periodAr, entryType);
+   134→   134→
+   135→   135→        const refPrefix = category === 'revenue' ? 'REV' : 'EXP';
+   136→   136→        const reference = `${refPrefix}-${year}${String(month).padStart(2, '0')}-${String(idx + 1).padStart(3, '0')}`;
+   137→   137→
+   138→   138→        entries.push({
+   139→   139→          id: `aje_${ds.companyName}_${key}_${ds.period}_${idx}`,
+   140→   140→          companyName: ds.companyName,
+   141→   141→          period: ds.period,
+   142→   142→          date,
+   143→   143→          entryNumber: entryNum,
+   144→   144→          accountKey: key,
+   145→   145→          accountNameAr: item.nameAr,
+   146→   146→          accountNameEn: item.name,
+   147→   147→          description: desc,
+   148→   148→          debit: category === 'expense' ? amt : 0,
+   149→   149→          credit: category === 'revenue' ? amt : 0,
+   150→   150→          reference,
+   151→   151→          currency: ds.currency,
+   152→   152→          category,
+   153→   153→        });
+   154→   154→      });
+   155→   155→    }
+   156→   156→  }
+   157→   157→
+   158→   158→  return entries;
+   159→   159→}
+   160→   160→
+   161→   161→function splitAmount(total: number, parts: number): number[] {
+   162→   162→  if (parts <= 1) return [total];
+   163→   163→  const result: number[] = [];
+   164→   164→  let remaining = total;
+   165→   165→  for (let i = 0; i < parts - 1; i++) {
+   166→   166→    // Random split between 25-45% for each part
+   167→   167→    const pct = 0.25 + Math.random() * 0.20;
+   168→   168→    const part = Math.round(remaining * pct);
+   169→   169→    result.push(part);
+   170→   170→    remaining -= part;
+   171→   171→  }
+   172→   172→  result.push(remaining);
+   173→   173→  return result;
+   174→   174→}
+   175→   175→
+   176→   176→// Compute running balance
+   177→   177→function computeRunningBalance(entries: AutoJournalEntry[]): { entry: AutoJournalEntry; runningBalance: number }[] {
+   178→   178→  let balance = 0;
+   179→   179→  return entries.map((entry) => {
+   180→   180→    balance += entry.debit - entry.credit;
+   181→   181→    return { entry, runningBalance: balance };
+   182→   182→  });
+   183→   183→}
+   184→   184→
+   185→   185→// ─── Journal Entries Dialog Component (Professional Design) ──────────────────
+   186→   186→function JournalEntriesDialog({
+   187→   187→  isOpen,
+   188→   188→  onClose,
+   189→   189→  lineItem,
+   190→   190→  accountKey,
+   191→   191→}: {
+   192→   192→  isOpen: boolean;
+   193→   193→  onClose: () => void;
+   194→   194→  lineItem: PnLLineItem | null;
+   195→   195→  accountKey: string | null;
+   196→   196→}) {
+   197→   197→  const { companies, selectedCompanyNames, selectedPeriods } = usePnLStore();
+   198→   198→  const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
+   199→   199→  const allLineItems = useMemo(() => getAllLineItems(companies), [companies]);
+   200→   200→
+   201→   201→  // Auto-generate journal entries from P&L data
+   202→   202→  const allAutoEntries = useMemo(() => {
+   203→   203→    const filtered = companies.filter(
+   204→   204→      (c) => selectedCompanyNames.includes(c.companyName) && selectedPeriods.includes(c.period)
+   205→   205→    );
+   206→   206→    return generateAutoJournalEntries(filtered, allLineItems);
+   207→   207→  }, [companies, allLineItems, selectedCompanyNames, selectedPeriods]);
+   208→   208→
+   209→   209→  // Filter for this specific account
+   210→   210→  const accountEntries = useMemo(() => {
+   211→   211→    if (!accountKey) return [];
+   212→   212→    return allAutoEntries
+   213→   213→      .filter((e) => e.accountKey === accountKey)
+   214→   214→      .sort((a, b) => a.date.localeCompare(b.date));
+   215→   215→  }, [allAutoEntries, accountKey]);
+   216→   216→
+   217→   217→  // Group by company
+   218→   218→  const companiesWithEntries = useMemo(() => {
+   219→   219→    const companyMap = new Map<string, AutoJournalEntry[]>();
+   220→   220→    accountEntries.forEach((e) => {
+   221→   221→      const existing = companyMap.get(e.companyName) || [];
+   222→   222→      existing.push(e);
+   223→   223→      companyMap.set(e.companyName, existing);
+   224→   224→    });
+   225→   225→    return Array.from(companyMap.entries());
+   226→   226→  }, [accountEntries]);
+   227→   227→
+   228→   228→  // Auto-select first company
+   229→   229→  React.useEffect(() => {
+   230→   230→    if (!selectedCompany && companiesWithEntries.length > 0) {
+   231→   231→      setSelectedCompany(companiesWithEntries[0][0]);
+   232→   232→    }
+   233→   233→  }, [companiesWithEntries, selectedCompany]);
+   234→   234→
+   235→   235→  // Selected company entries
+   236→   236→  const selectedEntries = useMemo(() => {
+   237→   237→    if (!selectedCompany) return [];
+   238→   238→    return accountEntries.filter((e) => e.companyName === selectedCompany);
+   239→   239→  }, [accountEntries, selectedCompany]);
+   240→   240→
+   241→   241→  const withBalance = useMemo(() => computeRunningBalance(selectedEntries), [selectedEntries]);
+   242→   242→
+   243→   243→  const totalDebit = selectedEntries.reduce((s, e) => s + e.debit, 0);
+   244→   244→  const totalCredit = selectedEntries.reduce((s, e) => s + e.credit, 0);
+   245→   245→  const netBalance = totalDebit - totalCredit;
+   246→   246→  const currency = selectedEntries[0]?.currency || 'SAR';
+   247→   247→
+   248→   248→  // Export to Excel
+   249→   249→  const exportToExcel = async () => {
+   250→   250→    if (selectedEntries.length === 0) return;
+   251→   251→    const XLSX = await import('xlsx');
+   252→   252→    const wb = XLSX.utils.book_new();
+   253→   253→
+   254→   254→    const header = ['التاريخ', 'رقم القيد', 'البيان', 'مدين', 'دائن', 'الرصيد', 'م/د', 'المرجع'];
+   255→   255→    const rows = withBalance.map(({ entry, runningBalance }) => [
+   256→   256→      entry.date,
+   257→   257→      entry.entryNumber,
+   258→   258→      entry.description,
+   259→   259→      entry.debit || '',
+   260→   260→      entry.credit || '',
+   261→   261→      Math.abs(runningBalance),
+   262→   262→      runningBalance > 0 ? 'مدين' : runningBalance < 0 ? 'دائن' : '',
+   263→   263→      entry.reference,
+   264→   264→    ]);
+   265→   265→
+   266→   266→    rows.push([
+   267→   267→      'الإجمالي', '', '',
+   268→   268→      totalDebit, totalCredit,
+   269→   269→      Math.abs(netBalance),
+   270→   270→      netBalance > 0 ? 'مدين' : netBalance < 0 ? 'دائن' : '',
+   271→   271→      '',
+   272→   272→    ]);
+   273→   273→
+   274→   274→    const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+   275→   275→    ws['!cols'] = [
+   276→   276→      { wch: 14 }, { wch: 16 }, { wch: 45 },
+   277→   277→      { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 8 }, { wch: 18 },
+   278→   278→    ];
+   279→   279→    XLSX.utils.book_append_sheet(wb, ws, (lineItem?.nameAr || 'Ledger').substring(0, 31));
+   280→   280→    XLSX.writeFile(wb, `قيود_${lineItem?.nameAr?.replace(/\s+/g, '_') || 'account'}.xlsx`);
+   281→   281→  };
+   282→   282→
+   283→   283→  if (!lineItem || !accountKey) return null;
+   284→   284→
+   285→   285→  const isExpense = lineItem.category === 'expense';
+   286→   286→  const isRevenue = lineItem.category === 'revenue';
+   287→   287→
+   288→   288→  return (
+   289→   289→    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+   290→   290→      <DialogContent className="max-w-5xl max-h-[90vh] p-0 gap-0 overflow-hidden" dir="rtl">
+   291→   291→        {/* ─── Header Banner ─────────────────────────────────── */}
+   292→   292→        <div className={`px-6 py-5 ${
+   293→   293→          isExpense
+   294→   294→            ? 'bg-gradient-to-l from-red-600 via-red-500 to-rose-500'
+   295→   295→            : 'bg-gradient-to-l from-emerald-600 via-emerald-500 to-teal-500'
+   296→   296→        }`}>
+   297→   297→          <div className="flex items-start justify-between">
+   298→   298→            <div className="flex items-start gap-3">
+   299→   299→              <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
+   300→   300→                {isExpense ? (
+   301→   301→                  <ArrowUpRight className="h-5 w-5 text-white" />
+   302→   302→                ) : (
+   303→   303→                  <ArrowDownRight className="h-5 w-5 text-white" />
+   304→   304→                )}
+   305→   305→              </div>
+   306→   306→              <div>
+   307→   307→                <h2 className="text-lg font-bold text-white leading-tight">
+   308→   308→                  {isExpense ? 'قيود حساب مصروف' : 'قيود حساب إيراد'}
+   309→   309→                </h2>
+   310→   310→                <p className="text-white/80 text-sm mt-0.5">
+   311→   311→                  {lineItem.nameAr} — {lineItem.name}
+   312→   312→                </p>
+   313→   313→              </div>
+   314→   314→            </div>
+   315→   315→            <div className="flex items-center gap-2">
+   316→   316→              <Badge className="bg-white/20 text-white border-0 backdrop-blur-sm text-xs px-2.5 py-1">
+   317→   317→                <Sparkles className="h-3 w-3 ml-1" />
+   318→   318→                محسوب تلقائياً
+   319→   319→              </Badge>
+   320→   320→              <Badge className="bg-white/20 text-white border-0 backdrop-blur-sm text-xs px-2.5 py-1">
+   321→   321→                {accountEntries.length} قيد
+   322→   322→              </Badge>
+   323→   323→            </div>
+   324→   324→          </div>
+   325→   325→        </div>
+   326→   326→
+   327→   327→        <div className="overflow-y-auto max-h-[calc(90vh-180px)]">
+   328→   328→          {/* ─── Company Selector ──────────────────────────────── */}
+   329→   329→          {companiesWithEntries.length > 1 && (
+   330→   330→            <div className="px-6 pt-4 pb-2">
+   331→   331→              <div className="flex flex-wrap items-center gap-2">
+   332→   332→                <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+   333→   333→                  <Building2 className="h-3.5 w-3.5" />
+   334→   334→                  الشركة:
+   335→   335→                </span>
+   336→   336→                {companiesWithEntries.map(([name, entries], idx) => {
+   337→   337→                  const isActive = selectedCompany === name;
+   338→   338→                  const color = COMPANY_COLORS[idx % COMPANY_COLORS.length];
+   339→   339→                  return (
+   340→   340→                    <button
+   341→   341→                      key={name}
+   342→   342→                      onClick={() => setSelectedCompany(name)}
+   343→   343→                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
+   344→   344→                        isActive
+   345→   345→                          ? 'text-white shadow-md scale-105'
+   346→   346→                          : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+   347→   347→                      }`}
+   348→   348→                      style={isActive ? { backgroundColor: color } : undefined}
+   349→   349→                    >
+   350→   350→                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: isActive ? 'white' : color }} />
+   351→   351→                      {name}
+   352→   352→                      <span className={`text-[10px] ${isActive ? 'text-white/70' : 'text-muted-foreground/60'}`}>
+   353→   353→                        ({entries.length})
+   354→   354→                      </span>
+   355→   355→                    </button>
+   356→   356→                  );
+   357→   357→                })}
+   358→   358→              </div>
+   359→   359→            </div>
+   360→   360→          )}
+   361→   361→
+   362→   362→          {/* ─── Summary Cards ─────────────────────────────────── */}
+   363→   363→          {selectedEntries.length > 0 && (
+   364→   364→            <div className="px-6 pt-3 pb-2">
+   365→   365→              <div className="grid grid-cols-3 gap-3">
+   366→   366→                {/* Total Debit */}
+   367→   367→                <div className="relative overflow-hidden rounded-xl border border-red-200/60 dark:border-red-900/40 bg-gradient-to-bl from-red-50 to-white dark:from-red-950/30 dark:to-slate-900 p-3.5">
+   368→   368→                  <div className="absolute top-0 left-0 w-1 h-full bg-red-500" />
+   369→   369→                  <div className="flex items-center gap-2 mb-1">
+   370→   370→                    <TrendingUp className="h-3.5 w-3.5 text-red-500" />
+   371→   371→                    <span className="text-[11px] font-medium text-red-600 dark:text-red-400">إجمالي المدين</span>
+   372→   372→                  </div>
+   373→   373→                  <p className="text-lg font-bold text-red-700 dark:text-red-300 tabular-nums">
+   374→   374→                    {formatNumber(totalDebit, currency, false)}
+   375→   375→                  </p>
+   376→   376→                </div>
+   377→   377→
+   378→   378→                {/* Total Credit */}
+   379→   379→                <div className="relative overflow-hidden rounded-xl border border-emerald-200/60 dark:border-emerald-900/40 bg-gradient-to-bl from-emerald-50 to-white dark:from-emerald-950/30 dark:to-slate-900 p-3.5">
+   380→   380→                  <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500" />
+   381→   381→                  <div className="flex items-center gap-2 mb-1">
+   382→   382→                    <TrendingDown className="h-3.5 w-3.5 text-emerald-500" />
+   383→   383→                    <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">إجمالي الدائن</span>
+   384→   384→                  </div>
+   385→   385→                  <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">
+   386→   386→                    {formatNumber(totalCredit, currency, false)}
+   387→   387→                  </p>
+   388→   388→                </div>
+   389→   389→
+   390→   390→                {/* Net Balance */}
+   391→   391→                <div className={`relative overflow-hidden rounded-xl border p-3.5 ${
+   392→   392→                  isExpense
+   393→   393→                    ? 'border-amber-200/60 dark:border-amber-900/40 bg-gradient-to-bl from-amber-50 to-white dark:from-amber-950/30 dark:to-slate-900'
+   394→   394→                    : 'border-blue-200/60 dark:border-blue-900/40 bg-gradient-to-bl from-blue-50 to-white dark:from-blue-950/30 dark:to-slate-900'
+   395→   395→                }`}>
+   396→   396→                  <div className={`absolute top-0 left-0 w-1 h-full ${isExpense ? 'bg-amber-500' : 'bg-blue-500'}`} />
+   397→   397→                  <div className="flex items-center gap-2 mb-1">
+   398→   398→                    <BarChart3 className={`h-3.5 w-3.5 ${isExpense ? 'text-amber-500' : 'text-blue-500'}`} />
+   399→   399→                    <span className={`text-[11px] font-medium ${isExpense ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400'}`}>
+   400→   400→                      صافي الرصيد
+   401→   401→                    </span>
+   402→   402→                    <Badge className={`text-[9px] h-4 px-1.5 ${
+   403→   403→                      isExpense
+   404→   404→                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 border-0'
+   405→   405→                        : 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300 border-0'
+   406→   406→                    }`}>
+   407→   407→                      {isExpense ? 'مدين' : 'دائن'}
+   408→   408→                    </Badge>
+   409→   409→                  </div>
+   410→   410→                  <p className={`text-lg font-bold tabular-nums ${isExpense ? 'text-amber-700 dark:text-amber-300' : 'text-blue-700 dark:text-blue-300'}`}>
+   411→   411→                    {formatNumber(Math.abs(netBalance), currency, false)}
+   412→   412→                  </p>
+   413→   413→                </div>
+   414→   414→              </div>
+   415→   415→            </div>
+   416→   416→          )}
+   417→   417→
+   418→   418→          {/* ─── Export Button ──────────────────────────────────── */}
+   419→   419→          {selectedEntries.length > 0 && (
+   420→   420→            <div className="px-6 pt-1 pb-2 flex justify-end">
+   421→   421→              <Button
+   422→   422→                variant="outline"
+   423→   423→                size="sm"
+   424→   424→                className="gap-1.5 text-xs h-7 rounded-lg"
+   425→   425→                onClick={exportToExcel}
+   426→   426→              >
+   427→   427→                <Download className="h-3.5 w-3.5" />
+   428→   428→                تصدير القيود Excel
+   429→   429→              </Button>
+   430→   430→            </div>
+   431→   431→          )}
+   432→   432→
+   433→   433→          {/* ─── Journal Entries Table ──────────────────────────── */}
+   434→   434→          {withBalance.length > 0 && (
+   435→   435→            <div className="px-6 pb-6">
+   436→   436→              <div className="overflow-x-auto rounded-xl border shadow-sm">
+   437→   437→                <Table>
+   438→   438→                  <TableHeader>
+   439→   439→                    <TableRow className="bg-slate-50 dark:bg-slate-800/50">
+   440→   440→                      <TableHead className="text-[11px] font-bold min-w-[85px] text-slate-600 dark:text-slate-300">
+   441→   441→                        <Calendar className="h-3 w-3 inline ml-1" />
+   442→   442→                        التاريخ
+   443→   443→                      </TableHead>
+   444→   444→                      <TableHead className="text-[11px] font-bold min-w-[90px] text-slate-600 dark:text-slate-300">رقم القيد</TableHead>
+   445→   445→                      <TableHead className="text-[11px] font-bold min-w-[220px] text-slate-600 dark:text-slate-300">
+   446→   446→                        <FileText className="h-3 w-3 inline ml-1" />
+   447→   447→                        البيان
+   448→   448→                      </TableHead>
+   449→   449→                      <TableHead className="text-center text-[11px] font-bold min-w-[110px] bg-red-50/80 dark:bg-red-950/20 text-red-700 dark:text-red-300">
+   450→   450→                        مدين
+   451→   451→                      </TableHead>
+   452→   452→                      <TableHead className="text-center text-[11px] font-bold min-w-[110px] bg-emerald-50/80 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300">
+   453→   453→                        دائن
+   454→   454→                      </TableHead>
+   455→   455→                      <TableHead className="text-center text-[11px] font-bold min-w-[120px] bg-amber-50/80 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300">
+   456→   456→                        الرصيد
+   457→   457→                      </TableHead>
+   458→   458→                      <TableHead className="text-[11px] font-bold min-w-[110px] text-slate-600 dark:text-slate-300">المرجع</TableHead>
+   459→   459→                    </TableRow>
+   460→   460→                  </TableHeader>
+   461→   461→                  <TableBody>
+   462→   462→                    {withBalance.map(({ entry, runningBalance }, idx) => {
+   463→   463→                      const isLast = idx === withBalance.length - 1;
+   464→   464→                      return (
+   465→   465→                        <TableRow
+   466→   466→                          key={entry.id}
+   467→   467→                          className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors ${
+   468→   468→                            idx % 2 !== 0 ? 'bg-slate-25 dark:bg-slate-900/20' : ''
+   469→   469→                          }`}
+   470→   470→                        >
+   471→   471→                          <TableCell className="text-xs tabular-nums font-medium text-slate-700 dark:text-slate-300">
+   472→   472→                            {entry.date ? new Date(entry.date).toLocaleDateString('ar-SA', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}
+   473→   473→                          </TableCell>
+   474→   474→                          <TableCell className="text-xs font-mono text-slate-500 dark:text-slate-400">
+   475→   475→                            {entry.entryNumber}
+   476→   476→                          </TableCell>
+   477→   477→                          <TableCell className="text-xs text-slate-700 dark:text-slate-300">
+   478→   478→                            {entry.description}
+   479→   479→                          </TableCell>
+   480→   480→                          <TableCell className="text-center tabular-nums text-xs bg-red-50/30 dark:bg-red-950/10">
+   481→   481→                            {entry.debit > 0 ? (
+   482→   482→                              <span className="font-semibold text-red-600 dark:text-red-400">{formatNumber(entry.debit, currency, false)}</span>
+   483→   483→                            ) : <span className="text-slate-300 dark:text-slate-600">—</span>}
+   484→   484→                          </TableCell>
+   485→   485→                          <TableCell className="text-center tabular-nums text-xs bg-emerald-50/30 dark:bg-emerald-950/10">
+   486→   486→                            {entry.credit > 0 ? (
+   487→   487→                              <span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatNumber(entry.credit, currency, false)}</span>
+   488→   488→                            ) : <span className="text-slate-300 dark:text-slate-600">—</span>}
+   489→   489→                          </TableCell>
+   490→   490→                          <TableCell className="text-center tabular-nums text-xs bg-amber-50/30 dark:bg-amber-950/10">
+   491→   491→                            <span className={`font-bold ${
+   492→   492→                              runningBalance > 0 ? 'text-amber-600 dark:text-amber-400' : runningBalance < 0 ? 'text-blue-600 dark:text-blue-400' : ''
+   493→   493→                            }`}>
+   494→   494→                              {formatCompact(Math.abs(runningBalance))}
+   495→   495→                              <span className="text-[9px] mr-0.5 opacity-70">
+   496→   496→                                {runningBalance > 0 ? 'م' : runningBalance < 0 ? 'د' : ''}
+   497→   497→                              </span>
+   498→   498→                            </span>
+   499→   499→                          </TableCell>
+   500→   500→                          <TableCell className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+   501→   501→                            {entry.reference}
+   502→   502→                          </TableCell>
+   503→   503→                        </TableRow>
+   504→   504→                      );
+   505→   505→                    })}
+   506→   506→
+   507→   507→                    {/* ─── Totals Row ─────────────────────────────── */}
+   508→   508→                    <TableRow className="bg-slate-100/80 dark:bg-slate-800/60 border-t-2 border-slate-300 dark:border-slate-600">
+   509→   509→                      <TableCell colSpan={3} className="text-xs font-bold text-slate-700 dark:text-slate-200">
+   510→   510→                        الإجمالي
+   511→   511→                      </TableCell>
+   512→   512→                      <TableCell className="text-center tabular-nums text-xs font-bold text-red-600 dark:text-red-400 bg-red-50/40 dark:bg-red-950/15">
+   513→   513→                        {formatNumber(totalDebit, currency, false)}
+   514→   514→                      </TableCell>
+   515→   515→                      <TableCell className="text-center tabular-nums text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50/40 dark:bg-emerald-950/15">
+   516→   516→                        {formatNumber(totalCredit, currency, false)}
+   517→   517→                      </TableCell>
+   518→   518→                      <TableCell className="text-center tabular-nums text-xs font-bold bg-amber-50/40 dark:bg-amber-950/15">
+   519→   519→                        <span className={netBalance > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400'}>
+   520→   520→                          {formatNumber(Math.abs(netBalance), currency, false)}
+   521→   521→                          <span className="text-[9px] mr-0.5 opacity-70">
+   522→   522→                            {netBalance > 0 ? ' مدين' : netBalance < 0 ? ' دائن' : ''}
+   523→   523→                          </span>
+   524→   524→                        </span>
+   525→   525→                      </TableCell>
+   526→   526→                      <TableCell />
+   527→   527→                    </TableRow>
+   528→   528→                  </TableBody>
+   529→   529→                </Table>
+   530→   530→              </div>
+   531→   531→
+   532→   532→              {/* ─── Footer Note ──────────────────────────────── */}
+   533→   533→              <div className="mt-3 flex items-center gap-2 text-[10px] text-muted-foreground">
+   534→   534→                <Sparkles className="h-3 w-3 shrink-0 text-amber-500" />
+   535→   535→                <p>
+   536→   536→                  القيود محسوبة تلقائياً من بيانات قائمة الأرباح والخسائر — الحسابات المدينة: المصروفات | الحسابات الدائنة: الإيرادات
+   537→   537→                </p>
+   538→   538→              </div>
+   539→   539→            </div>
+   540→   540→          )}
+   541→   541→        </div>
+   542→   542→      </DialogContent>
+   543→   543→    </Dialog>
+   544→   544→  );
+   545→   545→}
+   546→   546→
+   547→   547→// ─── Main PnLTable Component ──────────────────────────────────────────────────
+   548→   548→export function PnLTable() {
+   549→   549→  const { getFiltered, getAggregatedFiltered, dateRangeStart, dateRangeEnd, companies } = usePnLStore();
+   550→   550→  const selected = getFiltered();
+   551→   551→  const aggregated = getAggregatedFiltered();
+   552→   552→  const isAggregated = !!(dateRangeStart && dateRangeEnd);
+   553→   553→
+   554→   554→  // Dialog state
+   555→   555→  const [dialogOpen, setDialogOpen] = useState(false);
+   556→   556→  const [selectedLineItem, setSelectedLineItem] = useState<PnLLineItem | null>(null);
+   557→   557→  const [selectedAccountKey, setSelectedAccountKey] = useState<string | null>(null);
+   558→   558→
+   559→   559→  // Get all line items including custom ones from the data
+   560→   560→  const allLineItems = getAllLineItems(companies);
+   561→   561→
+   562→   562→  // Determine which accounts have data (for the indicator)
+   563→   563→  const accountsWithData = useMemo(() => {
+   564→   564→    const keys = new Set<string>();
+   565→   565→    companies.forEach((ds) => {
+   566→   566→      Object.entries(ds.data).forEach(([key, val]) => {
+   567→   567→        if (val !== 0) keys.add(key);
+   568→   568→      });
+   569→   569→    });
+   570→   570→    return keys;
+   571→   571→  }, [companies]);
+   572→   572→
+   573→   573→  // Handle row click
+   574→   574→  const handleRowClick = (item: PnLLineItem) => {
+   575→   575→    if (item.isSubtotal || item.isTotal) return;
+   576→   576→    const key = item.isCustom ? item.name : getLineItemKey(item.name);
+   577→   577→    setSelectedLineItem(item);
+   578→   578→    setSelectedAccountKey(key);
+   579→   579→    setDialogOpen(true);
+   580→   580→  };
+   581→   581→
+   582→   582→  if (selected.length === 0) {
+   583→   583→    return (
+   584→   584→      <Card>
+   585→   585→        <CardContent className="flex flex-col items-center justify-center py-20 text-center">
+   586→   586→          <Building2 className="mb-4 h-16 w-16 text-muted-foreground/20" />
+   587→   587→          <h3 className="text-lg font-semibold text-muted-foreground">اختر شركة وفترة واحدة على الأقل من الفلاتر</h3>
+   588→   588→        </CardContent>
+   589→   589→      </Card>
+   590→   590→    );
+   591→   591→  }
+   592→   592→
+   593→   593→  // Helper: render a clickable line item name cell
+   594→   594→  const renderLineItemName = (item: PnLLineItem) => {
+   595→   595→    const key = item.isCustom ? item.name : getLineItemKey(item.name);
+   596→   596→    const isSummary = item.isSubtotal || item.isTotal;
+   597→   597→    const hasData = accountsWithData.has(key);
+   598→   598→    const isClickable = !isSummary && (item.category === 'expense' || item.category === 'revenue') && hasData;
+   599→   599→
+   600→   600→    return (
+   601→   601→      <span style={{ paddingRight: `${(item.indent || 0) * 24}px` }}
+   602→   602→        className="flex items-center gap-1.5"
+   603→   603→      >
+   604→   604→        {item.nameAr}
+   605→   605→        {item.isCustom && (
+   606→   606→          <span className="mr-1.5 inline-flex items-center gap-0.5 text-[9px] text-blue-600 bg-blue-50 dark:bg-blue-950 px-1 py-0.5 rounded">
+   607→   607→            <Tag className="h-2.5 w-2.5" />
+   608→   608→            مخصص
+   609→   609→          </span>
+   610→   610→        )}
+   611→   611→        {!item.isCustom && (
+   612→   612→          <span className="mr-1.5 text-xs opacity-50">({item.name})</span>
+   613→   613→        )}
+   614→   614→        {item.isCustom && item.nameEn && (
+   615→   615→          <span className="mr-1.5 text-xs opacity-50">({item.nameEn})</span>
+   616→   616→        )}
+   617→   617→        {item.description && <InfoTooltip text={item.description} side="left" />}
+   618→   618→        {/* Clickable indicator */}
+   619→   619→        {isClickable && (
+   620→   620→          <span className="inline-flex items-center gap-0.5 text-[9px] text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/30 px-1.5 py-0.5 rounded-full"
+   621→   621→            title="اضغط لعرض القيود المحاسبية">
+   622→   622→            <BookOpen className="h-2.5 w-2.5" />
+   623→   623→            قيود
+   624→   624→          </span>
+   625→   625→        )}
+   626→   626→      </span>
+   627→   627→    );
+   628→   628→  };
+   629→   629→
+   630→   630→  // Aggregated view: show one column per company with summed data
+   631→   631→  if (isAggregated) {
+   632→   632→    return (
+   633→   633→      <>
+   634→   634→        <Card className="overflow-hidden shadow-sm">
+   635→   635→          <CardHeader className="bg-gradient-to-l from-muted/60 to-muted/30 pb-3">
+   636→   636→            <CardTitle className="text-base font-bold">قائمة الأرباح والخسائر — بيانات مجمّعة</CardTitle>
+   637→   637→          </CardHeader>
+   638→   638→          <CardContent className="p-0">
+   639→   639→            <div className="overflow-x-auto">
+   640→   640→              <Table>
+   641→   641→                <TableHeader>
+   642→   642→                  <TableRow className="bg-muted/20">
+   643→   643→                    <TableHead className="min-w-[260px] font-bold bg-muted/30">البند المالي</TableHead>
+   644→   644→                    {aggregated.map((agg, gIdx) => {
+   645→   645→                      const color = COMPANY_COLORS[gIdx % COMPANY_COLORS.length];
+   646→   646→                      return (
+   647→   647→                        <React.Fragment key={agg.companyName}>
+   648→   648→                          <TableHead
+   649→   649→                            className="min-w-[130px] text-center font-bold border-b"
+   650→   650→                            style={{ color, backgroundColor: `${color}10` }}
+   651→   651→                          >
+   652→   652→                            <div className="flex items-center justify-center gap-2">
+   653→   653→                              <span className="h-2.5 w-2.5 rounded-full inline-block" style={{ backgroundColor: color }} />
+   654→   654→                              {agg.companyName}
+   655→   655→                            </div>
+   656→   656→                            <div className="text-xs font-normal opacity-70 mt-0.5">
+   657→   657→                              {agg.periodLabel} ({agg.periodCount} فترات)
+   658→   658→                            </div>
+   659→   659→                          </TableHead>
+   660→   660→                          <TableHead
+   661→   661→                            className="min-w-[70px] text-center text-[10px] font-medium border-b"
+   662→   662→                            style={{ backgroundColor: `${color}08` }}
+   663→   663→                          >
+   664→   664→                            النسبة %
+   665→   665→                          </TableHead>
+   666→   666→                        </React.Fragment>
+   667→   667→                      );
+   668→   668→                    })}
+   669→   669→                  </TableRow>
+   670→   670→                </TableHeader>
+   671→   671→                <TableBody>
+   672→   672→                  {allLineItems.map((item) => {
+   673→   673→                    const key = item.isCustom ? item.name : getLineItemKey(item.name);
+   674→   674→                    const isSummary = item.isSubtotal || item.isTotal;
+   675→   675→                    const isClickable = !isSummary && (item.category === 'expense' || item.category === 'revenue') && accountsWithData.has(key);
+   676→   676→
+   677→   677→                    return (
+   678→   678→                      <TableRow
+   679→   679→                        key={key}
+   680→   680→                        className={`${isSummary ? 'bg-muted/30 font-bold' : ''} ${
+   681→   681→                          item.category === 'profit' && !isSummary ? 'bg-emerald-50/30' : ''
+   682→   682→                        } ${item.isCustom ? 'bg-blue-50/20' : ''} ${
+   683→   683→                          isClickable ? 'cursor-pointer hover:bg-teal-50/30 dark:hover:bg-teal-950/20' : 'hover:bg-muted/10'
+   684→   684→                        } transition-colors`}
+   685→   685→                        onClick={isClickable ? () => handleRowClick(item) : undefined}
+   686→   686→                      >
+   687→   687→                        <TableCell className={`font-medium ${isSummary ? 'text-foreground' : 'text-muted-foreground'}`}>
+   688→   688→                          {renderLineItemName(item)}
+   689→   689→                          {isClickable && (
+   690→   690→                            <ChevronLeft className="h-3 w-3 text-muted-foreground/40 inline mr-1" />
+   691→   691→                          )}
+   692→   692→                        </TableCell>
+   693→   693→                        {aggregated.map((agg) => {
+   694→   694→                          const value = agg.aggregatedData[key] || 0;
+   695→   695→                          const revenue = agg.aggregatedData['revenue'] || 0;
+   696→   696→                          const pct = key === 'revenue'
+   697→   697→                            ? revenue !== 0 ? '100.0%' : '—'
+   698→   698→                            : revenue !== 0
+   699→   699→                              ? `${((value / revenue) * 100).toFixed(1)}%`
+   700→   700→                              : '—';
+   701→   701→                          return (
+   702→   702→                            <React.Fragment key={agg.companyName + key}>
+   703→   703→                              <TableCell
+   704→   704→                                className={`text-center tabular-nums text-sm ${
+   705→   705→                                  value < 0 ? 'text-red-600' : isSummary ? 'text-foreground font-bold' : ''
+   706→   706→                                }`}
+   707→   707→                              >
+   708→   708→                                {formatNumber(value, agg.currency)}
+   709→   709→                              </TableCell>
+   710→   710→                              <TableCell className="text-center tabular-nums text-xs text-muted-foreground bg-muted/5">
+   711→   711→                                {pct}
+   712→   712→                              </TableCell>
+   713→   713→                            </React.Fragment>
+   714→   714→                          );
+   715→   715→                        })}
+   716→   716→                      </TableRow>
+   717→   717→                    );
+   718→   718→                  })}
+   719→   719→                </TableBody>
+   720→   720→              </Table>
+   721→   721→            </div>
+   722→   722→            <div className="border-t px-4 py-3 bg-muted/10">
+   723→   723→              <div className="flex items-start gap-2 text-[10px] text-muted-foreground">
+   724→   724→                <Info className="h-3 w-3 mt-0.5 shrink-0" />
+   725→   725→                <div className="space-y-1">
+   726→   726→                  <p>النسبة % = قيمة البند ÷ الإيرادات × 100 — القيم السلبية باللون الأحمر</p>
+   727→   727→                  <p>اضغط على أي بند مصروف أو إيراد لعرض القيود المحاسبية المحسوبة تلقائياً</p>
+   728→   728→                  <p>البنود المخصصة <Tag className="h-2.5 w-2.5 inline" /> مضافة من ملف Excel — يتم تصنيفها تلقائياً حسب الاسم</p>
+   729→   729→                </div>
+   730→   730→              </div>
+   731→   731→            </div>
+   732→   732→          </CardContent>
+   733→   733→        </Card>
+   734→   734→
+   735→   735→        <JournalEntriesDialog
+   736→   736→          isOpen={dialogOpen}
+   737→   737→          onClose={() => setDialogOpen(false)}
+   738→   738→          lineItem={selectedLineItem}
+   739→   739→          accountKey={selectedAccountKey}
+   740→   740→        />
+   741→   741→      </>
+   742→   742→    );
+   743→   743→  }
+   744→   744→
+   745→   745→  // Standard (non-aggregated) view
+   746→   746→  const periodGroups = groupByPeriod(selected);
+   747→   747→  const allCompanyNames = [...new Set(selected.map((c) => c.companyName))];
+   748→   748→  const companyColorMap = new Map<string, string>();
+   749→   749→  allCompanyNames.forEach((name, idx) => {
+   750→   750→    companyColorMap.set(name, COMPANY_COLORS[idx % COMPANY_COLORS.length]);
+   751→   751→  });
+   752→   752→
+   753→   753→  return (
+   754→   754→    <>
+   755→   755→      <Card className="overflow-hidden shadow-sm">
+   756→   756→        <CardHeader className="bg-gradient-to-l from-muted/60 to-muted/30 pb-3">
+   757→   757→          <CardTitle className="text-base font-bold">قائمة الأرباح والخسائر — مقارنة شهرية بين الشركات</CardTitle>
+   758→   758→        </CardHeader>
+   759→   759→        <CardContent className="p-0">
+   760→   760→          <div className="overflow-x-auto">
+   761→   761→            <Table>
+   762→   762→              <TableHeader>
+   763→   763→                <TableRow className="bg-muted/20">
+   764→   764→                  <TableHead className="min-w-[260px] font-bold bg-muted/30" rowSpan={2}>
+   765→   765→                    البند المالي
+   766→   766→                  </TableHead>
+   767→   767→                  {periodGroups.map((pg) => (
+   768→   768→                    <TableHead
+   769→   769→                      key={pg.period}
+   770→   770→                      colSpan={pg.datasets.length * 2}
+   771→   771→                      className="text-center font-bold border-b text-sm"
+   772→   772→                      style={{ backgroundColor: '#f0fdf4' }}
+   773→   773→                    >
+   774→   774→                      <span className="inline-flex items-center gap-1.5">
+   775→   775→                        {periodToArabic(pg.period)}
+   776→   776→                      </span>
+   777→   777→                    </TableHead>
+   778→   778→                  ))}
+   779→   779→                </TableRow>
+   780→   780→                <TableRow className="bg-muted/10">
+   781→   781→                  {periodGroups.map((pg) =>
+   782→   782→                    pg.datasets.map((ds) => {
+   783→   783→                      const color = companyColorMap.get(ds.companyName) || COMPANY_COLORS[0];
+   784→   784→                      return (
+   785→   785→                        <React.Fragment key={ds.id}>
+   786→   786→                          <TableHead
+   787→   787→                            className="min-w-[130px] text-center text-xs font-medium"
+   788→   788→                            style={{ color, backgroundColor: `${color}10` }}
+   789→   789→                          >
+   790→   790→                            <div className="flex items-center justify-center gap-1">
+   791→   791→                              <span className="h-2 w-2 rounded-full inline-block" style={{ backgroundColor: color }} />
+   792→   792→                              {ds.companyName}
+   793→   793→                            </div>
+   794→   794→                            <span className="opacity-60 text-[10px]">{ds.currency}</span>
+   795→   795→                          </TableHead>
+   796→   796→                          <TableHead
+   797→   797→                            className="min-w-[60px] text-center text-[10px] font-medium bg-muted/5"
+   798→   798→                            style={{ backgroundColor: `${color}05` }}
+   799→   799→                          >
+   800→   800→                            النسبة %
+   801→   801→                          </TableHead>
+   802→   802→                        </React.Fragment>
+   803→   803→                      );
+   804→   804→                    })
+   805→   805→                  )}
+   806→   806→                </TableRow>
+   807→   807→              </TableHeader>
+   808→   808→              <TableBody>
+   809→   809→                {allLineItems.map((item) => {
+   810→   810→                  const key = item.isCustom ? item.name : getLineItemKey(item.name);
+   811→   811→                  const isSummary = item.isSubtotal || item.isTotal;
+   812→   812→                  const isClickable = !isSummary && (item.category === 'expense' || item.category === 'revenue') && accountsWithData.has(key);
+   813→   813→
+   814→   814→                  return (
+   815→   815→                    <TableRow
+   816→   816→                      key={key}
+   817→   817→                      className={`${isSummary ? 'bg-muted/30 font-bold' : ''} ${
+   818→   818→                        item.category === 'profit' && !isSummary ? 'bg-emerald-50/30' : ''
+   819→   819→                      } ${item.isCustom ? 'bg-blue-50/20' : ''} ${
+   820→   820→                        isClickable ? 'cursor-pointer hover:bg-teal-50/30 dark:hover:bg-teal-950/20' : 'hover:bg-muted/10'
+   821→   821→                      } transition-colors`}
+   822→   822→                      onClick={isClickable ? () => handleRowClick(item) : undefined}
+   823→   823→                    >
+   824→   824→                      <TableCell className={`font-medium ${isSummary ? 'text-foreground' : 'text-muted-foreground'}`}>
+   825→   825→                        {renderLineItemName(item)}
+   826→   826→                        {isClickable && (
+   827→   827→                          <ChevronLeft className="h-3 w-3 text-muted-foreground/40 inline mr-1" />
+   828→   828→                        )}
+   829→   829→                      </TableCell>
+   830→   830→                      {periodGroups.map((pg) =>
+   831→   831→                        pg.datasets.map((ds) => {
+   832→   832→                          const value = ds.data[key] || 0;
+   833→   833→                          const revenue = ds.data['revenue'] || 0;
+   834→   834→                          const pct = key === 'revenue'
+   835→   835→                            ? revenue !== 0 ? '100.0%' : '—'
+   836→   836→                            : revenue !== 0
+   837→   837→                              ? `${((value / revenue) * 100).toFixed(1)}%`
+   838→   838→                              : '—';
+   839→   839→                          return (
+   840→   840→                            <React.Fragment key={ds.id + key}>
+   841→   841→                              <TableCell
+   842→   842→                                className={`text-center tabular-nums text-sm ${
+   843→   843→                                  value < 0 ? 'text-red-600' : isSummary ? 'text-foreground font-bold' : ''
+   844→   844→                                }`}
+   845→   845→                              >
+   846→   846→                                {formatNumber(value, ds.currency)}
+   847→   847→                              </TableCell>
+   848→   848→                              <TableCell className="text-center tabular-nums text-xs text-muted-foreground bg-muted/5">
+   849→   849→                                {pct}
+   850→   850→                              </TableCell>
+   851→   851→                            </React.Fragment>
+   852→   852→                          );
+   853→   853→                        })
+   854→   854→                      )}
+   855→   855→                    </TableRow>
+   856→   856→                  );
+   857→   857→                })}
+   858→   858→              </TableBody>
+   859→   859→            </Table>
+   860→   860→          </div>
+   861→   861→          <div className="border-t px-4 py-3 bg-muted/10">
+   862→   862→            <div className="flex items-start gap-2 text-[10px] text-muted-foreground">
+   863→   863→              <Info className="h-3 w-3 mt-0.5 shrink-0" />
+   864→   864→              <div className="space-y-1">
+   865→   865→                <p>الجدول مجمّع حسب الشهر — كل شهر يعرض جميع الشركات جنباً إلى جنب للمقارنة المباشرة</p>
+   866→   866→                <p>اضغط على أي بند مصروف أو إيراد لعرض القيود المحاسبية المحسوبة تلقائياً</p>
+   867→   867→                <p>البنود المخصصة <Tag className="h-2.5 w-2.5 inline" /> مضافة من ملف Excel — يتم تصنيفها تلقائياً حسب الاسم</p>
+   868→   868→              </div>
+   869→   869→            </div>
+   870→   870→          </div>
+   871→   871→        </CardContent>
+   872→   872→      </Card>
+   873→   873→
+   874→   874→      <JournalEntriesDialog
+   875→   875→        isOpen={dialogOpen}
+   876→   876→        onClose={() => setDialogOpen(false)}
+   877→   877→        lineItem={selectedLineItem}
+   878→   878→        accountKey={selectedAccountKey}
+   879→   879→      />
+   880→   880→    </>
+   881→   881→  );
+   882→   882→}
+   883→   883→

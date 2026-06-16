@@ -182,7 +182,7 @@ function computeRunningBalance(entries: AutoJournalEntry[]): { entry: AutoJourna
   });
 }
 
-// ─── Journal Entries Dialog Component (Professional Design) ──────────────────
+// ─── Journal Entries Dialog Component (Modern Design) ──────────────────
 function JournalEntriesDialog({
   isOpen,
   onClose,
@@ -198,7 +198,6 @@ function JournalEntriesDialog({
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
   const allLineItems = useMemo(() => getAllLineItems(companies), [companies]);
 
-  // Auto-generate journal entries from P&L data
   const allAutoEntries = useMemo(() => {
     const filtered = companies.filter(
       (c) => selectedCompanyNames.includes(c.companyName) && selectedPeriods.includes(c.period)
@@ -206,7 +205,6 @@ function JournalEntriesDialog({
     return generateAutoJournalEntries(filtered, allLineItems);
   }, [companies, allLineItems, selectedCompanyNames, selectedPeriods]);
 
-  // Filter for this specific account
   const accountEntries = useMemo(() => {
     if (!accountKey) return [];
     return allAutoEntries
@@ -214,7 +212,6 @@ function JournalEntriesDialog({
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [allAutoEntries, accountKey]);
 
-  // Group by company
   const companiesWithEntries = useMemo(() => {
     const companyMap = new Map<string, AutoJournalEntry[]>();
     accountEntries.forEach((e) => {
@@ -225,14 +222,12 @@ function JournalEntriesDialog({
     return Array.from(companyMap.entries());
   }, [accountEntries]);
 
-  // Auto-select first company
   React.useEffect(() => {
     if (!selectedCompany && companiesWithEntries.length > 0) {
       setSelectedCompany(companiesWithEntries[0][0]);
     }
   }, [companiesWithEntries, selectedCompany]);
 
-  // Selected company entries
   const selectedEntries = useMemo(() => {
     if (!selectedCompany) return [];
     return accountEntries.filter((e) => e.companyName === selectedCompany);
@@ -245,37 +240,21 @@ function JournalEntriesDialog({
   const netBalance = totalDebit - totalCredit;
   const currency = selectedEntries[0]?.currency || 'SAR';
 
-  // Export to Excel
   const exportToExcel = async () => {
     if (selectedEntries.length === 0) return;
     const XLSX = await import('xlsx');
     const wb = XLSX.utils.book_new();
-
     const header = ['التاريخ', 'رقم القيد', 'البيان', 'مدين', 'دائن', 'الرصيد', 'م/د', 'المرجع'];
     const rows = withBalance.map(({ entry, runningBalance }) => [
-      entry.date,
-      entry.entryNumber,
-      entry.description,
-      entry.debit || '',
-      entry.credit || '',
+      entry.date, entry.entryNumber, entry.description,
+      entry.debit || '', entry.credit || '',
       Math.abs(runningBalance),
       runningBalance > 0 ? 'مدين' : runningBalance < 0 ? 'دائن' : '',
       entry.reference,
     ]);
-
-    rows.push([
-      'الإجمالي', '', '',
-      totalDebit, totalCredit,
-      Math.abs(netBalance),
-      netBalance > 0 ? 'مدين' : netBalance < 0 ? 'دائن' : '',
-      '',
-    ]);
-
+    rows.push(['الإجمالي', '', '', totalDebit, totalCredit, Math.abs(netBalance), netBalance > 0 ? 'مدين' : netBalance < 0 ? 'دائن' : '', '']);
     const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
-    ws['!cols'] = [
-      { wch: 14 }, { wch: 16 }, { wch: 45 },
-      { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 8 }, { wch: 18 },
-    ];
+    ws['!cols'] = [{ wch: 14 }, { wch: 16 }, { wch: 45 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 8 }, { wch: 18 }];
     XLSX.utils.book_append_sheet(wb, ws, (lineItem?.nameAr || 'Ledger').substring(0, 31));
     XLSX.writeFile(wb, `قيود_${lineItem?.nameAr?.replace(/\s+/g, '_') || 'account'}.xlsx`);
   };
@@ -283,131 +262,162 @@ function JournalEntriesDialog({
   if (!lineItem || !accountKey) return null;
 
   const isExpense = lineItem.category === 'expense';
-  const isRevenue = lineItem.category === 'revenue';
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-5xl max-h-[90vh] p-0 gap-0 overflow-hidden" dir="rtl">
-        {/* ─── Header Banner ─────────────────────────────────── */}
-        <div className={`px-6 py-5 ${
-          isExpense
-            ? 'bg-gradient-to-l from-red-600 via-red-500 to-rose-500'
-            : 'bg-gradient-to-l from-emerald-600 via-emerald-500 to-teal-500'
-        }`}>
-          <div className="flex items-start justify-between">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
+      <DialogContent className="max-w-5xl max-h-[90vh] p-0 gap-0 overflow-hidden rounded-3xl border-0 shadow-2xl" dir="rtl" showCloseButton={false}>
+        {/* ─── Modern Glassmorphic Header ──────────────────────── */}
+        <div className="relative overflow-hidden px-7 py-6">
+          {/* Gradient Background */}
+          <div className={`absolute inset-0 ${
+            isExpense
+              ? 'bg-gradient-to-bl from-red-600 via-rose-500 to-pink-600'
+              : 'bg-gradient-to-bl from-emerald-600 via-teal-500 to-cyan-600'
+          }`} />
+          {/* Decorative Circles */}
+          <div className="absolute -top-8 -left-8 h-32 w-32 rounded-full bg-white/5 blur-xl" />
+          <div className="absolute -bottom-10 -right-10 h-40 w-40 rounded-full bg-white/5 blur-2xl" />
+          <div className="absolute top-1/2 left-1/3 h-20 w-20 rounded-full bg-white/3 blur-lg" />
+
+          <div className="relative flex items-start justify-between">
+            <div className="flex items-start gap-4">
+              <div className="mt-0.5 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 backdrop-blur-md border border-white/10 shadow-lg">
                 {isExpense ? (
-                  <ArrowUpRight className="h-5 w-5 text-white" />
+                  <ArrowUpRight className="h-6 w-6 text-white" />
                 ) : (
-                  <ArrowDownRight className="h-5 w-5 text-white" />
+                  <ArrowDownRight className="h-6 w-6 text-white" />
                 )}
               </div>
               <div>
-                <h2 className="text-lg font-bold text-white leading-tight">
+                <h2 className="text-xl font-bold text-white leading-tight tracking-tight">
                   {isExpense ? 'قيود حساب مصروف' : 'قيود حساب إيراد'}
                 </h2>
-                <p className="text-white/80 text-sm mt-0.5">
-                  {lineItem.nameAr} — {lineItem.name}
+                <p className="text-white/70 text-sm mt-1 font-medium">
+                  {lineItem.nameAr} <span className="text-white/40">—</span> <span className="text-white/50">{lineItem.name}</span>
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Badge className="bg-white/20 text-white border-0 backdrop-blur-sm text-xs px-2.5 py-1">
+              <Badge className="bg-white/12 text-white border border-white/10 backdrop-blur-sm text-[11px] px-3 py-1 rounded-full">
                 <Sparkles className="h-3 w-3 ml-1" />
                 محسوب تلقائياً
               </Badge>
-              <Badge className="bg-white/20 text-white border-0 backdrop-blur-sm text-xs px-2.5 py-1">
+              <Badge className="bg-white/12 text-white border border-white/10 backdrop-blur-sm text-[11px] px-3 py-1 rounded-full">
                 {accountEntries.length} قيد
               </Badge>
+              <button
+                onClick={onClose}
+                className="mr-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/10 text-white/70 hover:text-white transition-all"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
           </div>
         </div>
 
-        <div className="overflow-y-auto max-h-[calc(90vh-180px)]">
+        <div className="overflow-y-auto max-h-[calc(90vh-130px)] bg-background">
           {/* ─── Company Selector ──────────────────────────────── */}
           {companiesWithEntries.length > 1 && (
-            <div className="px-6 pt-4 pb-2">
+            <div className="px-7 pt-5 pb-3">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                <span className="text-[11px] font-semibold text-muted-foreground/60 uppercase tracking-wider flex items-center gap-1.5">
                   <Building2 className="h-3.5 w-3.5" />
-                  الشركة:
+                  الشركة
                 </span>
-                {companiesWithEntries.map(([name, entries], idx) => {
-                  const isActive = selectedCompany === name;
-                  const color = COMPANY_COLORS[idx % COMPANY_COLORS.length];
-                  return (
-                    <button
-                      key={name}
-                      onClick={() => setSelectedCompany(name)}
-                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
-                        isActive
-                          ? 'text-white shadow-md scale-105'
-                          : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-                      }`}
-                      style={isActive ? { backgroundColor: color } : undefined}
-                    >
-                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: isActive ? 'white' : color }} />
-                      {name}
-                      <span className={`text-[10px] ${isActive ? 'text-white/70' : 'text-muted-foreground/60'}`}>
-                        ({entries.length})
-                      </span>
-                    </button>
-                  );
-                })}
+                <div className="flex items-center gap-1.5 p-1 rounded-xl bg-muted/20">
+                  {companiesWithEntries.map(([name, entries], idx) => {
+                    const isActive = selectedCompany === name;
+                    const color = COMPANY_COLORS[idx % COMPANY_COLORS.length];
+                    return (
+                      <button
+                        key={name}
+                        onClick={() => setSelectedCompany(name)}
+                        className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
+                          isActive
+                            ? 'text-white shadow-lg scale-[1.02]'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+                        }`}
+                        style={isActive ? { backgroundColor: color } : undefined}
+                      >
+                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: isActive ? 'white' : color }} />
+                        {name}
+                        <span className={`text-[10px] ${isActive ? 'text-white/60' : 'text-muted-foreground/40'}`}>
+                          {entries.length}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
 
-          {/* ─── Summary Cards ─────────────────────────────────── */}
+          {/* ─── Modern Stats ──────────────────────────────────── */}
           {selectedEntries.length > 0 && (
-            <div className="px-6 pt-3 pb-2">
+            <div className="px-7 pt-2 pb-4">
               <div className="grid grid-cols-3 gap-3">
-                {/* Total Debit */}
-                <div className="relative overflow-hidden rounded-xl border border-red-200/60 dark:border-red-900/40 bg-gradient-to-bl from-red-50 to-white dark:from-red-950/30 dark:to-slate-900 p-3.5">
-                  <div className="absolute top-0 left-0 w-1 h-full bg-red-500" />
-                  <div className="flex items-center gap-2 mb-1">
-                    <TrendingUp className="h-3.5 w-3.5 text-red-500" />
-                    <span className="text-[11px] font-medium text-red-600 dark:text-red-400">إجمالي المدين</span>
+                <div className="group relative overflow-hidden rounded-2xl border border-red-500/10 dark:border-red-500/20 bg-gradient-to-br from-red-500/5 via-transparent to-transparent dark:from-red-500/10 p-4 transition-all hover:shadow-lg hover:shadow-red-500/5">
+                  <div className="absolute -top-4 -left-4 h-16 w-16 rounded-full bg-red-500/10 blur-2xl group-hover:bg-red-500/15 transition-colors" />
+                  <div className="relative flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-500/10">
+                        <TrendingUp className="h-3.5 w-3.5 text-red-500" />
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-red-500/70">إجمالي المدين</span>
+                    </div>
                   </div>
-                  <p className="text-lg font-bold text-red-700 dark:text-red-300 tabular-nums">
+                  <p className="relative text-xl font-bold text-red-700 dark:text-red-300 tabular-nums tracking-tight">
                     {formatNumber(totalDebit, currency, false)}
                   </p>
                 </div>
 
-                {/* Total Credit */}
-                <div className="relative overflow-hidden rounded-xl border border-emerald-200/60 dark:border-emerald-900/40 bg-gradient-to-bl from-emerald-50 to-white dark:from-emerald-950/30 dark:to-slate-900 p-3.5">
-                  <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500" />
-                  <div className="flex items-center gap-2 mb-1">
-                    <TrendingDown className="h-3.5 w-3.5 text-emerald-500" />
-                    <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">إجمالي الدائن</span>
+                <div className="group relative overflow-hidden rounded-2xl border border-emerald-500/10 dark:border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 via-transparent to-transparent dark:from-emerald-500/10 p-4 transition-all hover:shadow-lg hover:shadow-emerald-500/5">
+                  <div className="absolute -top-4 -left-4 h-16 w-16 rounded-full bg-emerald-500/10 blur-2xl group-hover:bg-emerald-500/15 transition-colors" />
+                  <div className="relative flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10">
+                        <TrendingDown className="h-3.5 w-3.5 text-emerald-500" />
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-500/70">إجمالي الدائن</span>
+                    </div>
                   </div>
-                  <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">
+                  <p className="relative text-xl font-bold text-emerald-700 dark:text-emerald-300 tabular-nums tracking-tight">
                     {formatNumber(totalCredit, currency, false)}
                   </p>
                 </div>
 
-                {/* Net Balance */}
-                <div className={`relative overflow-hidden rounded-xl border p-3.5 ${
+                <div className={`group relative overflow-hidden rounded-2xl border p-4 transition-all hover:shadow-lg ${
                   isExpense
-                    ? 'border-amber-200/60 dark:border-amber-900/40 bg-gradient-to-bl from-amber-50 to-white dark:from-amber-950/30 dark:to-slate-900'
-                    : 'border-blue-200/60 dark:border-blue-900/40 bg-gradient-to-bl from-blue-50 to-white dark:from-blue-950/30 dark:to-slate-900'
+                    ? 'border-violet-500/10 dark:border-violet-500/20 bg-gradient-to-br from-violet-500/5 via-transparent to-transparent dark:from-violet-500/10 hover:shadow-violet-500/5'
+                    : 'border-sky-500/10 dark:border-sky-500/20 bg-gradient-to-br from-sky-500/5 via-transparent to-transparent dark:from-sky-500/10 hover:shadow-sky-500/5'
                 }`}>
-                  <div className={`absolute top-0 left-0 w-1 h-full ${isExpense ? 'bg-amber-500' : 'bg-blue-500'}`} />
-                  <div className="flex items-center gap-2 mb-1">
-                    <BarChart3 className={`h-3.5 w-3.5 ${isExpense ? 'text-amber-500' : 'text-blue-500'}`} />
-                    <span className={`text-[11px] font-medium ${isExpense ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400'}`}>
-                      صافي الرصيد
-                    </span>
-                    <Badge className={`text-[9px] h-4 px-1.5 ${
+                  <div className={`absolute -top-4 -left-4 h-16 w-16 rounded-full blur-2xl transition-colors ${
+                    isExpense ? 'bg-violet-500/10 group-hover:bg-violet-500/15' : 'bg-sky-500/10 group-hover:bg-sky-500/15'
+                  }`} />
+                  <div className="relative flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${
+                        isExpense ? 'bg-violet-500/10' : 'bg-sky-500/10'
+                      }`}>
+                        <BarChart3 className={`h-3.5 w-3.5 ${isExpense ? 'text-violet-500' : 'text-sky-500'}`} />
+                      </div>
+                      <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                        isExpense ? 'text-violet-500/70' : 'text-sky-500/70'
+                      }`}>صافي الرصيد</span>
+                    </div>
+                    <Badge className={`text-[9px] h-5 px-2 border-0 rounded-full ${
                       isExpense
-                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 border-0'
-                        : 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300 border-0'
+                        ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300'
+                        : 'bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300'
                     }`}>
                       {isExpense ? 'مدين' : 'دائن'}
                     </Badge>
                   </div>
-                  <p className={`text-lg font-bold tabular-nums ${isExpense ? 'text-amber-700 dark:text-amber-300' : 'text-blue-700 dark:text-blue-300'}`}>
+                  <p className={`relative text-xl font-bold tabular-nums tracking-tight ${
+                    isExpense ? 'text-violet-700 dark:text-violet-300' : 'text-sky-700 dark:text-sky-300'
+                  }`}>
                     {formatNumber(Math.abs(netBalance), currency, false)}
                   </p>
                 </div>
@@ -415,126 +425,120 @@ function JournalEntriesDialog({
             </div>
           )}
 
-          {/* ─── Export Button ──────────────────────────────────── */}
+          {/* ─── Export ──────────────────────────────────────────── */}
           {selectedEntries.length > 0 && (
-            <div className="px-6 pt-1 pb-2 flex justify-end">
+            <div className="px-7 pb-3 flex justify-end">
               <Button
                 variant="outline"
                 size="sm"
-                className="gap-1.5 text-xs h-7 rounded-lg"
+                className="gap-1.5 text-xs h-8 rounded-xl border-dashed hover:border-solid transition-all"
                 onClick={exportToExcel}
               >
                 <Download className="h-3.5 w-3.5" />
-                تصدير القيود Excel
+                تصدير القيود
               </Button>
             </div>
           )}
 
-          {/* ─── Journal Entries Table ──────────────────────────── */}
+          {/* ─── Journal Entries Timeline ───────────────────────── */}
           {withBalance.length > 0 && (
-            <div className="px-6 pb-6">
-              <div className="overflow-x-auto rounded-xl border shadow-sm">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50 dark:bg-slate-800/50">
-                      <TableHead className="text-[11px] font-bold min-w-[85px] text-slate-600 dark:text-slate-300">
-                        <Calendar className="h-3 w-3 inline ml-1" />
-                        التاريخ
-                      </TableHead>
-                      <TableHead className="text-[11px] font-bold min-w-[90px] text-slate-600 dark:text-slate-300">رقم القيد</TableHead>
-                      <TableHead className="text-[11px] font-bold min-w-[220px] text-slate-600 dark:text-slate-300">
-                        <FileText className="h-3 w-3 inline ml-1" />
-                        البيان
-                      </TableHead>
-                      <TableHead className="text-center text-[11px] font-bold min-w-[110px] bg-red-50/80 dark:bg-red-950/20 text-red-700 dark:text-red-300">
-                        مدين
-                      </TableHead>
-                      <TableHead className="text-center text-[11px] font-bold min-w-[110px] bg-emerald-50/80 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300">
-                        دائن
-                      </TableHead>
-                      <TableHead className="text-center text-[11px] font-bold min-w-[120px] bg-amber-50/80 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300">
-                        الرصيد
-                      </TableHead>
-                      <TableHead className="text-[11px] font-bold min-w-[110px] text-slate-600 dark:text-slate-300">المرجع</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {withBalance.map(({ entry, runningBalance }, idx) => {
-                      const isLast = idx === withBalance.length - 1;
-                      return (
-                        <TableRow
-                          key={entry.id}
-                          className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors ${
-                            idx % 2 !== 0 ? 'bg-slate-25 dark:bg-slate-900/20' : ''
-                          }`}
-                        >
-                          <TableCell className="text-xs tabular-nums font-medium text-slate-700 dark:text-slate-300">
-                            {entry.date ? new Date(entry.date).toLocaleDateString('ar-SA', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}
-                          </TableCell>
-                          <TableCell className="text-xs font-mono text-slate-500 dark:text-slate-400">
-                            {entry.entryNumber}
-                          </TableCell>
-                          <TableCell className="text-xs text-slate-700 dark:text-slate-300">
-                            {entry.description}
-                          </TableCell>
-                          <TableCell className="text-center tabular-nums text-xs bg-red-50/30 dark:bg-red-950/10">
-                            {entry.debit > 0 ? (
-                              <span className="font-semibold text-red-600 dark:text-red-400">{formatNumber(entry.debit, currency, false)}</span>
-                            ) : <span className="text-slate-300 dark:text-slate-600">—</span>}
-                          </TableCell>
-                          <TableCell className="text-center tabular-nums text-xs bg-emerald-50/30 dark:bg-emerald-950/10">
-                            {entry.credit > 0 ? (
-                              <span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatNumber(entry.credit, currency, false)}</span>
-                            ) : <span className="text-slate-300 dark:text-slate-600">—</span>}
-                          </TableCell>
-                          <TableCell className="text-center tabular-nums text-xs bg-amber-50/30 dark:bg-amber-950/10">
-                            <span className={`font-bold ${
-                              runningBalance > 0 ? 'text-amber-600 dark:text-amber-400' : runningBalance < 0 ? 'text-blue-600 dark:text-blue-400' : ''
-                            }`}>
-                              {formatCompact(Math.abs(runningBalance))}
-                              <span className="text-[9px] mr-0.5 opacity-70">
-                                {runningBalance > 0 ? 'م' : runningBalance < 0 ? 'د' : ''}
-                              </span>
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
-                            {entry.reference}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+            <div className="px-7 pb-7">
+              <div className="rounded-2xl border border-border/50 dark:border-border/30 overflow-hidden">
+                {/* Table Header */}
+                <div className="bg-muted/20 dark:bg-muted/10 border-b border-border/30">
+                  <div className="grid grid-cols-[100px_110px_1fr_110px_110px_120px_110px] gap-0 px-5 py-3">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">التاريخ</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">رقم القيد</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">البيان</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-red-500/50 text-center">مدين</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500/50 text-center">دائن</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-amber-500/50 text-center">الرصيد</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">المرجع</span>
+                  </div>
+                </div>
 
-                    {/* ─── Totals Row ─────────────────────────────── */}
-                    <TableRow className="bg-slate-100/80 dark:bg-slate-800/60 border-t-2 border-slate-300 dark:border-slate-600">
-                      <TableCell colSpan={3} className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                        الإجمالي
-                      </TableCell>
-                      <TableCell className="text-center tabular-nums text-xs font-bold text-red-600 dark:text-red-400 bg-red-50/40 dark:bg-red-950/15">
-                        {formatNumber(totalDebit, currency, false)}
-                      </TableCell>
-                      <TableCell className="text-center tabular-nums text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50/40 dark:bg-emerald-950/15">
-                        {formatNumber(totalCredit, currency, false)}
-                      </TableCell>
-                      <TableCell className="text-center tabular-nums text-xs font-bold bg-amber-50/40 dark:bg-amber-950/15">
-                        <span className={netBalance > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-blue-600 dark:text-blue-400'}>
-                          {formatNumber(Math.abs(netBalance), currency, false)}
-                          <span className="text-[9px] mr-0.5 opacity-70">
-                            {netBalance > 0 ? ' مدين' : netBalance < 0 ? ' دائن' : ''}
-                          </span>
+                {/* Rows */}
+                <div className="divide-y divide-border/20">
+                  {withBalance.map(({ entry, runningBalance }, idx) => (
+                    <div
+                      key={entry.id}
+                      className={`group grid grid-cols-[100px_110px_1fr_110px_110px_120px_110px] gap-0 px-5 py-3.5 items-center transition-colors hover:bg-muted/15 ${
+                        idx % 2 !== 0 ? 'bg-muted/[0.03]' : ''
+                      }`}
+                    >
+                      {/* Date */}
+                      <div className="flex items-center gap-2">
+                        <div className={`h-2 w-2 rounded-full ring-2 ring-background shrink-0 ${
+                          entry.debit > 0 ? 'bg-red-400' : 'bg-emerald-400'
+                        }`} />
+                        <span className="text-xs tabular-nums font-medium text-foreground/80">
+                          {entry.date ? new Date(entry.date).toLocaleDateString('ar-SA', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}
                         </span>
-                      </TableCell>
-                      <TableCell />
-                    </TableRow>
-                  </TableBody>
-                </Table>
+                      </div>
+
+                      {/* Entry Number */}
+                      <span className="text-[11px] font-mono text-muted-foreground/60 tracking-tight">{entry.entryNumber}</span>
+
+                      {/* Description */}
+                      <span className="text-xs text-foreground/85 leading-relaxed">{entry.description}</span>
+
+                      {/* Debit */}
+                      <div className="text-center">
+                        {entry.debit > 0 ? (
+                          <span className="inline-flex items-center justify-center rounded-lg bg-red-500/6 dark:bg-red-500/12 px-2 py-0.5 text-xs font-semibold text-red-600 dark:text-red-400 tabular-nums">
+                            {formatNumber(entry.debit, currency, false)}
+                          </span>
+                        ) : <span className="text-muted-foreground/20">—</span>}
+                      </div>
+
+                      {/* Credit */}
+                      <div className="text-center">
+                        {entry.credit > 0 ? (
+                          <span className="inline-flex items-center justify-center rounded-lg bg-emerald-500/6 dark:bg-emerald-500/12 px-2 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                            {formatNumber(entry.credit, currency, false)}
+                          </span>
+                        ) : <span className="text-muted-foreground/20">—</span>}
+                      </div>
+
+                      {/* Running Balance */}
+                      <div className="text-center">
+                        <span className={`text-xs font-bold tabular-nums ${
+                          runningBalance > 0 ? 'text-amber-600 dark:text-amber-400' : runningBalance < 0 ? 'text-sky-600 dark:text-sky-400' : 'text-muted-foreground'
+                        }`}>
+                          {formatCompact(Math.abs(runningBalance))}
+                          <span className="text-[9px] mr-0.5 opacity-50">{runningBalance > 0 ? 'م' : runningBalance < 0 ? 'د' : ''}</span>
+                        </span>
+                      </div>
+
+                      {/* Reference */}
+                      <span className="text-[10px] font-mono text-muted-foreground/40">{entry.reference}</span>
+                    </div>
+                  ))}
+
+                  {/* Totals */}
+                  <div className="grid grid-cols-[100px_110px_1fr_110px_110px_120px_110px] gap-0 px-5 py-4 bg-muted/15 border-t-2 border-border/40">
+                    <span className="col-span-3 text-xs font-bold text-foreground/70">الإجمالي</span>
+                    <div className="text-center">
+                      <span className="text-xs font-bold text-red-600 dark:text-red-400 tabular-nums">{formatNumber(totalDebit, currency, false)}</span>
+                    </div>
+                    <div className="text-center">
+                      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">{formatNumber(totalCredit, currency, false)}</span>
+                    </div>
+                    <div className="text-center">
+                      <span className={`text-xs font-bold tabular-nums ${netBalance > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-sky-600 dark:text-sky-400'}`}>
+                        {formatNumber(Math.abs(netBalance), currency, false)}
+                        <span className="text-[9px] font-normal opacity-50">{netBalance > 0 ? ' مدين' : netBalance < 0 ? ' دائن' : ''}</span>
+                      </span>
+                    </div>
+                    <span />
+                  </div>
+                </div>
               </div>
 
-              {/* ─── Footer Note ──────────────────────────────── */}
-              <div className="mt-3 flex items-center gap-2 text-[10px] text-muted-foreground">
-                <Sparkles className="h-3 w-3 shrink-0 text-amber-500" />
-                <p>
-                  القيود محسوبة تلقائياً من بيانات قائمة الأرباح والخسائر — الحسابات المدينة: المصروفات | الحسابات الدائنة: الإيرادات
-                </p>
+              {/* Footer */}
+              <div className="mt-4 flex items-center gap-2 text-[10px] text-muted-foreground/50">
+                <Sparkles className="h-3 w-3 shrink-0 text-violet-500/60" />
+                القيود محسوبة تلقائياً من بيانات قائمة الأرباح والخسائر — الحسابات المدينة: المصروفات | الحسابات الدائنة: الإيرادات
               </div>
             </div>
           )}
@@ -617,7 +621,7 @@ export function PnLTable() {
         {item.description && <InfoTooltip text={item.description} side="left" />}
         {/* Clickable indicator */}
         {isClickable && (
-          <span className="inline-flex items-center gap-0.5 text-[9px] text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/30 px-1.5 py-0.5 rounded-full"
+          <span className="inline-flex items-center gap-0.5 text-[9px] text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/30 px-1.5 py-0.5 rounded-full ring-1 ring-violet-500/20"
             title="اضغط لعرض القيود المحاسبية">
             <BookOpen className="h-2.5 w-2.5" />
             قيود
@@ -680,14 +684,14 @@ export function PnLTable() {
                         className={`${isSummary ? 'bg-muted/30 font-bold' : ''} ${
                           item.category === 'profit' && !isSummary ? 'bg-emerald-50/30' : ''
                         } ${item.isCustom ? 'bg-blue-50/20' : ''} ${
-                          isClickable ? 'cursor-pointer hover:bg-teal-50/30 dark:hover:bg-teal-950/20' : 'hover:bg-muted/10'
+                          isClickable ? 'cursor-pointer hover:bg-violet-50/30 dark:hover:bg-violet-950/20' : 'hover:bg-muted/10'
                         } transition-colors`}
                         onClick={isClickable ? () => handleRowClick(item) : undefined}
                       >
                         <TableCell className={`font-medium ${isSummary ? 'text-foreground' : 'text-muted-foreground'}`}>
                           {renderLineItemName(item)}
                           {isClickable && (
-                            <ChevronLeft className="h-3 w-3 text-muted-foreground/40 inline mr-1" />
+                            <ChevronLeft className="h-3 w-3 text-violet-500/40 inline mr-1" />
                           )}
                         </TableCell>
                         {aggregated.map((agg) => {
@@ -817,14 +821,14 @@ export function PnLTable() {
                       className={`${isSummary ? 'bg-muted/30 font-bold' : ''} ${
                         item.category === 'profit' && !isSummary ? 'bg-emerald-50/30' : ''
                       } ${item.isCustom ? 'bg-blue-50/20' : ''} ${
-                        isClickable ? 'cursor-pointer hover:bg-teal-50/30 dark:hover:bg-teal-950/20' : 'hover:bg-muted/10'
+                        isClickable ? 'cursor-pointer hover:bg-violet-50/30 dark:hover:bg-violet-950/20' : 'hover:bg-muted/10'
                       } transition-colors`}
                       onClick={isClickable ? () => handleRowClick(item) : undefined}
                     >
                       <TableCell className={`font-medium ${isSummary ? 'text-foreground' : 'text-muted-foreground'}`}>
                         {renderLineItemName(item)}
                         {isClickable && (
-                          <ChevronLeft className="h-3 w-3 text-muted-foreground/40 inline mr-1" />
+                          <ChevronLeft className="h-3 w-3 text-violet-500/40 inline mr-1" />
                         )}
                       </TableCell>
                       {periodGroups.map((pg) =>
