@@ -304,19 +304,45 @@ export async function POST(request: Request) {
           const credit = getNum('credit');
           if (debit === 0 && credit === 0) continue;
 
-          // Match account to P&L line item key
+          // Match account to P&L line item key — try exact/key match first, then partial
           let accountKey = '';
+
+          // 1. Exact key match (highest priority)
+          const inputKey = getLineItemKey(accountName);
           for (const item of PNL_LINE_ITEMS) {
-            if (
-              accountName.includes(item.name) ||
-              accountNameAr.includes(item.nameAr) ||
-              accountName.toLowerCase().includes(item.name.toLowerCase()) ||
-              getLineItemKey(accountName) === getLineItemKey(item.name)
-            ) {
-              accountKey = getLineItemKey(item.name);
+            if (getLineItemKey(item.name) === inputKey) {
+              accountKey = inputKey;
               break;
             }
           }
+
+          // 2. Exact string match
+          if (!accountKey) {
+            for (const item of PNL_LINE_ITEMS) {
+              if (accountName === item.name || accountNameAr === item.nameAr) {
+                accountKey = getLineItemKey(item.name);
+                break;
+              }
+            }
+          }
+
+          // 3. Partial match — sort by name length descending (most specific first)
+          if (!accountKey) {
+            const sortedItems = [...PNL_LINE_ITEMS].sort(
+              (a, b) => b.name.length - a.name.length
+            );
+            for (const item of sortedItems) {
+              if (
+                accountName.includes(item.name) ||
+                accountNameAr.includes(item.nameAr) ||
+                accountName.toLowerCase().includes(item.name.toLowerCase())
+              ) {
+                accountKey = getLineItemKey(item.name);
+                break;
+              }
+            }
+          }
+
           if (!accountKey) {
             accountKey = getLineItemKey(accountName || accountNameAr);
           }

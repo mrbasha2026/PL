@@ -146,3 +146,22 @@ Stage Summary:
 - AI analysis still works identically via direct fetch to Z-AI API
 - Vercel deployment should now succeed without Node.js built-in module issues
 - Environment variables (ZAI_BASE_URL, ZAI_API_KEY, ZAI_CHAT_ID, ZAI_TOKEN, ZAI_USER_ID) still required in Vercel
+---
+Task ID: 5
+Agent: Main Agent
+Task: Make PnLTable rows clickable to show journal entries (القيود المحاسبية)
+
+Work Log:
+- Added JournalEntriesDialog component inside PnLTable.tsx
+- Made expense/revenue rows clickable with visual indicators (cursor pointer, hover effect, chevron icon)
+- Added "قيود" badge indicator on accounts that have journal entries
+- Dialog shows full ledger view with running balance, debit/credit totals, and export to Excel
+- Supports multi-company view with company tabs when entries exist for multiple companies
+- Fixed account matching logic in API route.ts — now uses exact key match first, then exact string match, then partial match sorted by name length (most specific first) to prevent "Sales Revenue" from matching "Revenue"
+- Regenerated sample Excel with 1,101 journal entries across 3 companies and 10 accounts
+
+Stage Summary:
+- Clicking any expense/revenue line item in PnLTable opens a dialog showing its journal entries
+- Account matching is now accurate (sales_revenue vs revenue properly distinguished)
+- Sample data has comprehensive journal entries for testing
+- Build passes successfully

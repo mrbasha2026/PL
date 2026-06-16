@@ -1,0 +1,936 @@
+     1→#!/usr/bin/env python3
+     2→"""Generate PnL_Sample_Data.xlsx with realistic Saudi company financial data.
+     3→Includes 2025 + 2026 data for YoY comparison."""
+     4→
+     5→import openpyxl
+     6→from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+     7→from openpyxl.utils import get_column_letter
+     8→
+     9→wb = openpyxl.Workbook()
+    10→
+    11→# ─── Color & Style Definitions ───────────────────────────────────────────────
+    12→HEADER_FILL = PatternFill(start_color="1B5E20", end_color="1B5E20", fill_type="solid")
+    13→HEADER_FONT = Font(name="Arial", bold=True, color="FFFFFF", size=11)
+    14→YEAR_2025_FILL = PatternFill(start_color="0D47A1", end_color="0D47A1", fill_type="solid")
+    15→YEAR_2025_FONT = Font(name="Arial", bold=True, color="FFFFFF", size=11)
+    16→SUBHEADER_FILL = PatternFill(start_color="E8F5E9", end_color="E8F5E9", fill_type="solid")
+    17→SUBHEADER_FONT = Font(name="Arial", bold=True, color="1B5E20", size=11)
+    18→SECTION_FILL = PatternFill(start_color="C8E6C9", end_color="C8E6C9", fill_type="solid")
+    19→SECTION_FONT = Font(name="Arial", bold=True, color="1B5E20", size=11)
+    20→TOTAL_FILL = PatternFill(start_color="FFF9C4", end_color="FFF9C4", fill_type="solid")
+    21→TOTAL_FONT = Font(name="Arial", bold=True, color="F57F17", size=11)
+    22→PROFIT_FILL = PatternFill(start_color="E8F5E9", end_color="E8F5E9", fill_type="solid")
+    23→PROFIT_FONT = Font(name="Arial", bold=True, color="2E7D32", size=11)
+    24→NET_INCOME_FILL = PatternFill(start_color="A5D6A7", end_color="A5D6A7", fill_type="solid")
+    25→NET_INCOME_FONT = Font(name="Arial", bold=True, color="1B5E20", size=12)
+    26→NORMAL_FONT = Font(name="Arial", size=10)
+    27→INDENT_FONT = Font(name="Arial", size=10, color="424242")
+    28→NUMBER_FMT = '#,##0'
+    29→THIN_BORDER = Border(bottom=Side(style='thin', color='E0E0E0'))
+    30→BOTTOM_BORDER = Border(bottom=Side(style='medium', color='1B5E20'))
+    31→
+    32→# ─── Line Items Definition (matching pnl-types.ts) ───────────────────────────
+    33→# (nameEn, nameAr, indent, isSection, isTotal, isProfit)
+    34→LINE_ITEMS = [
+    35→    # REVENUE
+    36→    ("Revenue", "الإيرادات", 0, False, True, False),
+    37→    ("Sales Revenue", "إيرادات المبيعات", 1, False, False, False),
+    38→    ("Service Revenue", "إيرادات الخدمات", 1, False, False, False),
+    39→    ("Other Revenue", "إيرادات أخرى", 1, False, False, False),
+    40→    # COST OF SALES
+    41→    ("Cost of Goods Sold", "تكلفة البضاعة المباعة", 1, True, False, False),
+    42→    ("Raw Materials", "المواد الخام", 2, False, False, False),
+    43→    ("Direct Labor", "العمالة المباشرة", 2, False, False, False),
+    44→    ("Manufacturing Overhead", "مصروفات التصنيع غير المباشرة", 2, False, False, False),
+    45→    ("Purchases", "المشتريات", 2, False, False, False),
+    46→    # GROSS PROFIT
+    47→    ("Gross Profit", "إجمالي الربح", 0, False, False, True),
+    48→    # OPERATING EXPENSES
+    49→    ("Operating Expenses", "المصروفات التشغيلية", 0, True, True, False),
+    50→    # Selling & Marketing
+    51→    ("Selling Expenses", "مصروفات البيع والتسويق", 1, True, False, False),
+    52→    ("Sales Commissions", "عمولات المبيعات", 2, False, False, False),
+    53→    ("Advertising", "الإعلان والترويج", 2, False, False, False),
+    54→    ("Marketing Expenses", "مصروفات التسويق", 2, False, False, False),
+    55→    ("Delivery & Shipping", "التوصيل والشحن", 2, False, False, False),
+    56→    ("Customer Service", "خدمة العملاء", 2, False, False, False),
+    57→    # G&A
+    58→    ("General & Administrative", "المصروفات الإدارية والعمومية", 1, True, False, False),
+    59→    ("Salaries & Wages", "الرواتب والأجور", 2, False, False, False),
+    60→    ("Employee Benefits", "بدلات ومزايا الموظفين", 2, False, False, False),
+    61→    ("GOSI Contributions", "اشتراكات التأمينات الاجتماعية (GOSI)", 2, False, False, False),
+    62→    ("Rent Expense", "الإيجارات", 2, False, False, False),
+    63→    ("Utilities", "المرافق (كهرباء وماء وغاز)", 2, False, False, False),
+    64→    ("Telecommunications", "الاتصالات والإنترنت", 2, False, False, False),
+    65→    ("Office Supplies", "القرطاسية واللوازم المكتبية", 2, False, False, False),
+    66→    ("Professional Fees", "الأتعاب المهنية", 2, False, False, False),
+    67→    ("Travel & Entertainment", "السفر والضيافة", 2, False, False, False),
+    68→    ("Insurance Expense", "التأمين", 2, False, False, False),
+    69→    ("Maintenance & Repairs", "الصيانة والإصلاحات", 2, False, False, False),
+    70→    ("Licenses & Permits", "التراخيص والرسوم الحكومية", 2, False, False, False),
+    71→    ("Subscriptions & Software", "الاشتراكات والبرمجيات", 2, False, False, False),
+    72→    ("Bad Debts", "الديون المعدومة", 2, False, False, False),
+    73→    ("Miscellaneous Expenses", "مصروفات متنوعة", 2, False, False, False),
+    74→    # Depreciation
+    75→    ("Depreciation & Amortization", "الإهلاك والاستنفاد", 1, True, False, False),
+    76→    ("Depreciation of Buildings", "إهلاك المباني", 2, False, False, False),
+    77→    ("Depreciation of Equipment", "إهلاك المعدات والأجهزة", 2, False, False, False),
+    78→    ("Depreciation of Vehicles", "إهلاك السيارات", 2, False, False, False),
+    79→    ("Amortization of Intangibles", "استنفاد الأصول غير الملموسة", 2, False, False, False),
+    80→    # OPERATING INCOME
+    81→    ("Operating Income (EBIT)", "الدخل التشغيلي", 0, False, False, True),
+    82→    # NON-OPERATING
+    83→    ("Interest Income", "إيرادات الاستثمارات", 1, False, False, False),
+    84→    ("Finance Cost", "تكلفة التمويل", 1, False, False, False),
+    85→    ("Other Income", "إيرادات أخرى", 1, False, False, False),
+    86→    ("Other Expenses", "مصروفات أخرى", 1, False, False, False),
+    87→    # INCOME BEFORE ZAKAT
+    88→    ("Income Before Zakat", "الدخل قبل الزكاة", 0, False, False, True),
+    89→    # ZAKAT
+    90→    ("Zakat Expense", "مصروف الزكاة", 1, False, False, False),
+    91→    # NET INCOME
+    92→    ("Net Income", "صافي الدخل", 0, False, True, True),
+    93→]
+    94→
+    95→# 12 months: Jan-Jun 2025 + Jan-Jun 2026
+    96→PERIODS = [
+    97→    "Jan 2025", "Feb 2025", "Mar 2025", "Apr 2025", "May 2025", "Jun 2025",
+    98→    "Jan 2026", "Feb 2026", "Mar 2026", "Apr 2026", "May 2026", "Jun 2026",
+    99→]
+   100→
+   101→# ─── Helper: scale a list by a factor ────────────────────────────────────────
+   102→def scale(vals, factor):
+   103→    return [round(v * factor) for v in vals]
+   104→
+   105→# ─── 2026 data (same as before) ──────────────────────────────────────────────
+   106→# Company 1: شركة النخبة التجارية — Trading, ~8M/month in 2026
+   107→nukhba_2026 = {
+   108→    "Revenue":                          [7200000, 7500000, 7800000, 8100000, 8500000, 8900000],
+   109→    "Sales Revenue":                    [6500000, 6800000, 7000000, 7300000, 7700000, 8000000],
+   110→    "Service Revenue":                  [500000, 520000, 550000, 570000, 550000, 600000],
+   111→    "Other Revenue":                    [200000, 180000, 250000, 230000, 250000, 300000],
+   112→    "Cost of Goods Sold":               [3960000, 4125000, 4290000, 4455000, 4675000, 4895000],
+   113→    "Raw Materials":                    [2160000, 2250000, 2340000, 2430000, 2550000, 2670000],
+   114→    "Direct Labor":                     [900000, 937500, 975000, 1012500, 1062500, 1113750],
+   115→    "Manufacturing Overhead":           [540000, 562500, 585000, 607500, 637500, 668250],
+   116→    "Purchases":                        [360000, 375000, 390000, 405000, 425000, 443000],
+   117→    "Gross Profit":                     [3240000, 3375000, 3510000, 3645000, 3825000, 4005000],
+   118→    "Operating Expenses":               [2520000, 2625000, 2730000, 2835000, 2975000, 3115000],
+   119→    "Selling Expenses":                 [720000, 750000, 780000, 810000, 850000, 890000],
+   120→    "Sales Commissions":                [195000, 204000, 210000, 219000, 231000, 240000],
+   121→    "Advertising":                      [144000, 150000, 156000, 162000, 170000, 178000],
+   122→    "Marketing Expenses":               [216000, 225000, 234000, 243000, 255000, 267000],
+   123→    "Delivery & Shipping":              [108000, 112500, 117000, 121500, 127500, 133500],
+   124→    "Customer Service":                 [57000, 58500, 63000, 64500, 66500, 71500],
+   125→    "General & Administrative":         [1296000, 1350000, 1404000, 1458000, 1530000, 1602000],
+   126→    "Salaries & Wages":                 [540000, 540000, 540000, 567000, 567000, 567000],
+   127→    "Employee Benefits":                [162000, 162000, 162000, 170100, 170100, 170100],
+   128→    "GOSI Contributions":               [75600, 75600, 75600, 79380, 79380, 79380],
+   129→    "Rent Expense":                     [120000, 120000, 120000, 120000, 120000, 120000],
+   130→    "Utilities":                        [45000, 42000, 40000, 48000, 54000, 58000],
+   131→    "Telecommunications":               [18000, 18000, 18000, 18000, 18000, 18000],
+   132→    "Office Supplies":                  [12000, 11500, 10000, 13000, 12500, 11000],
+   133→    "Professional Fees":                [60000, 55000, 75000, 50000, 65000, 80000],
+   134→    "Travel & Entertainment":           [35000, 30000, 28000, 45000, 50000, 65000],
+   135→    "Insurance Expense":                [24000, 24000, 24000, 24000, 24000, 24000],
+   136→    "Maintenance & Repairs":            [30000, 35000, 25000, 40000, 32000, 38000],
+   137→    "Licenses & Permits":               [15000, 10000, 8000, 12000, 9000, 8000],
+   138→    "Subscriptions & Software":         [36000, 36000, 36000, 36000, 36000, 36000],
+   139→    "Bad Debts":                        [45000, 48000, 52000, 50000, 55000, 60000],
+   140→    "Miscellaneous Expenses":           [77400, 80900, 84400, 83520, 88020, 93520],
+   141→    "Depreciation & Amortization":      [360000, 360000, 360000, 360000, 375000, 375000],
+   142→    "Depreciation of Buildings":        [80000, 80000, 80000, 80000, 80000, 80000],
+   143→    "Depreciation of Equipment":        [180000, 180000, 180000, 180000, 180000, 180000],
+   144→    "Depreciation of Vehicles":         [60000, 60000, 60000, 60000, 75000, 75000],
+   145→    "Amortization of Intangibles":      [40000, 40000, 40000, 40000, 40000, 40000],
+   146→    "Operating Income (EBIT)":          [720000, 750000, 780000, 810000, 850000, 890000],
+   147→    "Interest Income":                  [45000, 42000, 48000, 50000, 55000, 52000],
+   148→    "Finance Cost":                     [120000, 115000, 110000, 105000, 100000, 95000],
+   149→    "Other Income":                     [30000, 25000, 35000, 40000, 28000, 45000],
+   150→    "Other Expenses":                   [15000, 18000, 12000, 20000, 15000, 10000],
+   151→    "Income Before Zakat":              [660000, 684000, 741000, 775000, 818000, 882000],
+   152→    "Zakat Expense":                    [16500, 17100, 18525, 19375, 20450, 22050],
+   153→    "Net Income":                       [643500, 666900, 722475, 755625, 797550, 859950],
+   154→}
+   155→
+   156→# Company 2: شركة الأفق للخدمات — Services, ~4.5M/month in 2026
+   157→ufuq_2026 = {
+   158→    "Revenue":                          [4200000, 4350000, 4500000, 4650000, 4800000, 4950000],
+   159→    "Sales Revenue":                    [1200000, 1250000, 1300000, 1350000, 1400000, 1450000],
+   160→    "Service Revenue":                  [2800000, 2900000, 3000000, 3100000, 3200000, 3300000],
+   161→    "Other Revenue":                    [200000, 200000, 200000, 200000, 200000, 200000],
+   162→    "Cost of Goods Sold":               [1680000, 1740000, 1800000, 1860000, 1920000, 1980000],
+   163→    "Raw Materials":                    [420000, 435000, 450000, 465000, 480000, 495000],
+   164→    "Direct Labor":                     [630000, 652500, 675000, 697500, 720000, 742500],
+   165→    "Manufacturing Overhead":           [336000, 348000, 360000, 372000, 384000, 396000],
+   166→    "Purchases":                        [294000, 304500, 315000, 325500, 336000, 346500],
+   167→    "Gross Profit":                     [2520000, 2610000, 2700000, 2790000, 2880000, 2970000],
+   168→    "Operating Expenses":               [1890000, 1957500, 2025000, 2092500, 2160000, 2227500],
+   169→    "Selling Expenses":                 [378000, 391500, 405000, 418500, 432000, 445500],
+   170→    "Sales Commissions":                [126000, 130500, 135000, 139500, 144000, 148500],
+   171→    "Advertising":                      [75600, 78300, 81000, 83700, 86400, 89100],
+   172→    "Marketing Expenses":               [88200, 91350, 94500, 97650, 100800, 103950],
+   173→    "Delivery & Shipping":              [50400, 52200, 54000, 55800, 57600, 59400],
+   174→    "Customer Service":                 [37800, 39150, 40500, 41850, 43200, 44550],
+   175→    "General & Administrative":         [1134000, 1174500, 1215000, 1255500, 1296000, 1336500],
+   176→    "Salaries & Wages":                 [540000, 540000, 540000, 567000, 567000, 567000],
+   177→    "Employee Benefits":                [135000, 135000, 135000, 141750, 141750, 141750],
+   178→    "GOSI Contributions":               [67500, 67500, 67500, 70875, 70875, 70875],
+   179→    "Rent Expense":                     [90000, 90000, 90000, 90000, 90000, 90000],
+   180→    "Utilities":                        [32000, 30000, 28000, 35000, 38000, 42000],
+   181→    "Telecommunications":               [15000, 15000, 15000, 15000, 15000, 15000],
+   182→    "Office Supplies":                  [8000, 7500, 7000, 8500, 8000, 7500],
+   183→    "Professional Fees":                [45000, 50000, 40000, 55000, 60000, 45000],
+   184→    "Travel & Entertainment":           [28000, 25000, 22000, 35000, 40000, 50000],
+   185→    "Insurance Expense":                [18000, 18000, 18000, 18000, 18000, 18000],
+   186→    "Maintenance & Repairs":            [20000, 25000, 18000, 30000, 22000, 28000],
+   187→    "Licenses & Permits":               [10000, 8000, 6000, 10000, 7000, 5000],
+   188→    "Subscriptions & Software":         [60000, 60000, 60000, 60000, 60000, 60000],
+   189→    "Bad Debts":                        [28000, 30000, 35000, 32000, 38000, 40000],
+   190→    "Miscellaneous Expenses":           [51500, 52500, 54000, 53875, 55375, 58375],
+   191→    "Depreciation & Amortization":      [252000, 252000, 252000, 252000, 252000, 252000],
+   192→    "Depreciation of Buildings":        [50000, 50000, 50000, 50000, 50000, 50000],
+   193→    "Depreciation of Equipment":        [120000, 120000, 120000, 120000, 120000, 120000],
+   194→    "Depreciation of Vehicles":         [45000, 45000, 45000, 45000, 45000, 45000],
+   195→    "Amortization of Intangibles":      [37000, 37000, 37000, 37000, 37000, 37000],
+   196→    "Operating Income (EBIT)":          [630000, 652500, 675000, 697500, 720000, 742500],
+   197→    "Interest Income":                  [25000, 23000, 27000, 28000, 30000, 29000],
+   198→    "Finance Cost":                     [80000, 78000, 75000, 72000, 70000, 68000],
+   199→    "Other Income":                     [15000, 18000, 12000, 20000, 16000, 22000],
+   200→    "Other Expenses":                   [10000, 12000, 8000, 14000, 10000, 8000],
+   201→    "Income Before Zakat":              [580000, 603500, 631000, 659500, 686000, 717500],
+   202→    "Zakat Expense":                    [14500, 15088, 15775, 16488, 17150, 17938],
+   203→    "Net Income":                       [565500, 588413, 615225, 643013, 668850, 699563],
+   204→}
+   205→
+   206→# Company 3: شركة البناء الحديث — Construction, ~12M/month in 2026
+   207→bina_2026 = {
+   208→    "Revenue":                          [11500000, 12000000, 11800000, 12500000, 13000000, 13500000],
+   209→    "Sales Revenue":                    [10500000, 11000000, 10800000, 11500000, 12000000, 12500000],
+   210→    "Service Revenue":                  [800000, 800000, 800000, 800000, 800000, 800000],
+   211→    "Other Revenue":                    [200000, 200000, 200000, 200000, 200000, 200000],
+   212→    "Cost of Goods Sold":               [6900000, 7200000, 7080000, 7500000, 7800000, 8100000],
+   213→    "Raw Materials":                    [4600000, 4800000, 4720000, 5000000, 5200000, 5400000],
+   214→    "Direct Labor":                     [1380000, 1440000, 1416000, 1500000, 1560000, 1620000],
+   215→    "Manufacturing Overhead":           [575000, 600000, 590000, 625000, 650000, 675000],
+   216→    "Purchases":                        [345000, 360000, 354000, 375000, 390000, 405000],
+   217→    "Gross Profit":                     [4600000, 4800000, 4720000, 5000000, 5200000, 5400000],
+   218→    "Operating Expenses":               [3220000, 3360000, 3304000, 3500000, 3640000, 3780000],
+   219→    "Selling Expenses":                 [805000, 840000, 826000, 875000, 910000, 945000],
+   220→    "Sales Commissions":                [241500, 252000, 247800, 262500, 273000, 283500],
+   221→    "Advertising":                      [161000, 168000, 165200, 175000, 182000, 189000],
+   222→    "Marketing Expenses":               [241500, 252000, 247800, 262500, 273000, 283500],
+   223→    "Delivery & Shipping":              [120750, 126000, 123900, 131250, 136500, 141750],
+   224→    "Customer Service":                 [40250, 42000, 41300, 43750, 45500, 47250],
+   225→    "General & Administrative":         [1840000, 1920000, 1888000, 2000000, 2080000, 2160000],
+   226→    "Salaries & Wages":                 [750000, 750000, 750000, 787500, 787500, 787500],
+   227→    "Employee Benefits":                [225000, 225000, 225000, 236250, 236250, 236250],
+   228→    "GOSI Contributions":               [105000, 105000, 105000, 110250, 110250, 110250],
+   229→    "Rent Expense":                     [200000, 200000, 200000, 200000, 200000, 200000],
+   230→    "Utilities":                        [85000, 80000, 75000, 95000, 110000, 120000],
+   231→    "Telecommunications":               [25000, 25000, 25000, 25000, 25000, 25000],
+   232→    "Office Supplies":                  [18000, 17000, 16000, 20000, 19000, 18000],
+   233→    "Professional Fees":                [90000, 85000, 95000, 80000, 100000, 110000],
+   234→    "Travel & Entertainment":           [50000, 45000, 42000, 60000, 65000, 75000],
+   235→    "Insurance Expense":                [35000, 35000, 35000, 35000, 35000, 35000],
+   236→    "Maintenance & Repairs":            [55000, 60000, 48000, 70000, 55000, 65000],
+   237→    "Licenses & Permits":               [20000, 15000, 12000, 18000, 14000, 10000],
+   238→    "Subscriptions & Software":         [40000, 40000, 40000, 40000, 40000, 40000],
+   239→    "Bad Debts":                        [70000, 75000, 80000, 72000, 85000, 90000],
+   240→    "Miscellaneous Expenses":           [82000, 85000, 81000, 88000, 91500, 96000],
+   241→    "Depreciation & Amortization":      [575000, 600000, 590000, 625000, 650000, 675000],
+   242→    "Depreciation of Buildings":        [150000, 150000, 150000, 150000, 150000, 150000],
+   243→    "Depreciation of Equipment":        [300000, 300000, 300000, 300000, 300000, 300000],
+   244→    "Depreciation of Vehicles":         [75000, 75000, 75000, 75000, 75000, 75000],
+   245→    "Amortization of Intangibles":      [50000, 75000, 65000, 100000, 125000, 150000],
+   246→    "Operating Income (EBIT)":          [1380000, 1440000, 1416000, 1500000, 1560000, 1620000],
+   247→    "Interest Income":                  [60000, 55000, 65000, 70000, 75000, 70000],
+   248→    "Finance Cost":                     [180000, 175000, 170000, 165000, 160000, 155000],
+   249→    "Other Income":                     [40000, 35000, 45000, 50000, 30000, 55000],
+   250→    "Other Expenses":                   [25000, 30000, 20000, 35000, 25000, 15000],
+   251→    "Income Before Zakat":              [1275000, 1325000, 1336000, 1420000, 1480000, 1575000],
+   252→    "Zakat Expense":                    [31875, 33125, 33400, 35500, 37000, 39375],
+   253→    "Net Income":                       [1243125, 1291875, 1302600, 1384500, 1443000, 1535625],
+   254→}
+   255→
+   256→# ─── 2025 data: ~12-18% lower than 2026 (YoY growth story) ──────────────────
+   257→# Fixed costs (rent, salaries) stay similar; variable costs scale with revenue
+   258→# Finance costs are higher in 2025 (paying down debt)
+   259→
+   260→def make_2025(data_2026, revenue_factor=0.85, variable_factor=0.85, fixed_factor=0.95):
+   261→    """Generate 2025 data from 2026 with realistic YoY differences.
+   262→    - Revenue & variable costs: scaled by revenue_factor
+   263→    - Fixed costs (salaries, rent, insurance, depreciation): scaled by fixed_factor  
+   264→    - Finance cost: higher in 2025 (more debt)
+   265→    - Bad debts: higher in 2025 (weaker collection)
+   266→    """
+   267→    # Items that are mostly fixed (don't scale much with revenue)
+   268→    FIXED_ITEMS = {
+   269→        "Salaries & Wages", "Employee Benefits", "GOSI Contributions",
+   270→        "Rent Expense", "Insurance Expense", "Telecommunications",
+   271→        "Subscriptions & Software", "Depreciation of Buildings",
+   272→        "Depreciation of Equipment", "Depreciation of Vehicles",
+   273→        "Amortization of Intangibles",
+   274→    }
+   275→    # Items that should be HIGHER in 2025 (worse performance)
+   276→    HIGHER_ITEMS = {
+   277→        "Finance Cost", "Bad Debts",
+   278→    }
+   279→    # Computed/subtotal items that need special handling
+   280→    SUBTOTAL_ITEMS = {
+   281→        "Revenue", "Cost of Goods Sold", "Gross Profit", "Operating Expenses",
+   282→        "Selling Expenses", "General & Administrative",
+   283→        "Depreciation & Amortization",
+   284→        "Operating Income (EBIT)", "Income Before Zakat", "Net Income",
+   285→    }
+   286→
+   287→    result = {}
+   288→    for key, vals in data_2026.items():
+   289→        if key in FIXED_ITEMS:
+   290→            result[key] = scale(vals, fixed_factor)
+   291→        elif key in HIGHER_ITEMS:
+   292→            # ~15-25% higher in 2025
+   293→            result[key] = scale(vals, 1.20)
+   294→        elif key in SUBTOTAL_ITEMS:
+   295→            # These will be recalculated, but for simplicity use revenue_factor
+   296→            # The app recalculates them anyway
+   297→            if key in ("Operating Income (EBIT)", "Income Before Zakat", "Net Income", "Gross Profit"):
+   298→                result[key] = scale(vals, revenue_factor * 0.9)  # Profits grow faster
+   299→            else:
+   300→                result[key] = scale(vals, revenue_factor)
+   301→        else:
+   302→            result[key] = scale(vals, variable_factor)
+   303→    return result
+   304→
+   305→nukhba_2025 = make_2025(nukhba_2026, revenue_factor=0.86, variable_factor=0.86, fixed_factor=0.95)
+   306→ufuq_2025   = make_2025(ufuq_2026,   revenue_factor=0.88, variable_factor=0.88, fixed_factor=0.96)
+   307→bina_2025   = make_2025(bina_2026,   revenue_factor=0.84, variable_factor=0.84, fixed_factor=0.94)
+   308→
+   309→# Merge 2025 + 2026 into single 12-month arrays
+   310→def merge_years(d2025, d2026):
+   311→    return {k: d2025[k] + d2026[k] for k in d2026}
+   312→
+   313→al_nukhba = merge_years(nukhba_2025, nukhba_2026)
+   314→al_ufuq   = merge_years(ufuq_2025, ufuq_2026)
+   315→al_bina   = merge_years(bina_2025, bina_2026)
+   316→
+   317→
+   318→def write_company_sheet(wb, sheet_name, company_data, currency="SAR"):
+   319→    """Write a company sheet with formatted P&L data for 12 months."""
+   320→    ws = wb.create_sheet(sheet_name)
+   321→    ws.sheet_properties.tabColor = "1B5E20"
+   322→
+   323→    num_cols = len(PERIODS) + 1  # label + 12 periods
+   324→
+   325→    # Column widths
+   326→    ws.column_dimensions['A'].width = 50
+   327→    for col_idx in range(2, num_cols + 1):
+   328→        ws.column_dimensions[get_column_letter(col_idx)].width = 15
+   329→
+   330→    # Row 1: Header (Periods) — 2025 in blue, 2026 in green
+   331→    cell = ws.cell(row=1, column=1, value="البند Line Item")
+   332→    cell.font = HEADER_FONT
+   333→    cell.fill = HEADER_FILL
+   334→    cell.alignment = Alignment(horizontal='center', vertical='center')
+   335→    for col_idx, period in enumerate(PERIODS, 2):
+   336→        cell = ws.cell(row=1, column=col_idx, value=period)
+   337→        if "2025" in period:
+   338→            cell.font = YEAR_2025_FONT
+   339→            cell.fill = YEAR_2025_FILL
+   340→        else:
+   341→            cell.font = HEADER_FONT
+   342→            cell.fill = HEADER_FILL
+   343→        cell.alignment = Alignment(horizontal='center', vertical='center')
+   344→
+   345→    # Row 2: Currency
+   346→    cell = ws.cell(row=2, column=1, value="العملة Currency")
+   347→    cell.font = SUBHEADER_FONT
+   348→    cell.fill = SUBHEADER_FILL
+   349→    for col_idx in range(2, num_cols + 1):
+   350→        cell = ws.cell(row=2, column=col_idx, value=currency)
+   351→        cell.font = SUBHEADER_FONT
+   352→        cell.fill = SUBHEADER_FILL
+   353→        cell.alignment = Alignment(horizontal='center')
+   354→
+   355→    # Freeze panes
+   356→    ws.freeze_panes = 'B3'
+   357→
+   358→    # Data rows
+   359→    row = 3
+   360→    for (nameEn, nameAr, indent, isSection, isTotal, isProfit) in LINE_ITEMS:
+   361→        label = f"{'  ' * indent}{nameAr} - {nameEn}"
+   362→        cell_label = ws.cell(row=row, column=1, value=label)
+   363→
+   364→        if isProfit and isTotal:
+   365→            label_font = NET_INCOME_FONT
+   366→            label_fill = NET_INCOME_FILL
+   367→        elif isProfit:
+   368→            label_font = PROFIT_FONT
+   369→            label_fill = PROFIT_FILL
+   370→        elif isTotal:
+   371→            label_font = TOTAL_FONT
+   372→            label_fill = TOTAL_FILL
+   373→        elif isSection:
+   374→            label_font = SECTION_FONT
+   375→            label_fill = SECTION_FILL
+   376→        elif indent > 0:
+   377→            label_font = INDENT_FONT
+   378→            label_fill = None
+   379→        else:
+   380→            label_font = NORMAL_FONT
+   381→            label_fill = None
+   382→
+   383→        cell_label.font = label_font
+   384→        if label_fill:
+   385→            cell_label.fill = label_fill
+   386→
+   387→        values = company_data.get(nameEn, [0] * len(PERIODS))
+   388→        for col_idx, val in enumerate(values, 2):
+   389→            cell = ws.cell(row=row, column=col_idx, value=val)
+   390→            cell.number_format = NUMBER_FMT
+   391→            cell.alignment = Alignment(horizontal='center')
+   392→            cell.font = label_font
+   393→            if label_fill:
+   394→                cell.fill = label_fill
+   395→            if isProfit or isTotal:
+   396→                cell.border = BOTTOM_BORDER
+   397→            else:
+   398→                cell.border = THIN_BORDER
+   399→
+   400→        if isProfit or isTotal:
+   401→            cell_label.border = BOTTOM_BORDER
+   402→        else:
+   403→            cell_label.border = THIN_BORDER
+   404→
+   405→        row += 1
+   406→
+   407→
+   408→# ─── Instructions Sheet ──────────────────────────────────────────────────────
+   409→ws_instr = wb.active
+   410→ws_instr.title = "تعليمات Instructions"
+   411→ws_instr.column_dimensions['A'].width = 90
+   412→ws_instr.sheet_properties.tabColor = "1B5E20"
+   413→
+   414→instructions = [
+   415→    ("تعليمات - Instructions", Font(name="Arial", bold=True, size=14, color="1B5E20")),
+   416→    ("", None),
+   417→    ("العربية:", Font(name="Arial", bold=True, size=11, color="1B5E20")),
+   418→    ("  هذا الملف يحتوي على بيانات نموذجية لثلاث شركات سعودية لسنتين (2025 + 2026)", None),
+   419→    ("  كل ورقة تمثل شركة مستقلة ببيانات 12 شهر (يناير - يونيو 2025 + يناير - يونيو 2026)", None),
+   420→    ("  الأعمدة الزرقاء = 2025 | الأعمدة الخضراء = 2026 — لدعم المقارنة السنوية", None),
+   421→    ("  يمكنك تعديل الأرقام أو إضافة شركات أخرى بأوراق جديدة", None),
+   422→    ("  اسم الورقة = اسم الشركة", None),
+   423→    ("  الصف 1: الفترات المالية  |  الصف 2: العملة  |  عمود A = اسم البند", None),
+   424→    ("", None),
+   425→    ("  ملاحظة: لا توجد ضريبة دخل — نظام الزكاة الشرعية ينطبق", Font(name="Arial", bold=True, size=10, color="D32F2F")),
+   426→    ("  البنود باللون الأخضر = أرباح | باللون الأصفر = إجماليات | بالأخضر الفاتح = أقسام", None),
+   427→    ("", None),
+   428→    ("English:", Font(name="Arial", bold=True, size=11, color="1B5E20")),
+   429→    ("  This file contains sample data for three Saudi companies for 2 years (2025 + 2026)", None),
+   430→    ("  Each sheet = one company with 12 months (Jan-Jun 2025 + Jan-Jun 2026)", None),
+   431→    ("  Blue columns = 2025 | Green columns = 2026 — enables year-over-year comparison", None),
+   432→    ("  You can edit numbers or add more companies in new sheets", None),
+   433→    ("  Sheet name = Company name", None),
+   434→    ("  Row 1: Periods  |  Row 2: Currency  |  Column A = Item name", None),
+   435→    ("", None),
+   436→    ("  Note: No income tax — Islamic Zakat system applies", Font(name="Arial", bold=True, size=10, color="D32F2F")),
+   437→    ("  Green cells = Profits | Yellow cells = Totals | Light green = Sections", None),
+   438→    ("", None),
+   439→    ("أوراق الحركات / Movement Sheets:", Font(name="Arial", bold=True, size=11, color="0D47A1")),
+   440→    ("  أوراق 'حركات X' تحتوي على القيم + نسبة التغير الدوري بين كل فترة والتي قبلها", None),
+   441→    ("  اللون الأخضر = زيادة > 2% | اللون الأحمر = انخفاض > 2% | الرمادي = تغير طفيف", None),
+   442→    ("  المتوسط = متوسط نسبة التغير خلال كل الفترات", None),
+   443→    ("  هذه البيانات تحسب تلقائياً في الموقع عند اختيار تبويب 'حركات البنود'", None),
+   444→    ("", None),
+   445→    ("  Movement sheets ('حركات X') contain values + period-over-period % change", None),
+   446→    ("  Green = increase > 2% | Red = decrease > 2% | Grey = minor change", None),
+   447→    ("  Average = mean % change across all periods", None),
+   448→    ("  This data is auto-calculated on the website in the 'Line Item Movements' tab", None),
+   449→    ("", None),
+   450→    ("الشركات النموذجية / Sample Companies:", Font(name="Arial", bold=True, size=11, color="1B5E20")),
+   451→    ("  1. شركة النخبة التجارية — تجارية (~7M→8M ريال/شهر) — Trading (~14% YoY growth)", None),
+   452→    ("  2. شركة الأفق للخدمات — خدماتية (~4M→4.5M ريال/شهر) — Services (~12% YoY growth)", None),
+   453→    ("  3. شركة البناء الحديث — صناعية/إنشائية (~10M→12M ريال/شهر) — Construction (~19% YoY growth)", None),
+   454→]
+   455→
+   456→for idx, (text, font) in enumerate(instructions, 1):
+   457→    cell = ws_instr.cell(row=idx, column=1, value=text)
+   458→    if font:
+   459→        cell.font = font
+   460→    else:
+   461→        cell.font = Font(name="Arial", size=10)
+   462→
+   463→
+   464→# ─── Movement Analysis Sheet ────────────────────────────────────────────────
+   465→# Shows period-over-period % change for all line items per company
+   466→
+   467→MOVEMENT_FILL_POS = PatternFill(start_color="E8F5E9", end_color="E8F5E9", fill_type="solid")  # green for positive
+   468→MOVEMENT_FILL_NEG = PatternFill(start_color="FFEBEE", end_color="FFEBEE", fill_type="solid")  # red for negative
+   469→MOVEMENT_FILL_ZERO = PatternFill(start_color="F5F5F5", end_color="F5F5F5", fill_type="solid")  # grey for zero
+   470→MOVEMENT_FONT_POS = Font(name="Arial", size=10, color="2E7D32", bold=True)
+   471→MOVEMENT_FONT_NEG = Font(name="Arial", size=10, color="C62828", bold=True)
+   472→MOVEMENT_FONT_ZERO = Font(name="Arial", size=10, color="757575")
+   473→PCT_FMT = '0.0%'
+   474→
+   475→def write_movement_sheet(wb, sheet_name, company_data, currency="SAR"):
+   476→    """Write a movement analysis sheet showing period-over-period % changes."""
+   477→    ws = wb.create_sheet(sheet_name)
+   478→    ws.sheet_properties.tabColor = "0D47A1"  # Blue tab for movement sheets
+   479→
+   480→    num_value_cols = len(PERIODS)
+   481→    num_change_cols = num_value_cols - 1  # one fewer change column
+   482→    total_cols = 1 + num_value_cols + 2 + num_change_cols + 2  # label + values + (total, avg) + changes + (avg change, total change)
+   483→
+   484→    # Column widths
+   485→    ws.column_dimensions['A'].width = 50
+   486→    for col_idx in range(2, total_cols + 1):
+   487→        ws.column_dimensions[get_column_letter(col_idx)].width = 14
+   488→
+   489→    # ─── Section 1: Values ────────────────────────────────
+   490→    # Header row
+   491→    col = 1
+   492→    cell = ws.cell(row=1, column=col, value="البند Line Item")
+   493→    cell.font = HEADER_FONT
+   494→    cell.fill = HEADER_FILL
+   495→    cell.alignment = Alignment(horizontal='center', vertical='center')
+   496→
+   497→    col = 2
+   498→    for period in PERIODS:
+   499→        cell = ws.cell(row=1, column=col, value=period)
+   500→        if "2025" in period:
+   501→            cell.font = YEAR_2025_FONT
+   502→            cell.fill = YEAR_2025_FILL
+   503→        else:
+   504→            cell.font = HEADER_FONT
+   505→            cell.fill = HEADER_FILL
+   506→        cell.alignment = Alignment(horizontal='center', vertical='center')
+   507→        col += 1
+   508→
+   509→    # Total + Average
+   510→    cell = ws.cell(row=1, column=col, value="الإجمالي")
+   511→    cell.font = Font(name="Arial", bold=True, color="FFFFFF", size=10)
+   512→    cell.fill = PatternFill(start_color="F57F17", end_color="F57F17", fill_type="solid")
+   513→    cell.alignment = Alignment(horizontal='center')
+   514→    col += 1
+   515→    cell = ws.cell(row=1, column=col, value="المتوسط")
+   516→    cell.font = Font(name="Arial", bold=True, color="FFFFFF", size=10)
+   517→    cell.fill = PatternFill(start_color="F57F17", end_color="F57F17", fill_type="solid")
+   518→    cell.alignment = Alignment(horizontal='center')
+   519→    col += 1
+   520→
+   521→    # ─── Section 2: % Changes ────────────────────────────────
+   522→    # Separator column
+   523→    cell = ws.cell(row=1, column=col, value="")
+   524→    cell.fill = PatternFill(start_color="E0E0E0", end_color="E0E0E0", fill_type="solid")
+   525→    col += 1
+   526→
+   527→    # Change headers
+   528→    cell = ws.cell(row=1, column=col, value="نسبة التغير الدوري %")
+   529→    cell.font = Font(name="Arial", bold=True, color="FFFFFF", size=11)
+   530→    cell.fill = PatternFill(start_color="0D47A1", end_color="0D47A1", fill_type="solid")
+   531→    cell.alignment = Alignment(horizontal='center')
+   532→    # Merge across change columns
+   533→    ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + num_change_cols + 1)
+   534→
+   535→    # Sub-header for change columns
+   536→    col = col  # stay at same col for row 2
+   537→    change_start_col = col
+   538→    for i in range(1, len(PERIODS)):
+   539→        cell = ws.cell(row=2, column=col, value=f"{PERIODS[i]}\nvs\n{PERIODS[i-1]}")
+   540→        cell.font = Font(name="Arial", bold=True, color="FFFFFF", size=9)
+   541→        cell.fill = PatternFill(start_color="1565C0", end_color="1565C0", fill_type="solid")
+   542→        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+   543→        col += 1
+   544→
+   545→    # Average change + Total change
+   546→    cell = ws.cell(row=2, column=col, value="متوسط\nالتغير %")
+   547→    cell.font = Font(name="Arial", bold=True, color="FFFFFF", size=9)
+   548→    cell.fill = PatternFill(start_color="0D47A1", end_color="0D47A1", fill_type="solid")
+   549→    cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+   550→    col += 1
+   551→
+   552→    # Row 2: sub-headers for value section
+   553→    for c in range(1, change_start_col):
+   554→        if ws.cell(row=2, column=c).value is None:
+   555→            cell = ws.cell(row=2, column=c, value="")
+   556→            cell.fill = PatternFill(start_color="E8F5E9", end_color="E8F5E9", fill_type="solid")
+   557→
+   558→    # Freeze panes
+   559→    ws.freeze_panes = 'B3'
+   560→    ws.row_dimensions[1].height = 25
+   561→    ws.row_dimensions[2].height = 50
+   562→
+   563→    # Data rows
+   564→    row = 3
+   565→    for (nameEn, nameAr, indent, isSection, isTotal, isProfit) in LINE_ITEMS:
+   566→        label = f"{'  ' * indent}{nameAr} - {nameEn}"
+   567→        cell_label = ws.cell(row=row, column=1, value=label)
+   568→
+   569→        if isProfit and isTotal:
+   570→            label_font = NET_INCOME_FONT
+   571→            label_fill = NET_INCOME_FILL
+   572→        elif isProfit:
+   573→            label_font = PROFIT_FONT
+   574→            label_fill = PROFIT_FILL
+   575→        elif isTotal:
+   576→            label_font = TOTAL_FONT
+   577→            label_fill = TOTAL_FILL
+   578→        elif isSection:
+   579→            label_font = SECTION_FONT
+   580→            label_fill = SECTION_FILL
+   581→        elif indent > 0:
+   582→            label_font = INDENT_FONT
+   583→            label_fill = None
+   584→        else:
+   585→            label_font = NORMAL_FONT
+   586→            label_fill = None
+   587→
+   588→        cell_label.font = label_font
+   589→        if label_fill:
+   590→            cell_label.fill = label_fill
+   591→
+   592→        values = company_data.get(nameEn, [0] * len(PERIODS))
+   593→
+   594→        # Write values
+   595→        col = 2
+   596→        total_val = 0
+   597→        for val in values:
+   598→            cell = ws.cell(row=row, column=col, value=val)
+   599→            cell.number_format = NUMBER_FMT
+   600→            cell.alignment = Alignment(horizontal='center')
+   601→            cell.font = label_font
+   602→            if label_fill:
+   603→                cell.fill = label_fill
+   604→            total_val += val
+   605→            col += 1
+   606→
+   607→        # Total + Average
+   608→        cell = ws.cell(row=row, column=col, value=total_val)
+   609→        cell.number_format = NUMBER_FMT
+   610→        cell.font = Font(name="Arial", bold=True, size=10)
+   611→        cell.fill = PatternFill(start_color="FFF9C4", end_color="FFF9C4", fill_type="solid")
+   612→        cell.alignment = Alignment(horizontal='center')
+   613→        col += 1
+   614→
+   615→        avg_val = total_val / len(values) if values else 0
+   616→        cell = ws.cell(row=row, column=col, value=round(avg_val))
+   617→        cell.number_format = NUMBER_FMT
+   618→        cell.font = Font(name="Arial", size=10)
+   619→        cell.fill = PatternFill(start_color="FFF9C4", end_color="FFF9C4", fill_type="solid")
+   620→        cell.alignment = Alignment(horizontal='center')
+   621→        col += 1
+   622→
+   623→        # Separator
+   624→        cell = ws.cell(row=row, column=col, value="")
+   625→        cell.fill = PatternFill(start_color="E0E0E0", end_color="E0E0E0", fill_type="solid")
+   626→        col += 1
+   627→
+   628→        # % Changes
+   629→        pct_changes = []
+   630→        for i in range(1, len(values)):
+   631→            prev = values[i - 1]
+   632→            curr = values[i]
+   633→            if prev != 0:
+   634→                pct = (curr - prev) / abs(prev)
+   635→            else:
+   636→                pct = 0
+   637→            pct_changes.append(pct)
+   638→
+   639→            cell = ws.cell(row=row, column=col, value=pct)
+   640→            cell.number_format = PCT_FMT
+   641→            cell.alignment = Alignment(horizontal='center')
+   642→
+   643→            # Conditional formatting by color
+   644→            if pct > 0.02:
+   645→                cell.fill = MOVEMENT_FILL_POS
+   646→                cell.font = MOVEMENT_FONT_POS
+   647→            elif pct < -0.02:
+   648→                cell.fill = MOVEMENT_FILL_NEG
+   649→                cell.font = MOVEMENT_FONT_NEG
+   650→            else:
+   651→                cell.fill = MOVEMENT_FILL_ZERO
+   652→                cell.font = MOVEMENT_FONT_ZERO
+   653→            col += 1
+   654→
+   655→        # Average change
+   656→        if pct_changes:
+   657→            avg_pct = sum(pct_changes) / len(pct_changes)
+   658→            cell = ws.cell(row=row, column=col, value=avg_pct)
+   659→            cell.number_format = PCT_FMT
+   660→            cell.alignment = Alignment(horizontal='center')
+   661→            cell.font = Font(name="Arial", bold=True, size=10,
+   662→                           color="2E7D32" if avg_pct > 0 else "C62828" if avg_pct < 0 else "757575")
+   663→        col += 1
+   664→
+   665→        row += 1
+   666→
+   667→    return ws
+   668→
+   669→
+   670→# ─── Journal Entries Sheets (القيود المحاسبية) ───────────────────────────────
+   671→# Sample journal entries showing individual transactions posted to P&L accounts
+   672→
+   673→JE_HEADER_FILL = PatternFill(start_color="4A148C", end_color="4A148C", fill_type="solid")
+   674→JE_HEADER_FONT = Font(name="Arial", bold=True, color="FFFFFF", size=10)
+   675→JE_ALT_ROW = PatternFill(start_color="F3E5F5", end_color="F3E5F5", fill_type="solid")
+   676→JE_NORMAL_FONT = Font(name="Arial", size=10)
+   677→JE_DATE_FONT = Font(name="Arial", size=10, color="1565C0")
+   678→JE_DEBIT_FONT = Font(name="Arial", size=10, color="C62828", bold=True)
+   679→JE_CREDIT_FONT = Font(name="Arial", size=10, color="2E7D32", bold=True)
+   680→
+   681→import random
+   682→from datetime import datetime, timedelta
+   683→
+   684→def generate_sample_journal_entries(company_data, company_name, months_data):
+   685→    """Generate realistic journal entries for a company from its monthly P&L data.
+   686→    
+   687→    Each monthly total is broken down into 2-5 individual journal entries
+   688→    representing the actual transactions that sum up to the monthly figure.
+   689→    """
+   690→    entries = []
+   691→    je_counter = 1
+   692→    
+   693→    # Key accounts to generate entries for
+   694→    entry_accounts = [
+   695→        ("Sales Revenue", "إيرادات المبيعات", "credit"),
+   696→        ("Service Revenue", "إيرادات الخدمات", "credit"),
+   697→        ("Cost of Goods Sold", "تكلفة البضاعة المباعة", "debit"),
+   698→        ("Salaries & Wages", "الرواتب والأجور", "debit"),
+   699→        ("Rent Expense", "الإيجارات", "debit"),
+   700→        ("Utilities", "المرافق (كهرباء وماء وغاز)", "debit"),
+   701→        ("Advertising", "الإعلان والترويج", "debit"),
+   702→        ("Sales Commissions", "عمولات المبيعات", "debit"),
+   703→        ("Finance Cost", "تكلفة التمويل", "debit"),
+   704→        ("Zakat Expense", "مصروف الزكاة", "debit"),
+   705→    ]
+   706→    
+   707→    for period_idx, period in enumerate(PERIODS):
+   708→        year = int(period.split()[-1])
+   709→        month_num = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].index(period.split()[0]) + 1
+   710→        
+   711→        for account_en, account_ar, side in entry_accounts:
+   712→            monthly_value = company_data.get(account_en, [0]*len(PERIODS))[period_idx]
+   713→            if monthly_value == 0:
+   714→                continue
+   715→            
+   716→            # Split monthly total into 2-4 entries
+   717→            num_entries = random.randint(2, 4)
+   718→            remaining = monthly_value
+   719→            
+   720→            for i in range(num_entries):
+   721→                if i == num_entries - 1:
+   722→                    amount = remaining
+   723→                else:
+   724→                    # Random split
+   725→                    fraction = random.uniform(0.15, 0.5)
+   726→                    amount = round(remaining * fraction, -2)
+   727→                    remaining -= amount
+   728→                
+   729→                if amount <= 0:
+   730→                    continue
+   731→                
+   732→                # Random date within the month
+   733→                day = random.randint(1, 28)
+   734→                date_str = f"{year}-{month_num:02d}-{day:02d}"
+   735→                
+   736→                entry_num = f"JV-{year}{month_idx_to_str(month_num)}-{je_counter:04d}"
+   737→                je_counter += 1
+   738→                
+   739→                # Generate description
+   740→                descriptions = {
+   741→                    "Sales Revenue": [
+   742→                        "إيراد مبيعات فاتورة رقم",
+   743→                        "مبيعات بضاعة - فاتورة",
+   744→                        "إيراد مبيعات شهرية - فاتورة",
+   745→                    ],
+   746→                    "Service Revenue": [
+   747→                        "إيراد خدمات استشارية - عقد",
+   748→                        "أتعاب خدمات - فاتورة",
+   749→                    ],
+   750→                    "Cost of Goods Sold": [
+   751→                        "تكلفة بضاعة مباعة - شحنة",
+   752→                        "مصروف تكلفة مبيعات - أمر",
+   753→                    ],
+   754→                    "Salaries & Wages": [
+   755→                        "رواتب موظفين شهر",
+   756→                        "صرف رواتب - تحويل بنكي",
+   757→                    ],
+   758→                    "Rent Expense": [
+   759→                        "إيجار مقر الشركة - شهر",
+   760→                        "سداد إيجار مستودع",
+   761→                    ],
+   762→                    "Utilities": [
+   763→                        "فاتورة كهرباء وماء",
+   764→                        "سداد فاتورة مرافق",
+   765→                    ],
+   766→                    "Advertising": [
+   767→                        "مصروف إعلان حملة تسويقية",
+   768→                        "تكلفة إعلان رقمي",
+   769→                    ],
+   770→                    "Sales Commissions": [
+   771→                        "عمولة مبيعات مندوبين",
+   772→                        "صرف عمولات مبيعات",
+   773→                    ],
+   774→                    "Finance Cost": [
+   775→                        "تكلفة تمويل مرابحة - قسط",
+   776→                        "رسوم تمويل إجارة",
+   777→                    ],
+   778→                    "Zakat Expense": [
+   779→                        "مخصص الزكاة الشرعية",
+   780→                        "سداد مستحق الزكاة",
+   781→                    ],
+   782→                }
+   783→                
+   784→                desc_list = descriptions.get(account_en, ["قيد محاسبي"])
+   785→                desc = random.choice(desc_list)
+   786→                ref_num = f"INV-{random.randint(1000, 9999)}"
+   787→                
+   788→                debit = amount if side == "debit" else 0
+   789→                credit = amount if side == "credit" else 0
+   790→                
+   791→                entries.append({
+   792→                    'date': date_str,
+   793→                    'entry_number': entry_num,
+   794→                    'account': account_en,
+   795→                    'account_ar': account_ar,
+   796→                    'description': desc,
+   797→                    'debit': debit,
+   798→                    'credit': credit,
+   799→                    'reference': ref_num,
+   800→                    'period': period,
+   801→                    'currency': 'SAR',
+   802→                })
+   803→    
+   804→    return entries
+   805→
+   806→def month_idx_to_str(m):
+   807→    months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+   808→    return months[m-1]
+   809→
+   810→def write_journal_entries_sheet(wb, sheet_name, entries):
+   811→    """Write a Journal Entries sheet with individual accounting transactions."""
+   812→    ws = wb.create_sheet(sheet_name)
+   813→    ws.sheet_properties.tabColor = "4A148C"  # Purple tab for journal entries
+   814→    
+   815→    # Header
+   816→    headers = [
+   817→        ("التاريخ", 14),
+   818→        ("رقم القيد", 18),
+   819→        ("الحساب", 30),
+   820→        ("اسم الحساب عربي", 28),
+   821→        ("البيان", 45),
+   822→        ("المدين", 15),
+   823→        ("الدائن", 15),
+   824→        ("المرجع", 16),
+   825→        ("الفترة", 14),
+   826→        ("العملة", 10),
+   827→    ]
+   828→    
+   829→    for col_idx, (header, width) in enumerate(headers, 1):
+   830→        cell = ws.cell(row=1, column=col_idx, value=header)
+   831→        cell.font = JE_HEADER_FONT
+   832→        cell.fill = JE_HEADER_FILL
+   833→        cell.alignment = Alignment(horizontal='center', vertical='center')
+   834→        ws.column_dimensions[get_column_letter(col_idx)].width = width
+   835→    
+   836→    # Freeze panes
+   837→    ws.freeze_panes = 'A2'
+   838→    ws.auto_filter.ref = f"A1:J{len(entries) + 1}"
+   839→    
+   840→    # Data rows
+   841→    for idx, entry in enumerate(entries, 2):
+   842→        alt_fill = JE_ALT_ROW if idx % 2 == 0 else None
+   843→        
+   844→        # Date
+   845→        cell = ws.cell(row=idx, column=1, value=entry['date'])
+   846→        cell.font = JE_DATE_FONT
+   847→        cell.number_format = 'YYYY-MM-DD'
+   848→        cell.alignment = Alignment(horizontal='center')
+   849→        if alt_fill: cell.fill = alt_fill
+   850→        
+   851→        # Entry number
+   852→        cell = ws.cell(row=idx, column=2, value=entry['entry_number'])
+   853→        cell.font = JE_NORMAL_FONT
+   854→        cell.alignment = Alignment(horizontal='center')
+   855→        if alt_fill: cell.fill = alt_fill
+   856→        
+   857→        # Account
+   858→        cell = ws.cell(row=idx, column=3, value=entry['account'])
+   859→        cell.font = JE_NORMAL_FONT
+   860→        if alt_fill: cell.fill = alt_fill
+   861→        
+   862→        # Account Arabic
+   863→        cell = ws.cell(row=idx, column=4, value=entry['account_ar'])
+   864→        cell.font = JE_NORMAL_FONT
+   865→        cell.alignment = Alignment(horizontal='right')
+   866→        if alt_fill: cell.fill = alt_fill
+   867→        
+   868→        # Description
+   869→        cell = ws.cell(row=idx, column=5, value=entry['description'])
+   870→        cell.font = JE_NORMAL_FONT
+   871→        cell.alignment = Alignment(horizontal='right')
+   872→        if alt_fill: cell.fill = alt_fill
+   873→        
+   874→        # Debit
+   875→        cell = ws.cell(row=idx, column=6, value=entry['debit'] if entry['debit'] > 0 else None)
+   876→        cell.font = JE_DEBIT_FONT
+   877→        cell.number_format = NUMBER_FMT
+   878→        cell.alignment = Alignment(horizontal='center')
+   879→        if alt_fill: cell.fill = alt_fill
+   880→        
+   881→        # Credit
+   882→        cell = ws.cell(row=idx, column=7, value=entry['credit'] if entry['credit'] > 0 else None)
+   883→        cell.font = JE_CREDIT_FONT
+   884→        cell.number_format = NUMBER_FMT
+   885→        cell.alignment = Alignment(horizontal='center')
+   886→        if alt_fill: cell.fill = alt_fill
+   887→        
+   888→        # Reference
+   889→        cell = ws.cell(row=idx, column=8, value=entry['reference'])
+   890→        cell.font = JE_NORMAL_FONT
+   891→        cell.alignment = Alignment(horizontal='center')
+   892→        if alt_fill: cell.fill = alt_fill
+   893→        
+   894→        # Period
+   895→        cell = ws.cell(row=idx, column=9, value=entry['period'])
+   896→        cell.font = JE_NORMAL_FONT
+   897→        cell.alignment = Alignment(horizontal='center')
+   898→        if alt_fill: cell.fill = alt_fill
+   899→        
+   900→        # Currency
+   901→        cell = ws.cell(row=idx, column=10, value=entry['currency'])
+   902→        cell.font = JE_NORMAL_FONT
+   903→        cell.alignment = Alignment(horizontal='center')
+   904→        if alt_fill: cell.fill = alt_fill
+   905→
+   906→
+   907→# ─── Write Company Sheets ────────────────────────────────────────────────────
+   908→write_company_sheet(wb, "النخبة التجارية", al_nukhba)
+   909→write_company_sheet(wb, "الأفق للخدمات", al_ufuq)
+   910→write_company_sheet(wb, "البناء الحديث", al_bina)
+   911→
+   912→# ─── Write Movement Sheets ───────────────────────────────────────────────────
+   913→write_movement_sheet(wb, "حركات النخبة", al_nukhba)
+   914→write_movement_sheet(wb, "حركات الأفق", al_ufuq)
+   915→write_movement_sheet(wb, "حركات البناء", al_bina)
+   916→
+   917→# ─── Write Journal Entries Sheets ────────────────────────────────────────────
+   918→random.seed(42)  # Reproducible results
+   919→nukhba_entries = generate_sample_journal_entries(al_nukhba, "النخبة التجارية", None)
+   920→ufuq_entries = generate_sample_journal_entries(al_ufuq, "الأفق للخدمات", None)
+   921→bina_entries = generate_sample_journal_entries(al_bina, "البناء الحديث", None)
+   922→
+   923→write_journal_entries_sheet(wb, "قيود النخبة", nukhba_entries)
+   924→write_journal_entries_sheet(wb, "قيود الأفق", ufuq_entries)
+   925→write_journal_entries_sheet(wb, "قيود البناء", bina_entries)
+   926→
+   927→# ─── Save ─────────────────────────────────────────────────────────────────────
+   928→output_path = "/home/z/my-project/download/PnL_Sample_Data.xlsx"
+   929→wb.save(output_path)
+   930→print(f"✅ File saved to: {output_path}")
+   931→print(f"   Sheets: {wb.sheetnames}")
+   932→print(f"   Companies: 3 (+ 3 movement + 3 journal entries sheets)")
+   933→print(f"   Journal entries: {len(nukhba_entries)} + {len(ufuq_entries)} + {len(bina_entries)}")
+   934→print(f"   Periods per company: 12 (Jan-Jun 2025 + Jan-Jun 2026)")
+   935→print(f"   YoY growth: النخبة ~14% | الأفق ~12% | البناء ~19%")
+   936→

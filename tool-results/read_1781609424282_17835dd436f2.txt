@@ -1,0 +1,1101 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import React, { useState, useMemo, useCallback } from 'react';
+     4→     4→import {
+     5→     5→  Card, CardContent, CardHeader, CardTitle,
+     6→     6→} from '@/components/ui/card';
+     7→     7→import { Badge } from '@/components/ui/badge';
+     8→     8→import { Button } from '@/components/ui/button';
+     9→     9→import {
+    10→    10→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+    11→    11→} from '@/components/ui/select';
+    12→    12→import {
+    13→    13→  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+    14→    14→} from '@/components/ui/table';
+    15→    15→import {
+    16→    16→  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+    17→    17→  ResponsiveContainer, LineChart, Line, ComposedChart, Area,
+    18→    18→} from 'recharts';
+    19→    19→import {
+    20→    20→  Building2, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight,
+    21→    21→  Minus, Search, Filter, BarChart3, LineChart as LineChartIcon, TableIcon,
+    22→    22→  ArrowUpDown, Download, MoveRight, ChevronDown, ChevronUp, FileSpreadsheet,
+    23→    23→} from 'lucide-react';
+    24→    24→import { Separator } from '@/components/ui/separator';
+    25→    25→import { usePnLStore } from '@/lib/pnl-store';
+    26→    26→import {
+    27→    27→  PNL_LINE_ITEMS,
+    28→    28→  getAllLineItems,
+    29→    29→  getLineItemKey,
+    30→    30→  COMPANY_COLORS,
+    31→    31→  groupByCompany,
+    32→    32→  formatNumber,
+    33→    33→  formatCompact,
+    34→    34→  formatPercentage,
+    35→    35→  periodToArabic,
+    36→    36→  calcGrowth,
+    37→    37→  sortPeriods,
+    38→    38→  CompanyGroup,
+    39→    39→  sortDatasetsByPeriod,
+    40→    40→} from '@/lib/pnl-types';
+    41→    41→
+    42→    42→
+    43→    43→// ─── Category filter options ────────────────────────────────────────────────
+    44→    44→type CategoryFilter = 'all' | 'revenue' | 'expense' | 'profit';
+    45→    45→type ViewMode = 'chart' | 'table' | 'both';
+    46→    46→type MovementViewMode = 'detail' | 'movement' | 'heatmap';
+    47→    47→
+    48→    48→const CATEGORY_LABELS: Record<CategoryFilter, string> = {
+    49→    49→  all: 'الكل',
+    50→    50→  revenue: 'الإيرادات',
+    51→    51→  expense: 'المصروفات',
+    52→    52→  profit: 'الأرباح',
+    53→    53→};
+    54→    54→
+    55→    55→// ─── Movement direction helper ──────────────────────────────────────────────
+    56→    56→function MovementBadge({ change, size = 'sm' }: { change: number | null; size?: 'sm' | 'lg' }) {
+    57→    57→  if (change === null) return <span className="text-muted-foreground">—</span>;
+    58→    58→  const isUp = change > 0;
+    59→    59→  const isDown = change < 0;
+    60→    60→  const colorClass = isUp ? 'text-emerald-600' : isDown ? 'text-red-500' : 'text-muted-foreground';
+    61→    61→  const bgClass = isUp ? 'bg-emerald-50' : isDown ? 'bg-red-50' : 'bg-muted/50';
+    62→    62→  const Icon = isUp ? ArrowUpRight : isDown ? ArrowDownRight : Minus;
+    63→    63→  const sz = size === 'lg' ? 'text-sm font-bold' : 'text-[10px] font-medium';
+    64→    64→  const iconSz = size === 'lg' ? 'h-3.5 w-3.5' : 'h-2.5 w-2.5';
+    65→    65→
+    66→    66→  return (
+    67→    67→    <span className={`inline-flex items-center gap-0.5 ${colorClass} ${bgClass} rounded px-1 py-0.5 ${sz}`}>
+    68→    68→      <Icon className={iconSz} />
+    69→    69→      {Math.abs(change).toFixed(1)}%
+    70→    70→    </span>
+    71→    71→  );
+    72→    72→}
+    73→    73→
+    74→    74→// ─── Detail table for a single line item across periods ──────────────────────
+    75→    75→function LineItemDetailTable({
+    76→    76→  itemKey,
+    77→    77→  itemAr,
+    78→    78→  itemEn,
+    79→    79→  groups,
+    80→    80→}: {
+    81→    81→  itemKey: string;
+    82→    82→  itemAr: string;
+    83→    83→  itemEn: string;
+    84→    84→  groups: CompanyGroup[];
+    85→    85→}) {
+    86→    86→  return (
+    87→    87→    <div className="overflow-x-auto">
+    88→    88→      <Table>
+    89→    89→        <TableHeader>
+    90→    90→          <TableRow className="bg-muted/10">
+    91→    91→            <TableHead className="text-xs font-bold">الشركة</TableHead>
+    92→    92→            {groups[0]?.datasets.map((ds) => (
+    93→    93→              <TableHead key={ds.period} className="text-center text-xs font-medium min-w-[110px]">
+    94→    94→                {periodToArabic(ds.period)}
+    95→    95→              </TableHead>
+    96→    96→            ))}
+    97→    97→            <TableHead className="text-center text-xs font-bold bg-emerald-50/50">الإجمالي</TableHead>
+    98→    98→            <TableHead className="text-center text-xs font-bold bg-amber-50/50">المتوسط</TableHead>
+    99→    99→            <TableHead className="text-center text-xs font-bold bg-blue-50/50">التغير %</TableHead>
+   100→   100→          </TableRow>
+   101→   101→        </TableHeader>
+   102→   102→        <TableBody>
+   103→   103→          {groups.map((group, gIdx) => {
+   104→   104→            const color = COMPANY_COLORS[gIdx % COMPANY_COLORS.length];
+   105→   105→            const values = group.datasets.map((ds) => ds.data[itemKey] || 0);
+   106→   106→            const total = values.reduce((a, b) => a + b, 0);
+   107→   107→            const avg = values.length > 0 ? total / values.length : 0;
+   108→   108→            const firstVal = values[0] || 0;
+   109→   109→            const lastVal = values[values.length - 1] || 0;
+   110→   110→            const overallChange = firstVal !== 0 ? ((lastVal - firstVal) / Math.abs(firstVal)) * 100 : null;
+   111→   111→
+   112→   112→            return (
+   113→   113→              <TableRow key={group.name} className="hover:bg-muted/5">
+   114→   114→                <TableCell className="font-medium text-sm">
+   115→   115→                  <div className="flex items-center gap-2">
+   116→   116→                    <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+   117→   117→                    {group.name}
+   118→   118→                  </div>
+   119→   119→                </TableCell>
+   120→   120→                {group.datasets.map((ds, i) => {
+   121→   121→                  const val = ds.data[itemKey] || 0;
+   122→   122→                  const prevVal = i > 0 ? (group.datasets[i - 1]?.data[itemKey] || 0) : null;
+   123→   123→                  const change = prevVal !== null && prevVal !== 0
+   124→   124→                    ? ((val - prevVal) / Math.abs(prevVal)) * 100
+   125→   125→                    : null;
+   126→   126→
+   127→   127→                  return (
+   128→   128→                    <TableCell key={ds.period} className="text-center tabular-nums text-sm">
+   129→   129→                      <div>{formatNumber(val, ds.currency, false)}</div>
+   130→   130→                      {change !== null && (
+   131→   131→                        <div className={`text-[10px] font-medium ${
+   132→   132→                          change > 0 ? 'text-emerald-600' : change < 0 ? 'text-red-500' : 'text-muted-foreground'
+   133→   133→                        }`}>
+   134→   134→                          {change > 0 ? '+' : ''}{change.toFixed(1)}%
+   135→   135→                        </div>
+   136→   136→                      )}
+   137→   137→                    </TableCell>
+   138→   138→                  );
+   139→   139→                })}
+   140→   140→                <TableCell className="text-center tabular-nums text-sm font-bold bg-emerald-50/20">
+   141→   141→                  {formatNumber(total, groups[0].datasets[0]?.currency || 'SAR', false)}
+   142→   142→                </TableCell>
+   143→   143→                <TableCell className="text-center tabular-nums text-sm bg-amber-50/20">
+   144→   144→                  {formatNumber(Math.round(avg), groups[0].datasets[0]?.currency || 'SAR', false)}
+   145→   145→                </TableCell>
+   146→   146→                <TableCell className="text-center bg-blue-50/20">
+   147→   147→                  <MovementBadge change={overallChange} />
+   148→   148→                </TableCell>
+   149→   149→              </TableRow>
+   150→   150→            );
+   151→   151→          })}
+   152→   152→        </TableBody>
+   153→   153→      </Table>
+   154→   154→    </div>
+   155→   155→  );
+   156→   156→}
+   157→   157→
+   158→   158→// ─── Movement Analysis Table (period-over-period changes) ──────────────────
+   159→   159→function MovementTable({
+   160→   160→  itemKey,
+   161→   161→  groups,
+   162→   162→}: {
+   163→   163→  itemKey: string;
+   164→   164→  groups: CompanyGroup[];
+   165→   165→}) {
+   166→   166→  return (
+   167→   167→    <div className="overflow-x-auto">
+   168→   168→      <Table>
+   169→   169→        <TableHeader>
+   170→   170→          <TableRow className="bg-muted/10">
+   171→   171→            <TableHead className="text-xs font-bold min-w-[120px]">الشركة</TableHead>
+   172→   172→            <TableHead className="text-xs font-bold min-w-[100px]">الفترة</TableHead>
+   173→   173→            <TableHead className="text-center text-xs font-bold">القيمة</TableHead>
+   174→   174→            <TableHead className="text-center text-xs font-bold">القيمة السابقة</TableHead>
+   175→   175→            <TableHead className="text-center text-xs font-bold bg-blue-50/50">التغير المطلق</TableHead>
+   176→   176→            <TableHead className="text-center text-xs font-bold bg-amber-50/50">نسبة التغير %</TableHead>
+   177→   177→            <TableHead className="text-center text-xs font-bold">الاتجاه</TableHead>
+   178→   178→          </TableRow>
+   179→   179→        </TableHeader>
+   180→   180→        <TableBody>
+   181→   181→          {groups.map((group, gIdx) => {
+   182→   182→            const color = COMPANY_COLORS[gIdx % COMPANY_COLORS.length];
+   183→   183→            return group.datasets.map((ds, i) => {
+   184→   184→              const val = ds.data[itemKey] || 0;
+   185→   185→              const prevVal = i > 0 ? (group.datasets[i - 1]?.data[itemKey] || 0) : null;
+   186→   186→              const absChange = prevVal !== null ? val - prevVal : null;
+   187→   187→              const pctChange = prevVal !== null && prevVal !== 0
+   188→   188→                ? ((val - prevVal) / Math.abs(prevVal)) * 100
+   189→   189→                : null;
+   190→   190→              const isFirst = i === 0;
+   191→   191→
+   192→   192→              return (
+   193→   193→                <TableRow key={`${group.name}-${ds.period}`} className={`hover:bg-muted/5 ${isFirst ? 'border-t-2 border-t-muted/30' : ''}`}>
+   194→   194→                  {i === 0 && (
+   195→   195→                    <TableCell rowSpan={group.datasets.length} className="font-medium text-sm align-top">
+   196→   196→                      <div className="flex items-center gap-2">
+   197→   197→                        <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+   198→   198→                        {group.name}
+   199→   199→                      </div>
+   200→   200→                    </TableCell>
+   201→   201→                  )}
+   202→   202→                  <TableCell className="text-sm">
+   203→   203→                    <span className="font-medium">{periodToArabic(ds.period)}</span>
+   204→   204→                  </TableCell>
+   205→   205→                  <TableCell className="text-center tabular-nums text-sm font-medium">
+   206→   206→                    {formatNumber(val, ds.currency, false)}
+   207→   207→                  </TableCell>
+   208→   208→                  <TableCell className="text-center tabular-nums text-sm text-muted-foreground">
+   209→   209→                    {prevVal !== null ? formatNumber(prevVal, ds.currency, false) : '—'}
+   210→   210→                  </TableCell>
+   211→   211→                  <TableCell className="text-center tabular-nums text-sm bg-blue-50/20">
+   212→   212→                    {absChange !== null ? (
+   213→   213→                      <span className={absChange > 0 ? 'text-emerald-600' : absChange < 0 ? 'text-red-500' : ''}>
+   214→   214→                        {absChange > 0 ? '+' : ''}{formatNumber(absChange, ds.currency, false)}
+   215→   215→                      </span>
+   216→   216→                    ) : '—'}
+   217→   217→                  </TableCell>
+   218→   218→                  <TableCell className="text-center bg-amber-50/20">
+   219→   219→                    <MovementBadge change={pctChange} />
+   220→   220→                  </TableCell>
+   221→   221→                  <TableCell className="text-center">
+   222→   222→                    {pctChange !== null ? (
+   223→   223→                      <div className="flex items-center justify-center">
+   224→   224→                        {pctChange > 5 ? (
+   225→   225→                          <TrendingUp className="h-5 w-5 text-emerald-500" />
+   226→   226→                        ) : pctChange < -5 ? (
+   227→   227→                          <TrendingDown className="h-5 w-5 text-red-500" />
+   228→   228→                        ) : (
+   229→   229→                          <Minus className="h-5 w-5 text-muted-foreground" />
+   230→   230→                        )}
+   231→   231→                      </div>
+   232→   232→                    ) : (
+   233→   233→                      <span className="text-muted-foreground text-xs">الأولى</span>
+   234→   234→                    )}
+   235→   235→                  </TableCell>
+   236→   236→                </TableRow>
+   237→   237→              );
+   238→   238→            });
+   239→   239→          })}
+   240→   240→        </TableBody>
+   241→   241→      </Table>
+   242→   242→    </div>
+   243→   243→  );
+   244→   244→}
+   245→   245→
+   246→   246→// ─── Heatmap View (color-coded grid of % changes) ──────────────────────────
+   247→   247→function MovementHeatmap({
+   248→   248→  itemKey,
+   249→   249→  groups,
+   250→   250→}: {
+   251→   251→  itemKey: string;
+   252→   252→  groups: CompanyGroup[];
+   253→   253→}) {
+   254→   254→  // Build period-over-period % change data for each company
+   255→   255→  const allPeriods = sortPeriods([...new Set(groups.flatMap((g) => g.datasets.map((d) => d.period)))]);
+   256→   256→  // Change periods = periods starting from index 1 (where we can calculate change)
+   257→   257→  const changePeriods = allPeriods.slice(1);
+   258→   258→
+   259→   259→  return (
+   260→   260→    <div className="overflow-x-auto">
+   261→   261→      <Table>
+   262→   262→        <TableHeader>
+   263→   263→          <TableRow className="bg-muted/10">
+   264→   264→            <TableHead className="text-xs font-bold min-w-[120px]">الشركة</TableHead>
+   265→   265→            {changePeriods.map((period) => (
+   266→   266→              <TableHead key={period} className="text-center text-xs font-medium min-w-[100px]">
+   267→   267→                {periodToArabic(period)}
+   268→   268→                <div className="text-[9px] text-muted-foreground">مقارنة بالسابق</div>
+   269→   269→              </TableHead>
+   270→   270→            ))}
+   271→   271→            <TableHead className="text-center text-xs font-bold bg-muted/20">متوسط التغير</TableHead>
+   272→   272→          </TableRow>
+   273→   273→        </TableHeader>
+   274→   274→        <TableBody>
+   275→   275→          {groups.map((group, gIdx) => {
+   276→   276→            const color = COMPANY_COLORS[gIdx % COMPANY_COLORS.length];
+   277→   277→            const pctChanges: (number | null)[] = [];
+   278→   278→
+   279→   279→            return (
+   280→   280→              <TableRow key={group.name} className="hover:bg-muted/5">
+   281→   281→                <TableCell className="font-medium text-sm">
+   282→   282→                  <div className="flex items-center gap-2">
+   283→   283→                    <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+   284→   284→                    {group.name}
+   285→   285→                  </div>
+   286→   286→                </TableCell>
+   287→   287→                {changePeriods.map((period) => {
+   288→   288→                  const ds = group.datasets.find((d) => d.period === period);
+   289→   289→                  const periodIdx = allPeriods.indexOf(period);
+   290→   290→                  const prevPeriod = allPeriods[periodIdx - 1];
+   291→   291→                  const prevDs = group.datasets.find((d) => d.period === prevPeriod);
+   292→   292→
+   293→   293→                  const val = ds ? (ds.data[itemKey] || 0) : 0;
+   294→   294→                  const prevVal = prevDs ? (prevDs.data[itemKey] || 0) : 0;
+   295→   295→                  const pctChange = prevVal !== 0 ? ((val - prevVal) / Math.abs(prevVal)) * 100 : null;
+   296→   296→                  pctChanges.push(pctChange);
+   297→   297→
+   298→   298→                  // Color intensity based on change magnitude
+   299→   299→                  let bgStyle = 'bg-muted/10';
+   300→   300→                  let textStyle = 'text-muted-foreground';
+   301→   301→                  if (pctChange !== null) {
+   302→   302→                    if (pctChange > 20) { bgStyle = 'bg-emerald-200'; textStyle = 'text-emerald-800'; }
+   303→   303→                    else if (pctChange > 10) { bgStyle = 'bg-emerald-100'; textStyle = 'text-emerald-700'; }
+   304→   304→                    else if (pctChange > 0) { bgStyle = 'bg-emerald-50'; textStyle = 'text-emerald-600'; }
+   305→   305→                    else if (pctChange > -10) { bgStyle = 'bg-red-50'; textStyle = 'text-red-600'; }
+   306→   306→                    else if (pctChange > -20) { bgStyle = 'bg-red-100'; textStyle = 'text-red-700'; }
+   307→   307→                    else { bgStyle = 'bg-red-200'; textStyle = 'text-red-800'; }
+   308→   308→                  }
+   309→   309→
+   310→   310→                  return (
+   311→   311→                    <TableCell key={period} className={`text-center ${bgStyle}`}>
+   312→   312→                      {pctChange !== null ? (
+   313→   313→                        <div>
+   314→   314→                          <div className={`text-sm font-bold tabular-nums ${textStyle}`}>
+   315→   315→                            {pctChange > 0 ? '+' : ''}{pctChange.toFixed(1)}%
+   316→   316→                          </div>
+   317→   317→                          <div className="text-[9px] text-muted-foreground mt-0.5">
+   318→   318→                            {val > prevVal ? '+' : ''}{formatCompact(val - prevVal)}
+   319→   319→                          </div>
+   320→   320→                        </div>
+   321→   321→                      ) : (
+   322→   322→                        <span className="text-muted-foreground">—</span>
+   323→   323→                      )}
+   324→   324→                    </TableCell>
+   325→   325→                  );
+   326→   326→                })}
+   327→   327→                <TableCell className="text-center bg-muted/10">
+   328→   328→                  {(() => {
+   329→   329→                    const validChanges = pctChanges.filter((c): c is number => c !== null);
+   330→   330→                    const avg = validChanges.length > 0
+   331→   331→                      ? validChanges.reduce((a, b) => a + b, 0) / validChanges.length
+   332→   332→                      : null;
+   333→   333→                    return avg !== null ? (
+   334→   334→                      <MovementBadge change={avg} size="lg" />
+   335→   335→                    ) : <span className="text-muted-foreground">—</span>;
+   336→   336→                  })()}
+   337→   337→                </TableCell>
+   338→   338→              </TableRow>
+   339→   339→            );
+   340→   340→          })}
+   341→   341→        </TableBody>
+   342→   342→      </Table>
+   343→   343→    </div>
+   344→   344→  );
+   345→   345→}
+   346→   346→
+   347→   347→// ─── Chart view for a single line item ──────────────────────────────────────
+   348→   348→function LineItemChart({
+   349→   349→  itemKey,
+   350→   350→  itemAr,
+   351→   351→  groups,
+   352→   352→  chartType,
+   353→   353→}: {
+   354→   354→  itemKey: string;
+   355→   355→  itemAr: string;
+   356→   356→  groups: CompanyGroup[];
+   357→   357→  chartType: 'bar' | 'line';
+   358→   358→}) {
+   359→   359→  const allPeriods = sortPeriods([...new Set(groups.flatMap((g) => g.datasets.map((d) => d.period)))]);
+   360→   360→
+   361→   361→  const chartData = allPeriods.map((period) => {
+   362→   362→    const item: Record<string, string | number> = { period: periodToArabic(period) };
+   363→   363→    groups.forEach((group) => {
+   364→   364→      const ds = group.datasets.find((d) => d.period === period);
+   365→   365→      item[group.name] = ds ? (ds.data[itemKey] || 0) : 0;
+   366→   366→    });
+   367→   367→    return item;
+   368→   368→  });
+   369→   369→
+   370→   370→  const ChartComponent = chartType === 'bar' ? BarChart : LineChart;
+   371→   371→
+   372→   372→  return (
+   373→   373→    <ResponsiveContainer width="100%" height={320}>
+   374→   374→      <ChartComponent data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+   375→   375→        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+   376→   376→        <XAxis dataKey="period" tick={{ fontSize: 11 }} />
+   377→   377→        <YAxis tickFormatter={formatCompact} tick={{ fontSize: 11 }} />
+   378→   378→        <Tooltip formatter={(value: number) => formatCompact(value)} />
+   379→   379→        <Legend />
+   380→   380→        {groups.map((group, idx) =>
+   381→   381→          chartType === 'bar' ? (
+   382→   382→            <Bar
+   383→   383→              key={group.name}
+   384→   384→              dataKey={group.name}
+   385→   385→              fill={COMPANY_COLORS[idx % COMPANY_COLORS.length]}
+   386→   386→              radius={[4, 4, 0, 0]}
+   387→   387→            />
+   388→   388→          ) : (
+   389→   389→            <Line
+   390→   390→              key={group.name}
+   391→   391→              type="monotone"
+   392→   392→              dataKey={group.name}
+   393→   393→              stroke={COMPANY_COLORS[idx % COMPANY_COLORS.length]}
+   394→   394→              strokeWidth={2.5}
+   395→   395→              dot={{ r: 4, fill: COMPANY_COLORS[idx % COMPANY_COLORS.length] }}
+   396→   396→            />
+   397→   397→          )
+   398→   398→        )}
+   399→   399→      </ChartComponent>
+   400→   400→    </ResponsiveContainer>
+   401→   401→  );
+   402→   402→}
+   403→   403→
+   404→   404→// ─── Movement Chart (Composed: values + % change area) ─────────────────────
+   405→   405→function MovementChart({
+   406→   406→  itemKey,
+   407→   407→  groups,
+   408→   408→}: {
+   409→   409→  itemKey: string;
+   410→   410→  groups: CompanyGroup[];
+   411→   411→}) {
+   412→   412→  const allPeriods = sortPeriods([...new Set(groups.flatMap((g) => g.datasets.map((d) => d.period)))]);
+   413→   413→
+   414→   414→  const chartData = allPeriods.map((period, idx) => {
+   415→   415→    const item: Record<string, string | number> = { period: periodToArabic(period) };
+   416→   416→    groups.forEach((group) => {
+   417→   417→      const ds = group.datasets.find((d) => d.period === period);
+   418→   418→      const val = ds ? (ds.data[itemKey] || 0) : 0;
+   419→   419→      item[group.name] = val;
+   420→   420→
+   421→   421→      // Calculate % change from previous period
+   422→   422→      if (idx > 0) {
+   423→   423→        const prevPeriod = allPeriods[idx - 1];
+   424→   424→        const prevDs = group.datasets.find((d) => d.period === prevPeriod);
+   425→   425→        const prevVal = prevDs ? (prevDs.data[itemKey] || 0) : 0;
+   426→   426→        item[`${group.name}_pct`] = prevVal !== 0 ? +(((val - prevVal) / Math.abs(prevVal)) * 100).toFixed(1) : 0;
+   427→   427→      } else {
+   428→   428→        item[`${group.name}_pct`] = 0;
+   429→   429→      }
+   430→   430→    });
+   431→   431→    return item;
+   432→   432→  });
+   433→   433→
+   434→   434→  return (
+   435→   435→    <div className="space-y-4">
+   436→   436→      {/* Value Trend */}
+   437→   437→      <Card>
+   438→   438→        <CardHeader className="pb-2">
+   439→   439→          <CardTitle className="text-sm flex items-center gap-2">
+   440→   440→            <LineChartIcon className="h-4 w-4 text-teal-600" />
+   441→   441→            تطور القيم عبر الفترات
+   442→   442→          </CardTitle>
+   443→   443→        </CardHeader>
+   444→   444→        <CardContent>
+   445→   445→          <ResponsiveContainer width="100%" height={280}>
+   446→   446→            <ComposedChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+   447→   447→              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+   448→   448→              <XAxis dataKey="period" tick={{ fontSize: 11 }} />
+   449→   449→              <YAxis yAxisId="value" tickFormatter={formatCompact} tick={{ fontSize: 11 }} />
+   450→   450→              <Tooltip formatter={(value: number, name: string) => {
+   451→   451→                if (name.includes('_pct')) return `${value}%`;
+   452→   452→                return formatCompact(value);
+   453→   453→              }} />
+   454→   454→              <Legend />
+   455→   455→              {groups.map((group, idx) => (
+   456→   456→                <Area
+   457→   457→                  key={`${group.name}_pct`}
+   458→   458→                  yAxisId="value"
+   459→   459→                  type="monotone"
+   460→   460→                  dataKey={`${group.name}_pct`}
+   461→   461→                  name={`${group.name} - نسبة التغير %`}
+   462→   462→                  fill={COMPANY_COLORS[idx % COMPANY_COLORS.length]}
+   463→   463→                  stroke={COMPANY_COLORS[idx % COMPANY_COLORS.length]}
+   464→   464→                  fillOpacity={0.15}
+   465→   465→                  strokeWidth={1.5}
+   466→   466→                  strokeDasharray="4 4"
+   467→   467→                />
+   468→   468→              ))}
+   469→   469→              {groups.map((group, idx) => (
+   470→   470→                <Bar
+   471→   471→                  key={group.name}
+   472→   472→                  yAxisId="value"
+   473→   473→                  dataKey={group.name}
+   474→   474→                  fill={COMPANY_COLORS[idx % COMPANY_COLORS.length]}
+   475→   475→                  radius={[3, 3, 0, 0]}
+   476→   476→                  opacity={0.85}
+   477→   477→                />
+   478→   478→              ))}
+   479→   479→            </ComposedChart>
+   480→   480→          </ResponsiveContainer>
+   481→   481→        </CardContent>
+   482→   482→      </Card>
+   483→   483→
+   484→   484→      {/* % Change Trend */}
+   485→   485→      <Card>
+   486→   486→        <CardHeader className="pb-2">
+   487→   487→          <CardTitle className="text-sm flex items-center gap-2">
+   488→   488→            <TrendingUp className="h-4 w-4 text-amber-600" />
+   489→   489→            نسبة التغير الدورية %
+   490→   490→          </CardTitle>
+   491→   491→        </CardHeader>
+   492→   492→        <CardContent>
+   493→   493→          <ResponsiveContainer width="100%" height={250}>
+   494→   494→            <LineChart data={chartData.slice(1)} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+   495→   495→              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+   496→   496→              <XAxis dataKey="period" tick={{ fontSize: 11 }} />
+   497→   497→              <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} />
+   498→   498→              <Tooltip formatter={(value: number) => `${value}%`} />
+   499→   499→              <Legend />
+   500→   500→              {groups.map((group, idx) => (
+   501→   501→                <Line
+   502→   502→                  key={`${group.name}_pct`}
+   503→   503→                  type="monotone"
+   504→   504→                  dataKey={`${group.name}_pct`}
+   505→   505→                  name={`${group.name} - % التغير`}
+   506→   506→                  stroke={COMPANY_COLORS[idx % COMPANY_COLORS.length]}
+   507→   507→                  strokeWidth={2.5}
+   508→   508→                  dot={{ r: 4, fill: COMPANY_COLORS[idx % COMPANY_COLORS.length] }}
+   509→   509→                />
+   510→   510→              ))}
+   511→   511→            </LineChart>
+   512→   512→          </ResponsiveContainer>
+   513→   513→        </CardContent>
+   514→   514→      </Card>
+   515→   515→    </div>
+   516→   516→  );
+   517→   517→}
+   518→   518→
+   519→   519→// ─── Export Movement Data to Excel ──────────────────────────────────────────
+   520→   520→async function exportMovementToExcel(
+   521→   521→  itemKey: string,
+   522→   522→  itemAr: string,
+   523→   523→  groups: CompanyGroup[],
+   524→   524→) {
+   525→   525→  // Use XLSX library from the browser
+   526→   526→  const XLSX = await import('xlsx');
+   527→   527→
+   528→   528→  const wb = XLSX.utils.book_new();
+   529→   529→
+   530→   530→  // Sheet 1: Values across periods
+   531→   531→  const allPeriods = sortPeriods([...new Set(groups.flatMap((g) => g.datasets.map((d) => d.period)))]);
+   532→   532→  const valueHeader = ['الشركة', ...allPeriods.map((p) => periodToArabic(p)), 'الإجمالي', 'المتوسط', 'التغير الكلي %'];
+   533→   533→  const valueRows = groups.map((group) => {
+   534→   534→    const values = allPeriods.map((period) => {
+   535→   535→      const ds = group.datasets.find((d) => d.period === period);
+   536→   536→      return ds ? (ds.data[itemKey] || 0) : 0;
+   537→   537→    });
+   538→   538→    const total = values.reduce((a, b) => a + b, 0);
+   539→   539→    const avg = values.length > 0 ? total / values.length : 0;
+   540→   540→    const first = values[0] || 0;
+   541→   541→    const last = values[values.length - 1] || 0;
+   542→   542→    const pctChange = first !== 0 ? ((last - first) / Math.abs(first)) * 100 : 0;
+   543→   543→    return [group.name, ...values, total, Math.round(avg), +pctChange.toFixed(1)];
+   544→   544→  });
+   545→   545→  const ws1 = XLSX.utils.aoa_to_sheet([valueHeader, ...valueRows]);
+   546→   546→  ws1['!cols'] = [{ wch: 20 }, ...allPeriods.map(() => ({ wch: 14 })), { wch: 14 }, { wch: 14 }, { wch: 14 }];
+   547→   547→  XLSX.utils.book_append_sheet(wb, ws1, 'القيم');
+   548→   548→
+   549→   549→  // Sheet 2: Period-over-period changes
+   550→   550→  const changePeriods = allPeriods.slice(1);
+   551→   551→  const changeHeader = ['الشركة', ...changePeriods.map((p, i) => `${periodToArabic(p)} vs ${periodToArabic(allPeriods[i])}`)];
+   552→   552→  const changeRows = groups.map((group) => {
+   553→   553→    const changes = changePeriods.map((period, i) => {
+   554→   554→      const ds = group.datasets.find((d) => d.period === period);
+   555→   555→      const prevDs = group.datasets.find((d) => d.period === allPeriods[i]);
+   556→   556→      const val = ds ? (ds.data[itemKey] || 0) : 0;
+   557→   557→      const prevVal = prevDs ? (prevDs.data[itemKey] || 0) : 0;
+   558→   558→      return prevVal !== 0 ? +((val - prevVal) / Math.abs(prevVal) * 100).toFixed(1) : 0;
+   559→   559→    });
+   560→   560→    return [group.name, ...changes];
+   561→   561→  });
+   562→   562→  const ws2 = XLSX.utils.aoa_to_sheet([changeHeader, ...changeRows]);
+   563→   563→  ws2['!cols'] = [{ wch: 20 }, ...changePeriods.map(() => ({ wch: 22 }))];
+   564→   564→  XLSX.utils.book_append_sheet(wb, ws2, 'نسبة التغير %');
+   565→   565→
+   566→   566→  // Sheet 3: Absolute changes
+   567→   567→  const absHeader = ['الشركة', ...changePeriods.map((p, i) => `${periodToArabic(p)} - ${periodToArabic(allPeriods[i])}`)];
+   568→   568→  const absRows = groups.map((group) => {
+   569→   569→    const absChanges = changePeriods.map((period, i) => {
+   570→   570→      const ds = group.datasets.find((d) => d.period === period);
+   571→   571→      const prevDs = group.datasets.find((d) => d.period === allPeriods[i]);
+   572→   572→      const val = ds ? (ds.data[itemKey] || 0) : 0;
+   573→   573→      const prevVal = prevDs ? (prevDs.data[itemKey] || 0) : 0;
+   574→   574→      return val - prevVal;
+   575→   575→    });
+   576→   576→    return [group.name, ...absChanges];
+   577→   577→  });
+   578→   578→  const ws3 = XLSX.utils.aoa_to_sheet([absHeader, ...absRows]);
+   579→   579→  ws3['!cols'] = [{ wch: 20 }, ...changePeriods.map(() => ({ wch: 22 }))];
+   580→   580→  XLSX.utils.book_append_sheet(wb, ws3, 'التغير المطلق');
+   581→   581→
+   582→   582→  // Download
+   583→   583→  XLSX.writeFile(wb, `حركات_${itemAr.replace(/\s+/g, '_')}.xlsx`);
+   584→   584→}
+   585→   585→
+   586→   586→// ─── Export ALL items Movement Summary to Excel ────────────────────────────
+   587→   587→async function exportAllItemsMovement(
+   588→   588→  groups: CompanyGroup[],
+   589→   589→  allItems: typeof PNL_LINE_ITEMS,
+   590→   590→) {
+   591→   591→  const XLSX = await import('xlsx');
+   592→   592→  const wb = XLSX.utils.book_new();
+   593→   593→
+   594→   594→  for (const group of groups) {
+   595→   595→    const allPeriods = sortPeriods(group.datasets.map((d) => d.period));
+   596→   596→    const changePeriods = allPeriods.slice(1);
+   597→   597→
+   598→   598→    // Header
+   599→   599→    const header = ['البند', 'التصنيف', ...allPeriods.map((p) => periodToArabic(p)), ...changePeriods.map((p, i) => `تغير % ${periodToArabic(p)}`)];
+   600→   600→
+   601→   601→    // Rows for each line item
+   602→   602→    const rows = allItems.map((item) => {
+   603→   603→      const key = item.isCustom ? item.name : getLineItemKey(item.name);
+   604→   604→      const catLabel = item.category === 'revenue' ? 'إيراد' : item.category === 'expense' ? 'مصروف' : 'ربح';
+   605→   605→      const values = allPeriods.map((period) => {
+   606→   606→        const ds = group.datasets.find((d) => d.period === period);
+   607→   607→        return ds ? (ds.data[key] || 0) : 0;
+   608→   608→      });
+   609→   609→      const changes = changePeriods.map((period, i) => {
+   610→   610→        const ds = group.datasets.find((d) => d.period === period);
+   611→   611→        const prevDs = group.datasets.find((d) => d.period === allPeriods[i]);
+   612→   612→        const val = ds ? (ds.data[key] || 0) : 0;
+   613→   613→        const prevVal = prevDs ? (prevDs.data[key] || 0) : 0;
+   614→   614→        return prevVal !== 0 ? +((val - prevVal) / Math.abs(prevVal) * 100).toFixed(1) : 0;
+   615→   615→      });
+   616→   616→      return [item.nameAr, catLabel, ...values, ...changes];
+   617→   617→    });
+   618→   618→
+   619→   619→    const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+   620→   620→    // Set column widths
+   621→   621→    ws['!cols'] = [
+   622→   622→      { wch: 30 }, { wch: 10 },
+   623→   623→      ...allPeriods.map(() => ({ wch: 14 })),
+   624→   624→      ...changePeriods.map(() => ({ wch: 16 })),
+   625→   625→    ];
+   626→   626→    const sheetName = group.name.substring(0, 31); // Excel sheet name max 31 chars
+   627→   627→    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+   628→   628→  }
+   629→   629→
+   630→   630→  XLSX.writeFile(wb, 'حركات_جميع_البنود.xlsx');
+   631→   631→}
+   632→   632→
+   633→   633→// ─── Main Component ──────────────────────────────────────────────────────────
+   634→   634→export function LineItemExplorer() {
+   635→   635→  const { getFiltered, companies } = usePnLStore();
+   636→   636→  const selected = getFiltered();
+   637→   637→  const groups = groupByCompany(selected);
+   638→   638→
+   639→   639→  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
+   640→   640→  const [selectedItemKey, setSelectedItemKey] = useState<string | null>(null);
+   641→   641→  const [viewMode, setViewMode] = useState<ViewMode>('both');
+   642→   642→  const [chartType, setChartType] = useState<'bar' | 'line'>('bar');
+   643→   643→  const [movementView, setMovementView] = useState<MovementViewMode>('detail');
+   644→   644→  const [searchText, setSearchText] = useState('');
+   645→   645→  const [isExporting, setIsExporting] = useState(false);
+   646→   646→
+   647→   647→  // Get all line items (standard + custom)
+   648→   648→  const allLineItems = useMemo(() => getAllLineItems(companies), [companies]);
+   649→   649→
+   650→   650→  // Filter line items by category and search
+   651→   651→  const filteredItems = useMemo(() => {
+   652→   652→    let items = allLineItems;
+   653→   653→    if (categoryFilter !== 'all') {
+   654→   654→      items = items.filter((item) => item.category === categoryFilter);
+   655→   655→    }
+   656→   656→    if (searchText.trim()) {
+   657→   657→      const search = searchText.trim().toLowerCase();
+   658→   658→      items = items.filter(
+   659→   659→        (item) =>
+   660→   660→          item.nameAr.includes(searchText.trim()) ||
+   661→   661→          item.name.toLowerCase().includes(search) ||
+   662→   662→          getLineItemKey(item.name).includes(search)
+   663→   663→      );
+   664→   664→    }
+   665→   665→    return items;
+   666→   666→  }, [allLineItems, categoryFilter, searchText]);
+   667→   667→
+   668→   668→  // Auto-select first item if none selected
+   669→   669→  React.useEffect(() => {
+   670→   670→    if (!selectedItemKey && filteredItems.length > 0) {
+   671→   671→      const firstKey = filteredItems[0].isCustom
+   672→   672→        ? filteredItems[0].name
+   673→   673→        : getLineItemKey(filteredItems[0].name);
+   674→   674→      setSelectedItemKey(firstKey);
+   675→   675→    }
+   676→   676→  }, [filteredItems, selectedItemKey]);
+   677→   677→
+   678→   678→  if (selected.length === 0) {
+   679→   679→    return (
+   680→   680→      <Card>
+   681→   681→        <CardContent className="flex flex-col items-center justify-center py-20 text-center">
+   682→   682→          <Building2 className="mb-4 h-16 w-16 text-muted-foreground/20" />
+   683→   683→          <h3 className="text-lg font-semibold text-muted-foreground">
+   684→   684→            اختر بيانات لعرض حركات البنود المالية
+   685→   685→          </h3>
+   686→   686→        </CardContent>
+   687→   687→      </Card>
+   688→   688→    );
+   689→   689→  }
+   690→   690→
+   691→   691→  // Selected item details
+   692→   692→  const selectedItem = allLineItems.find((item) =>
+   693→   693→    item.isCustom ? item.name === selectedItemKey : getLineItemKey(item.name) === selectedItemKey
+   694→   694→  );
+   695→   695→
+   696→   696→  // Category counts for badges
+   697→   697→  const categoryCounts = useMemo(() => {
+   698→   698→    const counts = { all: 0, revenue: 0, expense: 0, profit: 0 };
+   699→   699→    allLineItems.forEach((item) => {
+   700→   700→      counts.all++;
+   701→   701→      counts[item.category]++;
+   702→   702→    });
+   703→   703→    return counts;
+   704→   704→  }, [allLineItems]);
+   705→   705→
+   706→   706→  const handleExportSingle = useCallback(async () => {
+   707→   707→    if (!selectedItemKey || groups.length === 0) return;
+   708→   708→    setIsExporting(true);
+   709→   709→    try {
+   710→   710→      await exportMovementToExcel(selectedItemKey, selectedItem?.nameAr || '', groups);
+   711→   711→    } catch (err) {
+   712→   712→      console.error('Export failed:', err);
+   713→   713→    } finally {
+   714→   714→      setIsExporting(false);
+   715→   715→    }
+   716→   716→  }, [selectedItemKey, selectedItem, groups]);
+   717→   717→
+   718→   718→  const handleExportAll = useCallback(async () => {
+   719→   719→    if (groups.length === 0) return;
+   720→   720→    setIsExporting(true);
+   721→   721→    try {
+   722→   722→      await exportAllItemsMovement(groups, allLineItems);
+   723→   723→    } catch (err) {
+   724→   724→      console.error('Export failed:', err);
+   725→   725→    } finally {
+   726→   726→      setIsExporting(false);
+   727→   727→    }
+   728→   728→  }, [groups, allLineItems]);
+   729→   729→
+   730→   730→  return (
+   731→   731→    <div className="space-y-4">
+   732→   732→      {/* ─── Top controls ─────────────────────────────────────────── */}
+   733→   733→      <Card>
+   734→   734→        <CardContent className="p-4 space-y-3">
+   735→   735→          {/* Search + Category filter */}
+   736→   736→          <div className="flex flex-wrap items-center gap-3">
+   737→   737→            {/* Search */}
+   738→   738→            <div className="relative flex-1 min-w-[200px]">
+   739→   739→              <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+   740→   740→              <input
+   741→   741→                type="text"
+   742→   742→                placeholder="ابحث عن بند مالي..."
+   743→   743→                value={searchText}
+   744→   744→                onChange={(e) => setSearchText(e.target.value)}
+   745→   745→                className="w-full rounded-lg border bg-background px-4 py-2 pr-9 text-sm outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-500"
+   746→   746→              />
+   747→   747→            </div>
+   748→   748→
+   749→   749→            {/* Category filter pills */}
+   750→   750→            <div className="flex items-center gap-1.5">
+   751→   751→              <Filter className="h-4 w-4 text-muted-foreground" />
+   752→   752→              {(['all', 'revenue', 'expense', 'profit'] as CategoryFilter[]).map((cat) => (
+   753→   753→                <Button
+   754→   754→                  key={cat}
+   755→   755→                  variant={categoryFilter === cat ? 'default' : 'outline'}
+   756→   756→                  size="sm"
+   757→   757→                  className={`gap-1 text-xs h-7 ${
+   758→   758→                    categoryFilter === cat
+   759→   759→                      ? cat === 'revenue'
+   760→   760→                        ? 'bg-emerald-600 hover:bg-emerald-700'
+   761→   761→                        : cat === 'expense'
+   762→   762→                          ? 'bg-red-500 hover:bg-red-600'
+   763→   763→                          : cat === 'profit'
+   764→   764→                            ? 'bg-teal-600 hover:bg-teal-700'
+   765→   765→                            : 'bg-slate-700 hover:bg-slate-800'
+   766→   766→                      : ''
+   767→   767→                  }`}
+   768→   768→                  onClick={() => setCategoryFilter(cat)}
+   769→   769→                >
+   770→   770→                  {CATEGORY_LABELS[cat]}
+   771→   771→                  <span className="opacity-70">({categoryCounts[cat]})</span>
+   772→   772→                </Button>
+   773→   773→              ))}
+   774→   774→            </div>
+   775→   775→          </div>
+   776→   776→
+   777→   777→          {/* Line item selector + view controls */}
+   778→   778→          <div className="flex flex-wrap items-center gap-3">
+   779→   779→            <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">البند المالي:</span>
+   780→   780→            <Select
+   781→   781→              value={selectedItemKey || ''}
+   782→   782→              onValueChange={(val) => setSelectedItemKey(val)}
+   783→   783→            >
+   784→   784→              <SelectTrigger className="w-full max-w-md text-sm">
+   785→   785→                <SelectValue placeholder="اختر بنداً مالياً" />
+   786→   786→              </SelectTrigger>
+   787→   787→              <SelectContent className="max-h-[300px]">
+   788→   788→                {filteredItems.map((item) => {
+   789→   789→                  const key = item.isCustom ? item.name : getLineItemKey(item.name);
+   790→   790→                  return (
+   791→   791→                    <SelectItem key={key} value={key}>
+   792→   792→                      <div className="flex items-center gap-2">
+   793→   793→                        <span
+   794→   794→                          className={`h-2 w-2 rounded-full ${
+   795→   795→                            item.category === 'revenue'
+   796→   796→                              ? 'bg-emerald-500'
+   797→   797→                              : item.category === 'expense'
+   798→   798→                                ? 'bg-red-400'
+   799→   799→                                : 'bg-teal-500'
+   800→   800→                          }`}
+   801→   801→                        />
+   802→   802→                        <span>{item.nameAr}</span>
+   803→   803→                        <span className="text-muted-foreground text-xs">({item.name})</span>
+   804→   804→                        {item.isCustom && (
+   805→   805→                          <Badge variant="secondary" className="text-[9px] h-4 px-1">مخصص</Badge>
+   806→   806→                        )}
+   807→   807→                      </div>
+   808→   808→                    </SelectItem>
+   809→   809→                  );
+   810→   810→                })}
+   811→   811→              </SelectContent>
+   812→   812→            </Select>
+   813→   813→
+   814→   814→            {/* Movement view mode toggle */}
+   815→   815→            <div className="flex items-center gap-1 mr-auto">
+   816→   816→              <span className="text-xs text-muted-foreground ml-2">طريقة العرض:</span>
+   817→   817→              <Button
+   818→   818→                variant={movementView === 'detail' ? 'default' : 'ghost'}
+   819→   819→                size="sm"
+   820→   820→                className="h-7 gap-1 text-xs"
+   821→   821→                onClick={() => setMovementView('detail')}
+   822→   822→              >
+   823→   823→                <TableIcon className="h-3 w-3" />
+   824→   824→                تفصيلي
+   825→   825→              </Button>
+   826→   826→              <Button
+   827→   827→                variant={movementView === 'movement' ? 'default' : 'ghost'}
+   828→   828→                size="sm"
+   829→   829→                className="h-7 gap-1 text-xs"
+   830→   830→                onClick={() => setMovementView('movement')}
+   831→   831→              >
+   832→   832→                <MoveRight className="h-3 w-3" />
+   833→   833→                حركات
+   834→   834→              </Button>
+   835→   835→              <Button
+   836→   836→                variant={movementView === 'heatmap' ? 'default' : 'ghost'}
+   837→   837→                size="sm"
+   838→   838→                className="h-7 gap-1 text-xs"
+   839→   839→                onClick={() => setMovementView('heatmap')}
+   840→   840→              >
+   841→   841→                <BarChart3 className="h-3 w-3" />
+   842→   842→                خريطة حرارية
+   843→   843→              </Button>
+   844→   844→
+   845→   845→              <span className="text-xs text-muted-foreground mx-1">|</span>
+   846→   846→
+   847→   847→              {/* Chart type toggle */}
+   848→   848→              <Button
+   849→   849→                variant={chartType === 'bar' ? 'secondary' : 'ghost'}
+   850→   850→                size="sm"
+   851→   851→                className="h-7 gap-1 text-xs"
+   852→   852→                onClick={() => setChartType('bar')}
+   853→   853→              >
+   854→   854→                <BarChart3 className="h-3 w-3" />
+   855→   855→                أعمدة
+   856→   856→              </Button>
+   857→   857→              <Button
+   858→   858→                variant={chartType === 'line' ? 'secondary' : 'ghost'}
+   859→   859→                size="sm"
+   860→   860→                className="h-7 gap-1 text-xs"
+   861→   861→                onClick={() => setChartType('line')}
+   862→   862→              >
+   863→   863→                <LineChartIcon className="h-3 w-3" />
+   864→   864→                خطي
+   865→   865→              </Button>
+   866→   866→            </div>
+   867→   867→          </div>
+   868→   868→
+   869→   869→          {/* Export buttons */}
+   870→   870→          <div className="flex items-center gap-2">
+   871→   871→            <Button
+   872→   872→              variant="outline"
+   873→   873→              size="sm"
+   874→   874→              className="gap-1.5 text-xs h-8"
+   875→   875→              onClick={handleExportSingle}
+   876→   876→              disabled={!selectedItemKey || isExporting}
+   877→   877→            >
+   878→   878→              <Download className="h-3.5 w-3.5" />
+   879→   879→              {isExporting ? 'جاري التصدير...' : `تصدير حركات "${selectedItem?.nameAr || ''}" إلى Excel`}
+   880→   880→            </Button>
+   881→   881→            <Button
+   882→   882→              variant="outline"
+   883→   883→              size="sm"
+   884→   884→              className="gap-1.5 text-xs h-8"
+   885→   885→              onClick={handleExportAll}
+   886→   886→              disabled={isExporting}
+   887→   887→            >
+   888→   888→              <FileSpreadsheet className="h-3.5 w-3.5" />
+   889→   889→              تصدير حركات جميع البنود إلى Excel
+   890→   890→            </Button>
+   891→   891→          </div>
+   892→   892→        </CardContent>
+   893→   893→      </Card>
+   894→   894→
+   895→   895→      {/* ─── Selected item detail ──────────────────────────────────── */}
+   896→   896→      {selectedItem && selectedItemKey && (
+   897→   897→        <Card className="shadow-sm">
+   898→   898→          <CardHeader className="pb-3">
+   899→   899→            <CardTitle className="flex items-center gap-2 text-base">
+   900→   900→              <span
+   901→   901→                className={`h-3 w-3 rounded-full ${
+   902→   902→                  selectedItem.category === 'revenue'
+   903→   903→                    ? 'bg-emerald-500'
+   904→   904→                    : selectedItem.category === 'expense'
+   905→   905→                      ? 'bg-red-400'
+   906→   906→                      : 'bg-teal-500'
+   907→   907→                }`}
+   908→   908→              />
+   909→   909→              <span>{selectedItem.nameAr}</span>
+   910→   910→              <span className="text-sm font-normal text-muted-foreground">({selectedItem.name})</span>
+   911→   911→              <Badge
+   912→   912→                variant="outline"
+   913→   913→                className={`text-[10px] ${
+   914→   914→                  selectedItem.category === 'revenue'
+   915→   915→                    ? 'border-emerald-300 text-emerald-700'
+   916→   916→                    : selectedItem.category === 'expense'
+   917→   917→                      ? 'border-red-300 text-red-600'
+   918→   918→                      : 'border-teal-300 text-teal-700'
+   919→   919→                }`}
+   920→   920→              >
+   921→   921→                {CATEGORY_LABELS[selectedItem.category]}
+   922→   922→              </Badge>
+   923→   923→              {selectedItem.isCustom && (
+   924→   924→                <Badge variant="secondary" className="text-[10px]">مخصص</Badge>
+   925→   925→              )}
+   926→   926→              {selectedItem.description && (
+   927→   927→                <span className="text-xs text-muted-foreground font-normal max-w-md truncate">
+   928→   928→                  — {selectedItem.description.split('—')[0]?.trim()}
+   929→   929→                </span>
+   930→   930→              )}
+   931→   931→            </CardTitle>
+   932→   932→
+   933→   933→            {/* Quick summary stats */}
+   934→   934→            <div className="flex flex-wrap items-center gap-3 mt-2">
+   935→   935→              {groups.map((group, gIdx) => {
+   936→   936→                const color = COMPANY_COLORS[gIdx % COMPANY_COLORS.length];
+   937→   937→                const values = group.datasets.map((ds) => ds.data[selectedItemKey] || 0);
+   938→   938→                const total = values.reduce((a, b) => a + b, 0);
+   939→   939→                const latest = values[values.length - 1] || 0;
+   940→   940→                const first = values[0] || 0;
+   941→   941→                const change = first !== 0 ? ((latest - first) / Math.abs(first)) * 100 : null;
+   942→   942→                const revenue = group.datasets[group.datasets.length - 1]?.data['revenue'] || 0;
+   943→   943→                const pctOfRevenue = revenue !== 0 ? (latest / revenue) * 100 : null;
+   944→   944→
+   945→   945→                return (
+   946→   946→                  <div
+   947→   947→                    key={group.name}
+   948→   948→                    className="flex items-center gap-2 rounded-lg border px-3 py-1.5"
+   949→   949→                    style={{ borderColor: `${color}30`, backgroundColor: `${color}08` }}
+   950→   950→                  >
+   951→   951→                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+   952→   952→                    <span className="text-xs font-bold" style={{ color }}>{group.name}</span>
+   953→   953→                    <Separator orientation="vertical" className="h-4" />
+   954→   954→                    <span className="text-xs font-medium tabular-nums">
+   955→   955→                      {formatNumber(latest, 'SAR')}
+   956→   956→                    </span>
+   957→   957→                    {pctOfRevenue !== null && (
+   958→   958→                      <span className="text-[10px] text-muted-foreground">
+   959→   959→                        ({pctOfRevenue.toFixed(1)}% من الإيرادات)
+   960→   960→                      </span>
+   961→   961→                    )}
+   962→   962→                    {change !== null && (
+   963→   963→                      <MovementBadge change={change} size="lg" />
+   964→   964→                    )}
+   965→   965→                  </div>
+   966→   966→                );
+   967→   967→              })}
+   968→   968→            </div>
+   969→   969→          </CardHeader>
+   970→   970→
+   971→   971→          <CardContent className="space-y-4">
+   972→   972→            {/* Chart section */}
+   973→   973→            {movementView === 'detail' && (
+   974→   974→              <LineItemChart
+   975→   975→                itemKey={selectedItemKey}
+   976→   976→                itemAr={selectedItem.nameAr}
+   977→   977→                groups={groups}
+   978→   978→                chartType={chartType}
+   979→   979→              />
+   980→   980→            )}
+   981→   981→
+   982→   982→            {/* Movement chart (composed) */}
+   983→   983→            {movementView === 'movement' && (
+   984→   984→              <MovementChart
+   985→   985→                itemKey={selectedItemKey}
+   986→   986→                groups={groups}
+   987→   987→              />
+   988→   988→            )}
+   989→   989→
+   990→   990→            {/* Heatmap doesn't need a separate chart - it's table-based */}
+   991→   991→
+   992→   992→            {/* Detail table */}
+   993→   993→            {movementView === 'detail' && (
+   994→   994→              <LineItemDetailTable
+   995→   995→                itemKey={selectedItemKey}
+   996→   996→                itemAr={selectedItem.nameAr}
+   997→   997→                itemEn={selectedItem.name}
+   998→   998→                groups={groups}
+   999→   999→              />
+  1000→  1000→            )}
+  1001→  1001→
+  1002→  1002→            {/* Movement table */}
+  1003→  1003→            {movementView === 'movement' && (
+  1004→  1004→              <MovementTable
+  1005→  1005→                itemKey={selectedItemKey}
+  1006→  1006→                groups={groups}
+  1007→  1007→              />
+  1008→  1008→            )}
+  1009→  1009→
+  1010→  1010→            {/* Heatmap view */}
+  1011→  1011→            {movementView === 'heatmap' && (
+  1012→  1012→              <MovementHeatmap
+  1013→  1013→                itemKey={selectedItemKey}
+  1014→  1014→                groups={groups}
+  1015→  1015→              />
+  1016→  1016→            )}
+  1017→  1017→          </CardContent>
+  1018→  1018→        </Card>
+  1019→  1019→      )}
+  1020→  1020→
+  1021→  1021→      {/* ─── Quick browse: all items as clickable cards ────────────── */}
+  1022→  1022→      <Card>
+  1023→  1023→        <CardHeader className="pb-3">
+  1024→  1024→          <CardTitle className="text-base flex items-center gap-2">
+  1025→  1025→            <BarChart3 className="h-4 w-4 text-teal-600" />
+  1026→  1026→            استعراض سريع للبنود المالية
+  1027→  1027→            <Badge variant="outline" className="text-[10px]">{filteredItems.length} بند</Badge>
+  1028→  1028→          </CardTitle>
+  1029→  1029→        </CardHeader>
+  1030→  1030→        <CardContent>
+  1031→  1031→          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+  1032→  1032→            {filteredItems.map((item) => {
+  1033→  1033→              const key = item.isCustom ? item.name : getLineItemKey(item.name);
+  1034→  1034→              const isSelected = key === selectedItemKey;
+  1035→  1035→              const latestVals = groups.map((g) => {
+  1036→  1036→                const ds = g.datasets[g.datasets.length - 1];
+  1037→  1037→                return ds ? (ds.data[key] || 0) : 0;
+  1038→  1038→              });
+  1039→  1039→              const totalVal = latestVals.reduce((a, b) => a + b, 0);
+  1040→  1040→              const firstVals = groups.map((g) => {
+  1041→  1041→                const ds = g.datasets[0];
+  1042→  1042→                return ds ? (ds.data[key] || 0) : 0;
+  1043→  1043→              });
+  1044→  1044→              const totalFirst = firstVals.reduce((a, b) => a + b, 0);
+  1045→  1045→              const change = totalFirst !== 0 ? ((totalVal - totalFirst) / Math.abs(totalFirst)) * 100 : null;
+  1046→  1046→
+  1047→  1047→              return (
+  1048→  1048→                <button
+  1049→  1049→                  key={key}
+  1050→  1050→                  onClick={() => setSelectedItemKey(key)}
+  1051→  1051→                  className={`text-right rounded-lg border p-3 transition-all hover:shadow-md ${
+  1052→  1052→                    isSelected
+  1053→  1053→                      ? 'border-teal-400 bg-teal-50/50 ring-2 ring-teal-400/30 shadow-sm'
+  1054→  1054→                      : 'border-muted hover:border-teal-300'
+  1055→  1055→                  }`}
+  1056→  1056→                >
+  1057→  1057→                  <div className="flex items-start justify-between gap-2">
+  1058→  1058→                    <div className="min-w-0">
+  1059→  1059→                      <div className="flex items-center gap-1.5">
+  1060→  1060→                        <span
+  1061→  1061→                          className={`h-2 w-2 rounded-full shrink-0 ${
+  1062→  1062→                            item.category === 'revenue'
+  1063→  1063→                              ? 'bg-emerald-500'
+  1064→  1064→                              : item.category === 'expense'
+  1065→  1065→                                ? 'bg-red-400'
+  1066→  1066→                                : 'bg-teal-500'
+  1067→  1067→                          }`}
+  1068→  1068→                        />
+  1069→  1069→                        <span className="text-sm font-medium truncate">{item.nameAr}</span>
+  1070→  1070→                      </div>
+  1071→  1071→                      <p className="text-[10px] text-muted-foreground truncate mt-0.5">{item.name}</p>
+  1072→  1072→                    </div>
+  1073→  1073→                    {change !== null && (
+  1074→  1074→                      <MovementBadge change={change} />
+  1075→  1075→                    )}
+  1076→  1076→                  </div>
+  1077→  1077→                  <div className="mt-2 flex items-baseline gap-2">
+  1078→  1078→                    <span className="text-base font-bold tabular-nums">
+  1079→  1079→                      {formatNumber(totalVal, 'SAR')}
+  1080→  1080→                    </span>
+  1081→  1081→                    <span className="text-[10px] text-muted-foreground">
+  1082→  1082→                      {groups.length === 1
+  1083→  1083→                        ? periodToArabic(groups[0].datasets[groups[0].datasets.length - 1]?.period || '')
+  1084→  1084→                        : `${groups.length} شركات`}
+  1085→  1085→                    </span>
+  1086→  1086→                  </div>
+  1087→  1087→                  {item.isSubtotal || item.isTotal ? (
+  1088→  1088→                    <Badge variant="outline" className="text-[9px] mt-1 h-4 px-1">
+  1089→  1089→                      {item.isTotal ? 'إجمالي' : 'فرعي'}
+  1090→  1090→                    </Badge>
+  1091→  1091→                  ) : null}
+  1092→  1092→                </button>
+  1093→  1093→              );
+  1094→  1094→            })}
+  1095→  1095→          </div>
+  1096→  1096→        </CardContent>
+  1097→  1097→      </Card>
+  1098→  1098→    </div>
+  1099→  1099→  );
+  1100→  1100→}
+  1101→  1101→
