@@ -65,7 +65,12 @@ if [ -f "./next-service-dist/server.js" ]; then
     export NODE_ENV=production
     export PORT="${PORT:-3000}"
     export HOSTNAME="${HOSTNAME:-0.0.0.0}"
-    export DATABASE_URL="${DATABASE_URL:-$DEFAULT_PACKAGED_DATABASE_URL}"
+    
+    # 仅当 DATABASE_URL 未设置时，使用打包的本地 SQLite 数据库作为默认值
+    # 如果 .env 中已设置 PostgreSQL URL (Supabase)，则使用该 URL
+    if [ -z "$DATABASE_URL" ]; then
+        export DATABASE_URL="$DEFAULT_PACKAGED_DATABASE_URL"
+    fi
 
     if [ "$DATABASE_URL" = "$DEFAULT_PACKAGED_DATABASE_URL" ]; then
         if [ ! -f "$DEFAULT_PACKAGED_DB_PATH" ]; then

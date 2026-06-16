@@ -77,19 +77,33 @@ if [ -d "public" ]; then
     cp -r public "$BUILD_DIR/next-service-dist/"
 fi
 
-# 将测试环境数据库复制到构建产物中，生产环境直接使用这份数据库
+# 数据库处理：
+# - 如果使用本地 SQLite (DATABASE_URL=file:...)，复制 db 文件到构建产物
+# - 如果使用远程 PostgreSQL (如 Supabase)，跳过本地 db 文件步骤
 if [ -f "./db/custom.db" ]; then
-    echo "🗄️  复制测试环境数据库到构建产物..."
+    echo "🗄️  发现本地 SQLite 数据库，复制到构建产物..."
     mkdir -p "$BUILD_DIR/db"
     cp -r ./db/. "$BUILD_DIR/db/"
 
-    echo "🗄️  同步构建产物中的数据库结构..."
-    DATABASE_URL="file:$BUILD_DIR/db/custom.db" bun run db:push
-    echo "✅ 构建产物数据库已准备完成"
-    ls -lah "$BUILD_DIR/db"
+    # 仅当 Prisma schema 使用 SQLite 时才同步结构
+    if grep -q 'provider = "sqlite"' prisma/schema.prisma 2>/dev/null; then
+        echo "🗄️  同步构建产物中的数据库结构..."
+        DATABASE_URL="file:$BUILD_DIR/db/custom.db" bun run db:push
+        echo "✅ 构建产物数据库已准备完成"
+        ls -lah "$BUILD_DIR/db"
+    else
+        echo "ℹ️  Prisma schema 使用非 SQLite provider，跳过 db:push (使用远程数据库)"
+    fi
 else
-    echo "❌ 未找到测试环境数据库文件 ./db/custom.db，无法继续构建生产包"
-    exit 1
+    echo "ℹ️  未找到本地 SQLite 数据库文件 ./db/custom.db"
+    # 检查 Prisma schema 是否使用 PostgreSQL
+    if grep -q 'provider = "postgresql"' prisma/schema.prisma 2>/dev/null; then
+        echo "✅ 检测到 PostgreSQL (远程数据库)，跳过本地数据库文件步骤"
+    else
+        echo "❌ Prisma schema 使用 SQLite 但未找到 ./db/custom.db"
+        echo "   请创建本地数据库: mkdir -p db && touch db/custom.db && bun run db:push"
+        exit 1
+    fi
 fi
 
 # 复制 Caddyfile（如果存在）
