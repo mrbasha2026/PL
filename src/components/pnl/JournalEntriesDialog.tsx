@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import {
   Building2, BookOpen, Download, ChevronLeft,
@@ -237,7 +239,15 @@ export function JournalEntriesDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="!max-w-[95vw] lg:!max-w-[90vw] xl:!max-w-[1400px] w-[95vw] max-h-[94vh] p-0 gap-0 overflow-hidden rounded-3xl border-0 shadow-2xl" dir="rtl" showCloseButton={false}>
+      <DialogContent className="!max-w-[95vw] lg:!max-w-[90vw] xl:!max-w-[1400px] w-[95vw] max-h-[94vh] p-0 gap-0 overflow-hidden rounded-3xl border-0 shadow-2xl" dir="rtl" showCloseButton={false} aria-describedby={undefined}>
+        {/* Accessible title/description (visually hidden, for screen readers) */}
+        <DialogTitle className="sr-only">
+          {isExpense ? 'قيود حساب مصروف' : 'قيود حساب إيراد'} — {lineItem.nameAr}
+        </DialogTitle>
+        <DialogDescription className="sr-only">
+          عرض القيود المحاسبية المحسوبة تلقائياً من بيانات قائمة الأرباح والخسائر
+        </DialogDescription>
+
         {/* ─── Modern Glassmorphic Header ──────────────────────── */}
         <div className="relative overflow-hidden px-8 py-6">
           {/* Gradient Background */}

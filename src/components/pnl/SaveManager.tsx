@@ -4,17 +4,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,11 +15,34 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Save, Database, Trash2, Download, RefreshCw, Loader2,
-  CheckCircle2, AlertCircle, FileText, Calendar, Building2,
-  HardDrive, Cloud, Plus, Pencil,
+  AlertCircle, FileText, Calendar, Building2,
+  HardDrive, Cloud, Plus, Clock,
 } from 'lucide-react';
 import { usePnLStore } from '@/lib/pnl-store';
 import { useToast } from '@/hooks/use-toast';
+import type { CompanyPnL, JournalEntry } from '@/lib/pnl-types';
+
+// ─── localStorage-backed persistent storage ─────────────────────────────
+// Replaces the old /api/pnl/save Prisma+SQLite endpoint which fails on
+// serverless hosts (Vercel) because SQLite needs a persistent filesystem.
+// localStorage works everywhere, syncs with the existing Zustand persist
+// pattern, and never produces 500 errors.
+
+const STORAGE_KEY = 'pnl-saved-datasets-v1';
+
+interface SavedDataset {
+  id: string;
+  name: string;
+  description: string | null;
+  companies: CompanyPnL[];
+  journalEntries: JournalEntry[];
+  notes: Record<string, string>;
+  companyCount: number;
+  periodCount: number;
+  datasetCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
 
 interface SavedDatasetSummary {
   id: string;
@@ -40,13 +55,49 @@ interface SavedDatasetSummary {
   updatedAt: string;
 }
 
+function readAllDatasets(): SavedDataset[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeAllDatasets(datasets: SavedDataset[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(datasets));
+    // Notify other tabs / same-tab listeners
+    window.dispatchEvent(new CustomEvent('pnl-saved-datasets-changed'));
+  } catch (err) {
+    console.error('Failed to write saved datasets:', err);
+  }
+}
+
+function toSummary(ds: SavedDataset): SavedDatasetSummary {
+  return {
+    id: ds.id,
+    name: ds.name,
+    description: ds.description,
+    companyCount: ds.companyCount,
+    periodCount: ds.periodCount,
+    datasetCount: ds.datasetCount,
+    createdAt: ds.createdAt,
+    updatedAt: ds.updatedAt,
+  };
+}
+
 interface SaveManagerProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
 export function SaveManager({ isOpen, onClose }: SaveManagerProps) {
-  const { companies, journalEntries, notes, clearAll, addCompanies, addJournalEntries } = usePnLStore();
+  const { companies, journalEntries, notes, clearAll, addCompanies, addJournalEntries, setNote } = usePnLStore();
   const { toast } = useToast();
 
   const [mode, setMode] = useState<'list' | 'save'>('list');
@@ -63,22 +114,15 @@ export function SaveManager({ isOpen, onClose }: SaveManagerProps) {
   const loadList = useCallback(async () => {
     setLoadingList(true);
     try {
-      const res = await fetch('/api/pnl/save');
-      const data = await res.json();
-      if (res.ok) {
-        setDatasets(data.datasets || []);
-      } else {
-        toast({
-          variant: 'destructive',
-          title: 'خطأ',
-          description: data.error || 'فشل في جلب القائمة',
-        });
-      }
+      // Simulate async for UI feedback consistency
+      await new Promise((r) => setTimeout(r, 120));
+      const all = readAllDatasets().map(toSummary);
+      setDatasets(all);
     } catch {
       toast({
         variant: 'destructive',
         title: 'خطأ',
-        description: 'تعذّر الاتصال بالخادم',
+        description: 'فشل في قراءة البيانات المحفوظة',
       });
     } finally {
       setLoadingList(false);
@@ -93,6 +137,17 @@ export function SaveManager({ isOpen, onClose }: SaveManagerProps) {
       setSaveDescription('');
     }
   }, [isOpen, loadList]);
+
+  // Listen for cross-tab updates
+  useEffect(() => {
+    const handler = () => loadList();
+    window.addEventListener('pnl-saved-datasets-changed', handler);
+    window.addEventListener('storage', handler);
+    return () => {
+      window.removeEventListener('pnl-saved-datasets-changed', handler);
+      window.removeEventListener('storage', handler);
+    };
+  }, [loadList]);
 
   const handleSave = async () => {
     if (!saveName.trim()) {
@@ -114,41 +169,57 @@ export function SaveManager({ isOpen, onClose }: SaveManagerProps) {
 
     setSaving(true);
     try {
-      const res = await fetch('/api/pnl/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: saveName.trim(),
-          description: saveDescription.trim(),
-          companies,
-          journalEntries,
-          notes,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast({
-          title: 'تم الحفظ بنجاح',
-          description: data.action === 'updated'
-            ? `تم تحديث المجموعة "${data.name}"`
-            : `تم حفظ المجموعة "${data.name}"`,
-        });
-        setMode('list');
-        setSaveName('');
-        setSaveDescription('');
-        loadList();
+      // Simulate slight delay for UX feedback
+      await new Promise((r) => setTimeout(r, 200));
+
+      const all = readAllDatasets();
+      const existingIdx = all.findIndex(
+        (d) => d.name.trim().toLowerCase() === saveName.trim().toLowerCase()
+      );
+
+      const companyNames = new Set(companies.map((c) => c.companyName));
+      const periods = new Set(companies.map((c) => c.period));
+      const now = new Date().toISOString();
+
+      const dataset: SavedDataset = {
+        id: existingIdx >= 0 ? all[existingIdx].id : `ds_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        name: saveName.trim(),
+        description: saveDescription.trim() || null,
+        companies,
+        journalEntries,
+        notes,
+        companyCount: companyNames.size,
+        periodCount: periods.size,
+        datasetCount: companies.length,
+        createdAt: existingIdx >= 0 ? all[existingIdx].createdAt : now,
+        updatedAt: now,
+      };
+
+      let action: 'created' | 'updated';
+      if (existingIdx >= 0) {
+        all[existingIdx] = dataset;
+        action = 'updated';
       } else {
-        toast({
-          variant: 'destructive',
-          title: 'فشل الحفظ',
-          description: data.error || 'حدث خطأ',
-        });
+        all.push(dataset);
+        action = 'created';
       }
+      writeAllDatasets(all);
+
+      toast({
+        title: 'تم الحفظ بنجاح',
+        description: action === 'updated'
+          ? `تم تحديث المجموعة "${dataset.name}"`
+          : `تم حفظ المجموعة "${dataset.name}"`,
+      });
+      setMode('list');
+      setSaveName('');
+      setSaveDescription('');
+      loadList();
     } catch {
       toast({
         variant: 'destructive',
         title: 'فشل الحفظ',
-        description: 'تعذّر الاتصال بالخادم',
+        description: 'حدث خطأ غير متوقع',
       });
     } finally {
       setSaving(false);
@@ -158,41 +229,40 @@ export function SaveManager({ isOpen, onClose }: SaveManagerProps) {
   const handleLoad = async (id: string, name: string) => {
     setLoadingId(id);
     try {
-      const res = await fetch(`/api/pnl/save/${id}`);
-      const data = await res.json();
-      if (res.ok) {
-        // Replace current state with loaded data
-        clearAll();
-        if (data.companies?.length > 0) {
-          addCompanies(data.companies);
-        }
-        if (data.journalEntries?.length > 0) {
-          addJournalEntries(data.journalEntries);
-        }
-        // Notes — set via store directly (we need a way to set notes; for now we use individual setNote)
-        if (data.notes && typeof data.notes === 'object') {
-          const { setNote } = usePnLStore.getState();
-          Object.entries(data.notes).forEach(([k, v]) => {
-            setNote(k, v as string);
-          });
-        }
-        toast({
-          title: 'تم التحميل',
-          description: `تم تحميل مجموعة "${name}" — ${data.companies.length} مجموعة بيانات`,
-        });
-        onClose();
-      } else {
+      await new Promise((r) => setTimeout(r, 120));
+      const all = readAllDatasets();
+      const dataset = all.find((d) => d.id === id);
+      if (!dataset) {
         toast({
           variant: 'destructive',
           title: 'فشل التحميل',
-          description: data.error || 'حدث خطأ',
+          description: 'المجموعة غير موجودة',
+        });
+        return;
+      }
+      // Replace current state with loaded data
+      clearAll();
+      if (dataset.companies?.length > 0) {
+        addCompanies(dataset.companies);
+      }
+      if (dataset.journalEntries?.length > 0) {
+        addJournalEntries(dataset.journalEntries);
+      }
+      if (dataset.notes && typeof dataset.notes === 'object') {
+        Object.entries(dataset.notes).forEach(([k, v]) => {
+          setNote(k, v as string);
         });
       }
+      toast({
+        title: 'تم التحميل',
+        description: `تم تحميل مجموعة "${name}" — ${dataset.companies.length} مجموعة بيانات`,
+      });
+      onClose();
     } catch {
       toast({
         variant: 'destructive',
         title: 'فشل التحميل',
-        description: 'تعذّر الاتصال بالخادم',
+        description: 'حدث خطأ غير متوقع',
       });
     } finally {
       setLoadingId(null);
@@ -203,26 +273,20 @@ export function SaveManager({ isOpen, onClose }: SaveManagerProps) {
     if (!confirm(`هل أنت متأكد من حذف مجموعة "${name}"؟ لا يمكن التراجع.`)) return;
     setDeletingId(id);
     try {
-      const res = await fetch(`/api/pnl/save/${id}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (res.ok) {
-        toast({
-          title: 'تم الحذف',
-          description: `تم حذف مجموعة "${name}"`,
-        });
-        loadList();
-      } else {
-        toast({
-          variant: 'destructive',
-          title: 'فشل الحذف',
-          description: data.error || 'حدث خطأ',
-        });
-      }
+      await new Promise((r) => setTimeout(r, 120));
+      const all = readAllDatasets();
+      const next = all.filter((d) => d.id !== id);
+      writeAllDatasets(next);
+      toast({
+        title: 'تم الحذف',
+        description: `تم حذف مجموعة "${name}"`,
+      });
+      loadList();
     } catch {
       toast({
         variant: 'destructive',
         title: 'فشل الحذف',
-        description: 'تعذّر الاتصال بالخادم',
+        description: 'حدث خطأ غير متوقع',
       });
     } finally {
       setDeletingId(null);
@@ -243,7 +307,13 @@ export function SaveManager({ isOpen, onClose }: SaveManagerProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="!max-w-2xl max-h-[90vh] p-0 gap-0 overflow-hidden rounded-3xl border-0 shadow-2xl" dir="rtl">
+      <DialogContent className="!max-w-2xl max-h-[90vh] p-0 gap-0 overflow-hidden rounded-3xl border-0 shadow-2xl" dir="rtl" aria-describedby={undefined}>
+        {/* Accessible title/description for screen readers (visually hidden) */}
+        <DialogTitle className="sr-only">إدارة الحفظ الدائم</DialogTitle>
+        <DialogDescription className="sr-only">
+          احفظ بياناتك محلياً في المتصفح — تبقى محفوظة بشكل دائم حتى بعد إغلاق المتصفح
+        </DialogDescription>
+
         {/* Header */}
         <div className="relative overflow-hidden px-7 py-6">
           <div className="absolute inset-0 bg-gradient-to-bl from-violet-600 via-purple-500 to-fuchsia-600" />
@@ -260,13 +330,14 @@ export function SaveManager({ isOpen, onClose }: SaveManagerProps) {
                   الحفظ الدائم
                 </h2>
                 <p className="text-white/80 text-xs mt-1 font-medium">
-                  احفظ بياناتك في قاعدة البيانات — تبقى محفوظة حتى بعد مسح المتصفح
+                  احفظ بياناتك في المتصفح — تبقى محفوظة حتى بعد مسح ذاكرة الجلسة
                 </p>
               </div>
             </div>
             <button
               onClick={onClose}
               className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/10 text-white/70 hover:text-white transition-all"
+              aria-label="إغلاق"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -543,14 +614,5 @@ export function SaveManager({ isOpen, onClose }: SaveManagerProps) {
         </ScrollArea>
       </DialogContent>
     </Dialog>
-  );
-}
-
-// Inline clock icon (avoid extra import)
-function Clock({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
   );
 }
