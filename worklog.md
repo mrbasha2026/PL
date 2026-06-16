@@ -107,3 +107,22 @@ Stage Summary:
 - All AI features now use free GLM models (glm-4-plus, glm-4-flash, glm-4-long) via z-ai-web-dev-sdk
 - No API key required — all models are free and work out of the box
 - Build clean, dev server working, API endpoint verified
+---
+Task ID: 4
+Agent: Main
+Task: Fix website hydration errors and AI analysis not working on Vercel
+
+Work Log:
+- Diagnosed hydration mismatch: Grammarly browser extension adds data-* attributes to DOM elements, causing React hydration warnings
+- Added suppressHydrationWarning to <body> tag in layout.tsx (already had it on <html>)
+- Diagnosed AI analysis failure on Vercel: route.ts used fs/path/os to read config files, which doesn't work in Vercel Serverless
+- Rewrote /api/pnl/ai-summary/route.ts to use only environment variables (ZAI_BASE_URL, ZAI_API_KEY, ZAI_CHAT_ID, ZAI_TOKEN, ZAI_USER_ID)
+- Removed fs, path, os imports from route.ts
+- Created .env.local with all Z-AI SDK config variables
+- Build succeeded, AI API tested and working with both glm-4-plus and glm-4-flash models
+- Page renders correctly with no errors
+
+Stage Summary:
+- Hydration warnings fixed with suppressHydrationWarning
+- AI analysis now works on Vercel (env vars instead of file system)
+- For Vercel deployment, need to set env vars: ZAI_BASE_URL, ZAI_API_KEY, ZAI_CHAT_ID, ZAI_TOKEN, ZAI_USER_ID

@@ -1,0 +1,598 @@
+     1→Console Error
+     2→
+     3→
+     4→A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+     5→- A server/client branch `if (typeof window !== 'undefined')`.
+     6→- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+     7→- Date formatting in a user's locale which doesn't match the server.
+     8→- External changing data without sending a snapshot of it along with the HTML.
+     9→- Invalid HTML tag nesting.
+    10→
+    11→It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+    12→
+    13→See more info here: https://nextjs.org/docs/messages/react-hydration-error
+    14→
+    15→
+    16→  ...
+    17→    <HotReload globalError={[...]} webSocket={WebSocket} staticIndicatorState={{pathname:null, ...}}>
+    18→      <AppDevOverlayErrorBoundary globalError={[...]}>
+    19→        <ReplaySsrOnlyErrors>
+    20→        <DevRootHTTPAccessFallbackBoundary>
+    21→          <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>
+    22→            <HTTPAccessFallbackErrorBoundary pathname="/" notFound={<NotAllowedRootHTTPFallbackError>} ...>
+    23→              <RedirectBoundary>
+    24→                <RedirectErrorBoundary router={{...}}>
+    25→                  <Head headCacheNode={{rsc:<Fragment>, ...}}>
+    26→                    <__next_viewport_boundary__>
+    27→                    <MetadataWrapper>
+    28→                      <div
+    29→                        hidden={true}
+    30→-                       data--h-bstatus="0OBSERVED"
+    31→                      >
+    32→                    ...
+    33→                  <__next_root_layout_boundary__>
+    34→                    <SegmentViewNode type="layout" pagePath="layout.tsx">
+    35→                      <SegmentTrieNode>
+    36→                      <link>
+    37→                      <script>
+    38→                      <script>
+    39→                      <script>
+    40→                      <RootLayout>
+    41→                        <html lang="ar" dir="rtl" suppressHydrationWarning={true}>
+    42→                          <body
+    43→                            className="geist_a71539c9-module__T19VSG__variable geist_mono_8d43a2aa-module__8Li5zG__var..."
+    44→-                           data-new-gr-c-s-check-loaded="14.1302.0"
+    45→-                           data-gr-ext-installed=""
+    46→-                           data--h-bstatus="0OBSERVED"
+    47→                          >
+    48→                            ...
+    49→                              ...
+    50→                                <SegmentViewNode type="page" pagePath="page.tsx">
+    51→                                  <SegmentTrieNode>
+    52→                                  <ClientPageRoot Component={function Home} serverProvidedParams={{...}}>
+    53→                                    <Home params={Promise} searchParams={Promise}>
+    54→                                      <div
+    55→                                        className="flex min-h-screen flex-col bg-gradient-to-b from-slate-50 to-white ..."
+    56→-                                       data--h-bstatus="0OBSERVED"
+    57→                                      >
+    58→                                        <header
+    59→                                          className="sticky top-0 z-50 border-b bg-white/90 dark:bg-slate-950/90 backd..."
+    60→-                                         data--h-bstatus="0OBSERVED"
+    61→                                        >
+    62→                                          <div
+    63→                                            className="mx-auto flex h-14 max-w-[1600px] items-center justify-between p..."
+    64→-                                           data--h-bstatus="0OBSERVED"
+    65→                                          >
+    66→                                            <div
+    67→                                              className="flex items-center gap-3"
+    68→-                                             data--h-bstatus="0OBSERVED"
+    69→                                            >
+    70→                                              <img
+    71→                                                alt="Dealz Tree"
+    72→                                                fetchPriority={undefined}
+    73→                                                loading={undefined}
+    74→                                                width={36}
+    75→                                                height={36}
+    76→                                                decoding="async"
+    77→                                                data-nimg="1"
+    78→                                                className="h-9 w-auto"
+    79→                                                style={{color:"transparent"}}
+    80→                                                sizes={undefined}
+    81→                                                srcSet={"/_next/image?url=%2Flogo.png&w=48&q=75 1x, /_next/image?url=..."}
+    82→                                                src={"/_next/image?url=%2Flogo.png&w=96&q=75"}
+    83→                                                ref={function}
+    84→                                                onLoad={function onLoad}
+    85→                                                onError={function onError}
+    86→-                                               data--h-bstatus="5PROCESSED"
+    87→-                                               data--h-bresult="clear"
+    88→                                              >
+    89→                                              ...
+    90→                                              <div
+    91→-                                               data--h-bstatus="0OBSERVED"
+    92→                                              >
+    93→                                                <div
+    94→                                                  className="flex items-center gap-2"
+    95→-                                                 data--h-bstatus="0OBSERVED"
+    96→                                                >
+    97→                                                  <h1
+    98→                                                    className="text-base font-bold leading-tight tracking-tight text-[..."
+    99→-                                                   data--h-bstatus="0OBSERVED"
+   100→                                                  >
+   101→+                                                   ديلز تري
+   102→                                                  <span
+   103→                                                    className="text-xs text-muted-foreground font-medium"
+   104→-                                                   data--h-bstatus="0OBSERVED"
+   105→                                                  >
+   106→+                                                   Dealz Tree
+   107→                                                <p
+   108→                                                  className="text-[10px] text-muted-foreground tracking-wide"
+   109→-                                                 data--h-bstatus="0OBSERVED"
+   110→                                                >
+   111→+                                                 {"لوحة مقارنة الأرباح والخسائر — P&L COMPARISON DASHBOARD"}
+   112→                                            <div
+   113→                                              className="flex items-center gap-2"
+   114→-                                             data--h-bstatus="0OBSERVED"
+   115→                                            >
+   116→                                              <ThemeToggle>
+   117→                                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+   118→                                                  <button
+   119→                                                    data-slot="button"
+   120→                                                    className={"inline-flex items-center justify-center whitespace-no..."}
+   121→-                                                   data--h-bstatus="0OBSERVED"
+   122→                                                  >
+   123→                                                    <Sun className="h-4 w-4">
+   124→                                                      <svg
+   125→                                                        ref={null}
+   126→                                                        xmlns="http://www.w3.org/2000/svg"
+   127→                                                        width={24}
+   128→                                                        height={24}
+   129→                                                        viewBox="0 0 24 24"
+   130→                                                        fill="none"
+   131→                                                        stroke="currentColor"
+   132→                                                        strokeWidth={2}
+   133→                                                        strokeLinecap="round"
+   134→                                                        strokeLinejoin="round"
+   135→                                                        className="lucide lucide-sun h-4 w-4"
+   136→                                                        aria-hidden="true"
+   137→-                                                       data--h-bstatus="0OBSERVED"
+   138→                                                      >
+   139→                                                        <circle
+   140→                                                          cx="12"
+   141→                                                          cy="12"
+   142→                                                          r="4"
+   143→-                                                         data--h-bstatus="0OBSERVED"
+   144→                                                        >
+   145→                                                        <path
+   146→                                                          d="M12 2v2"
+   147→-                                                         data--h-bstatus="0OBSERVED"
+   148→                                                        >
+   149→                                                        <path
+   150→                                                          d="M12 20v2"
+   151→-                                                         data--h-bstatus="0OBSERVED"
+   152→                                                        >
+   153→                                                        <path
+   154→                                                          d="m4.93 4.93 1.41 1.41"
+   155→-                                                         data--h-bstatus="0OBSERVED"
+   156→                                                        >
+   157→                                                        <path
+   158→                                                          d="m17.66 17.66 1.41 1.41"
+   159→-                                                         data--h-bstatus="0OBSERVED"
+   160→                                                        >
+   161→                                                        <path
+   162→                                                          d="M2 12h2"
+   163→-                                                         data--h-bstatus="0OBSERVED"
+   164→                                                        >
+   165→                                                        <path
+   166→                                                          d="M20 12h2"
+   167→-                                                         data--h-bstatus="0OBSERVED"
+   168→                                                        >
+   169→                                                        <path
+   170→                                                          d="m6.34 17.66-1.41 1.41"
+   171→-                                                         data--h-bstatus="0OBSERVED"
+   172→                                                        >
+   173→                                                        <path
+   174→                                                          d="m19.07 4.93-1.41 1.41"
+   175→-                                                         data--h-bstatus="0OBSERVED"
+   176→                                                        >
+   177→                                        <main
+   178→                                          className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6 lg:px-8"
+   179→-                                         data--h-bstatus="0OBSERVED"
+   180→                                        >
+   181→                                          <div
+   182→                                            className="mb-10"
+   183→-                                           data--h-bstatus="0OBSERVED"
+   184→                                          >
+   185→                                            <div
+   186→                                              className="mb-8 text-center"
+   187→-                                             data--h-bstatus="0OBSERVED"
+   188→                                            >
+   189→                                              <div
+   190→                                                className="mb-4 inline-flex items-center gap-1.5 rounded-full bg-[#4CA..."
+   191→-                                               data--h-bstatus="0OBSERVED"
+   192→                                              >
+   193→                                                <Sparkles className="h-3.5 w-3.5">
+   194→                                                  <svg
+   195→                                                    ref={null}
+   196→                                                    xmlns="http://www.w3.org/2000/svg"
+   197→                                                    width={24}
+   198→                                                    height={24}
+   199→                                                    viewBox="0 0 24 24"
+   200→                                                    fill="none"
+   201→                                                    stroke="currentColor"
+   202→                                                    strokeWidth={2}
+   203→                                                    strokeLinecap="round"
+   204→                                                    strokeLinejoin="round"
+   205→                                                    className="lucide lucide-sparkles h-3.5 w-3.5"
+   206→                                                    aria-hidden="true"
+   207→-                                                   data--h-bstatus="0OBSERVED"
+   208→                                                  >
+   209→                                                    <path
+   210→                                                      d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.9..."
+   211→-                                                     data--h-bstatus="0OBSERVED"
+   212→                                                    >
+   213→                                                    <path
+   214→                                                      d="M20 3v4"
+   215→-                                                     data--h-bstatus="0OBSERVED"
+   216→                                                    >
+   217→                                                    <path
+   218→                                                      d="M22 5h-4"
+   219→-                                                     data--h-bstatus="0OBSERVED"
+   220→                                                    >
+   221→                                                    <path
+   222→                                                      d="M4 17v2"
+   223→-                                                     data--h-bstatus="0OBSERVED"
+   224→                                                    >
+   225→                                                    <path
+   226→                                                      d="M5 18H3"
+   227→-                                                     data--h-bstatus="0OBSERVED"
+   228→                                                    >
+   229→                                                ...
+   230→                                              <h2
+   231→                                                className="mb-3 text-3xl font-bold tracking-tight"
+   232→-                                               data--h-bstatus="0OBSERVED"
+   233→                                              >
+   234→+                                               قم برفع ومقارنة بيانات الأرباح والخسائر
+   235→                                              <p
+   236→                                                className="mx-auto max-w-2xl text-muted-foreground leading-relaxed"
+   237→-                                               data--h-bstatus="0OBSERVED"
+   238→                                              >
+   239→+                                               {"ارفع ملف Excel يحتوي على بيانات P&L لشركة واحدة أو أكثر عبر فترات ..."}
+   240→                                            <div
+   241→                                              className="mx-auto max-w-2xl"
+   242→-                                             data--h-bstatus="0OBSERVED"
+   243→                                            >
+   244→                                              <PnLUpload>
+   245→                                                <Card className="border-dashed">
+   246→                                                  <div
+   247→                                                    data-slot="card"
+   248→                                                    className="bg-card text-card-foreground flex flex-col gap-6 rounde..."
+   249→-                                                   data--h-bstatus="0OBSERVED"
+   250→                                                  >
+   251→                                                    <CardHeader className="pb-3">
+   252→                                                      <div
+   253→                                                        data-slot="card-header"
+   254→                                                        className="@container/card-header grid auto-rows-min grid-rows..."
+   255→-                                                       data--h-bstatus="0OBSERVED"
+   256→                                                      >
+   257→                                                        <CardTitle className="flex items...">
+   258→                                                          <div
+   259→                                                            data-slot="card-title"
+   260→                                                            className="font-semibold flex items-center gap-2 text-base"
+   261→-                                                           data--h-bstatus="0OBSERVED"
+   262→                                                          >
+   263→                                                            <FileSpreadsheet className="h-5 w-5 te...">
+   264→                                                              <svg
+   265→                                                                ref={null}
+   266→                                                                xmlns="http://www.w3.org/2000/svg"
+   267→                                                                width={24}
+   268→                                                                height={24}
+   269→                                                                viewBox="0 0 24 24"
+   270→                                                                fill="none"
+   271→                                                                stroke="currentColor"
+   272→                                                                strokeWidth={2}
+   273→                                                                strokeLinecap="round"
+   274→                                                                strokeLinejoin="round"
+   275→                                                                className="lucide lucide-file-spreadsheet h-5 w-5 text..."
+   276→                                                                aria-hidden="true"
+   277→-                                                               data--h-bstatus="0OBSERVED"
+   278→                                                              >
+   279→                                                                <path
+   280→                                                                  d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0..."
+   281→-                                                                 data--h-bstatus="0OBSERVED"
+   282→                                                                >
+   283→                                                                <path
+   284→                                                                  d="M14 2v4a2 2 0 0 0 2 2h4"
+   285→-                                                                 data--h-bstatus="0OBSERVED"
+   286→                                                                >
+   287→                                                                <path
+   288→                                                                  d="M8 13h2"
+   289→-                                                                 data--h-bstatus="0OBSERVED"
+   290→                                                                >
+   291→                                                                <path
+   292→                                                                  d="M14 13h2"
+   293→-                                                                 data--h-bstatus="0OBSERVED"
+   294→                                                                >
+   295→                                                                <path
+   296→                                                                  d="M8 17h2"
+   297→-                                                                 data--h-bstatus="0OBSERVED"
+   298→                                                                >
+   299→                                                                <path
+   300→                                                                  d="M14 17h2"
+   301→-                                                                 data--h-bstatus="0OBSERVED"
+   302→                                                                >
+   303→                                                            ...
+   304→                                                        <CardDescription>
+   305→                                                          <div
+   306→                                                            data-slot="card-description"
+   307→                                                            className="text-muted-foreground text-sm"
+   308→-                                                           data--h-bstatus="0OBSERVED"
+   309→                                                          >
+   310→+                                                           {"ارفع ملف Excel يحتوي على بيانات P&L — يدعم عدة شركات و..."}
+   311→                                                    <CardContent className="space-y-4">
+   312→                                                      <div
+   313→                                                        data-slot="card-content"
+   314→                                                        className="px-6 space-y-4"
+   315→-                                                       data--h-bstatus="0OBSERVED"
+   316→                                                      >
+   317→                                                        <div
+   318→                                                          onDrop={function PnLUpload.useCallback[handleDrop]}
+   319→                                                          onDragOver={function PnLUpload.useCallback[handleDragOver]}
+   320→                                                          onDragLeave={function PnLUpload.useCallback[handleDragLeave]}
+   321→                                                          className="relative flex flex-col items-center justify-cente..."
+   322→-                                                         data--h-bstatus="0OBSERVED"
+   323→                                                        >
+   324→                                                          <div
+   325→                                                            className="mb-3 flex h-14 w-14 items-center justify-center..."
+   326→-                                                           data--h-bstatus="0OBSERVED"
+   327→                                                          >
+   328→                                                            <Upload className="h-6 w-6 te...">
+   329→                                                              <svg
+   330→                                                                ref={null}
+   331→                                                                xmlns="http://www.w3.org/2000/svg"
+   332→                                                                width={24}
+   333→                                                                height={24}
+   334→                                                                viewBox="0 0 24 24"
+   335→                                                                fill="none"
+   336→                                                                stroke="currentColor"
+   337→                                                                strokeWidth={2}
+   338→                                                                strokeLinecap="round"
+   339→                                                                strokeLinejoin="round"
+   340→                                                                className="lucide lucide-upload h-6 w-6 text-teal-600"
+   341→                                                                aria-hidden="true"
+   342→-                                                               data--h-bstatus="0OBSERVED"
+   343→                                                              >
+   344→                                                                <path
+   345→                                                                  d="M12 3v12"
+   346→-                                                                 data--h-bstatus="0OBSERVED"
+   347→                                                                >
+   348→                                                                <path
+   349→                                                                  d="m17 8-5-5-5 5"
+   350→-                                                                 data--h-bstatus="0OBSERVED"
+   351→                                                                >
+   352→                                                                <path
+   353→                                                                  d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+   354→-                                                                 data--h-bstatus="0OBSERVED"
+   355→                                                                >
+   356→                                                          <p
+   357→                                                            className="mb-1 text-sm font-semibold"
+   358→-                                                           data--h-bstatus="0OBSERVED"
+   359→                                                          >
+   360→+                                                           اسحب وأفلت ملف Excel هنا
+   361→                                                          <p
+   362→                                                            className="mb-3 text-xs text-muted-foreground"
+   363→-                                                           data--h-bstatus="0OBSERVED"
+   364→                                                          >
+   365→+                                                           أو اضغط لاختيار ملف
+   366→                                                          <Button type="button" variant="outline" size="sm" ...>
+   367→                                                            <button
+   368→                                                              data-slot="button"
+   369→                                                              className={"inline-flex items-center justify-center whi..."}
+   370→                                                              type="button"
+   371→                                                              onClick={function onClick}
+   372→-                                                             data--h-bstatus="0OBSERVED"
+   373→                                                            >
+   374→                                                              <Upload className="h-3.5 w-3.5">
+   375→                                                                <svg
+   376→                                                                  ref={null}
+   377→                                                                  xmlns="http://www.w3.org/2000/svg"
+   378→                                                                  width={24}
+   379→                                                                  height={24}
+   380→                                                                  viewBox="0 0 24 24"
+   381→                                                                  fill="none"
+   382→                                                                  stroke="currentColor"
+   383→                                                                  strokeWidth={2}
+   384→                                                                  strokeLinecap="round"
+   385→                                                                  strokeLinejoin="round"
+   386→                                                                  className="lucide lucide-upload h-3.5 w-3.5"
+   387→                                                                  aria-hidden="true"
+   388→-                                                                 data--h-bstatus="0OBSERVED"
+   389→                                                                >
+   390→                                                                  <path
+   391→                                                                    d="M12 3v12"
+   392→-                                                                   data--h-bstatus="0OBSERVED"
+   393→                                                                  >
+   394→                                                                  <path
+   395→                                                                    d="m17 8-5-5-5 5"
+   396→-                                                                   data--h-bstatus="0OBSERVED"
+   397→                                                                  >
+   398→                                                                  <path
+   399→                                                                    d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+   400→-                                                                   data--h-bstatus="0OBSERVED"
+   401→                                                                  >
+   402→                                                              ...
+   403→                                                          <input
+   404→                                                            id="pnl-file-upload"
+   405→                                                            type="file"
+   406→                                                            accept=".xlsx,.xls"
+   407→                                                            className="hidden"
+   408→                                                            onChange={function PnLUpload.useCallback[handleInputChange]}
+   409→-                                                           data--h-bstatus="0OBSERVED"
+   410→                                                          >
+   411→                                                        <div
+   412→                                                          className="flex items-center justify-between gap-4"
+   413→-                                                         data--h-bstatus="0OBSERVED"
+   414→                                                        >
+   415→                                                          <div
+   416→                                                            className="flex items-center gap-3"
+   417→-                                                           data--h-bstatus="0OBSERVED"
+   418→                                                          >
+   419→                                                          <Button variant="ghost" size="sm" className="gap-1.5 te..." ...>
+   420→                                                            <button
+   421→                                                              data-slot="button"
+   422→                                                              className={"inline-flex items-center justify-center whi..."}
+   423→                                                              onClick={function handleDownloadTemplate}
+   424→-                                                             data--h-bstatus="0OBSERVED"
+   425→                                                            >
+   426→                                                              <Download className="h-4 w-4">
+   427→                                                                <svg
+   428→                                                                  ref={null}
+   429→                                                                  xmlns="http://www.w3.org/2000/svg"
+   430→                                                                  width={24}
+   431→                                                                  height={24}
+   432→                                                                  viewBox="0 0 24 24"
+   433→                                                                  fill="none"
+   434→                                                                  stroke="currentColor"
+   435→                                                                  strokeWidth={2}
+   436→                                                                  strokeLinecap="round"
+   437→                                                                  strokeLinejoin="round"
+   438→                                                                  className="lucide lucide-download h-4 w-4"
+   439→                                                                  aria-hidden="true"
+   440→-                                                                 data--h-bstatus="0OBSERVED"
+   441→                                                                >
+   442→                                                                  <path
+   443→                                                                    d="M12 15V3"
+   444→-                                                                   data--h-bstatus="0OBSERVED"
+   445→                                                                  >
+   446→                                                                  <path
+   447→                                                                    d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+   448→-                                                                   data--h-bstatus="0OBSERVED"
+   449→                                                                  >
+   450→                                                                  <path
+   451→                                                                    d="m7 10 5 5 5-5"
+   452→-                                                                   data--h-bstatus="0OBSERVED"
+   453→                                                                  >
+   454→                                                              ...
+   455→                                            <div
+   456→                                              className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-3"
+   457→-                                             data--h-bstatus="0OBSERVED"
+   458→                                            >
+   459→                                              <Card className="border-das...">
+   460→                                                <div
+   461→                                                  data-slot="card"
+   462→                                                  className="bg-card text-card-foreground flex flex-col gap-6 rounded-..."
+   463→-                                                 data--h-bstatus="0OBSERVED"
+   464→                                                >
+   465→                                                  <CardContent className="flex flex-...">
+   466→                                                    <div
+   467→                                                      data-slot="card-content"
+   468→                                                      className="flex flex-col items-center p-8 text-center"
+   469→-                                                     data--h-bstatus="0OBSERVED"
+   470→                                                    >
+   471→                                                      <div
+   472→                                                        className="mb-4 flex h-14 w-14 items-center justify-center rou..."
+   473→-                                                       data--h-bstatus="0OBSERVED"
+   474→                                                      >
+   475→                                                        <span
+   476→                                                          className="text-2xl font-bold text-[#4CAF50]"
+   477→-                                                         data--h-bstatus="0OBSERVED"
+   478→                                                        >
+   479→+                                                         1
+   480→                                                      <h3
+   481→                                                        className="mb-2 text-base font-bold"
+   482→-                                                       data--h-bstatus="0OBSERVED"
+   483→                                                      >
+   484→+                                                       حمّل القالب
+   485→                                                      <p
+   486→                                                        className="text-sm leading-relaxed text-muted-foreground"
+   487→-                                                       data--h-bstatus="0OBSERVED"
+   488→                                                      >
+   489→+                                                       نزّل قالب Excel المقترح واملأ بيانات الشركات والفترات الشهرية
+   490→                                              <Card className="border-das...">
+   491→                                                <div
+   492→                                                  data-slot="card"
+   493→                                                  className="bg-card text-card-foreground flex flex-col gap-6 rounded-..."
+   494→-                                                 data--h-bstatus="0OBSERVED"
+   495→                                                >
+   496→                                                  <CardContent className="flex flex-...">
+   497→                                                    <div
+   498→                                                      data-slot="card-content"
+   499→                                                      className="flex flex-col items-center p-8 text-center"
+   500→-                                                     data--h-bstatus="0OBSERVED"
+   501→                                                    >
+   502→                                                      <div
+   503→                                                        className="mb-4 flex h-14 w-14 items-center justify-center rou..."
+   504→-                                                       data--h-bstatus="0OBSERVED"
+   505→                                                      >
+   506→                                                        <span
+   507→                                                          className="text-2xl font-bold text-amber-700"
+   508→-                                                         data--h-bstatus="0OBSERVED"
+   509→                                                        >
+   510→+                                                         2
+   511→                                                      <h3
+   512→                                                        className="mb-2 text-base font-bold"
+   513→-                                                       data--h-bstatus="0OBSERVED"
+   514→                                                      >
+   515→+                                                       ارفع الملف
+   516→                                                      <p
+   517→                                                        className="text-sm leading-relaxed text-muted-foreground"
+   518→-                                                       data--h-bstatus="0OBSERVED"
+   519→                                                      >
+   520→+                                                       ارفع ملف Excel — كل ورقة تمثل شركة وكل عمود يمثل شهر
+   521→                                              <Card className="border-das...">
+   522→                                                <div
+   523→                                                  data-slot="card"
+   524→                                                  className="bg-card text-card-foreground flex flex-col gap-6 rounded-..."
+   525→-                                                 data--h-bstatus="0OBSERVED"
+   526→                                                >
+   527→                                                  <CardContent className="flex flex-...">
+   528→                                                    <div
+   529→                                                      data-slot="card-content"
+   530→                                                      className="flex flex-col items-center p-8 text-center"
+   531→-                                                     data--h-bstatus="0OBSERVED"
+   532→                                                    >
+   533→                                                      <div
+   534→                                                        className="mb-4 flex h-14 w-14 items-center justify-center rou..."
+   535→-                                                       data--h-bstatus="0OBSERVED"
+   536→                                                      >
+   537→                                                        <span
+   538→                                                          className="text-2xl font-bold text-violet-700"
+   539→-                                                         data--h-bstatus="0OBSERVED"
+   540→                                                        >
+   541→+                                                         3
+   542→                                                      <h3
+   543→                                                        className="mb-2 text-base font-bold"
+   544→-                                                       data--h-bstatus="0OBSERVED"
+   545→                                                      >
+   546→+                                                       حلّل وقارن
+   547→                                                      <p
+   548→                                                        className="text-sm leading-relaxed text-muted-foreground"
+   549→-                                                       data--h-bstatus="0OBSERVED"
+   550→                                                      >
+   551→+                                                       استخدم الملخص التنفيذي والجداول والرسوم البيانية والنسب المالية...
+   552→                                        <footer
+   553→                                          className="mt-auto border-t bg-slate-50 dark:bg-slate-950 py-5 no-print"
+   554→-                                         data--h-bstatus="0OBSERVED"
+   555→                                        >
+   556→                                          <div
+   557→                                            className="mx-auto max-w-[1600px] px-4 text-center sm:px-6 lg:px-8"
+   558→-                                           data--h-bstatus="0OBSERVED"
+   559→                                          >
+   560→                                            <p
+   561→                                              className="text-xs text-muted-foreground"
+   562→-                                             data--h-bstatus="0OBSERVED"
+   563→                                            >
+   564→+                                             {"ديلز تري — Dealz Tree | لوحة مقارنة الأرباح والخسائر — Profit & Loss..."}
+   565→                                            <p
+   566→                                              className="mt-1 text-[10px] text-muted-foreground/50"
+   567→-                                             data--h-bstatus="0OBSERVED"
+   568→                                            >
+   569→+                                             البيانات محفوظة تلقائياً في المتصفح — لا تُرسل لأي خادم خارجي
+   570→                              ...
+   571→                                <ToastViewport ref={null} className="fixed top-...">
+   572→                                  <DismissableLayerBranch ref={{current:null}} role="region" aria-label="Notificati..." ...>
+   573→                                    <Primitive.div role="region" aria-label="Notificati..." tabIndex={-1} style={{...}} ...>
+   574→                                      <div
+   575→                                        role="region"
+   576→                                        aria-label="Notifications (F8)"
+   577→                                        tabIndex={-1}
+   578→                                        style={{pointerEvents:"none"}}
+   579→                                        ref={function}
+   580→-                                       data--h-bstatus="0OBSERVED"
+   581→                                      >
+   582→                                        <ToastCollectionSlot scope={undefined}>
+   583→                                          <ToastCollectionSlot.Slot ref={function}>
+   584→                                            <ToastCollectionSlot.SlotClone ref={function}>
+   585→                                              <Primitive.ol tabIndex={-1} className="fixed top-..." ref={function}>
+   586→                                                <ol
+   587→                                                  tabIndex={-1}
+   588→                                                  className="fixed top-0 z-[100] flex max-h-screen w-full flex-col-rev..."
+   589→                                                  ref={function}
+   590→-                                                 data--h-bstatus="0OBSERVED"
+   591→                                                >
+   592→                  ...
+   593→Call Stack
+   594→17
+   595→
+   596→Show 16 ignore-listed frame(s)
+   597→div
+   598→<anonymous>

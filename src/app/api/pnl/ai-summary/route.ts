@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import ZAI from 'z-ai-web-dev-sdk';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
 
 // ─── AI Response ──────────────────────────────────────────────────────────────
 interface AIResponse {
@@ -151,47 +148,22 @@ const ANALYSIS_MODES: Record<string, { systemPrompt: string; maxTokens: number; 
   },
 };
 
-// ─── Load Z-AI Config (3-layer fallback) ────────────────────────────────────
+// ─── Z-AI Config (env vars only — works on Vercel + local) ──────────────────
 function getZAIConfig() {
-  // 1. Try env vars
-  const envBaseUrl = process.env.ZAI_BASE_URL;
-  const envApiKey = process.env.ZAI_API_KEY;
-  if (envBaseUrl && envApiKey) {
-    console.log('[AI] Config from env vars');
-    return {
-      baseUrl: envBaseUrl,
-      apiKey: envApiKey,
-      chatId: process.env.ZAI_CHAT_ID || '',
-      token: process.env.ZAI_TOKEN || '',
-      userId: process.env.ZAI_USER_ID || '',
-    };
-  }
+  const baseUrl = process.env.ZAI_BASE_URL || 'https://internal-api.z.ai/v1';
+  const apiKey = process.env.ZAI_API_KEY || 'Z.ai';
+  const chatId = process.env.ZAI_CHAT_ID || '';
+  const token = process.env.ZAI_TOKEN || '';
+  const userId = process.env.ZAI_USER_ID || '';
 
-  // 2. Try config files
-  const configPaths = [
-    path.join(process.cwd(), '.z-ai-config'),
-    path.join(os.homedir(), '.z-ai-config'),
-    '/etc/.z-ai-config',
-  ];
-  for (const filePath of configPaths) {
-    try {
-      const configStr = fs.readFileSync(filePath, 'utf-8');
-      const config = JSON.parse(configStr);
-      if (config.baseUrl && config.apiKey) {
-        console.log('[AI] Config from file:', filePath);
-        return config;
-      }
-    } catch { /* next */ }
-  }
+  console.log('[AI] Config — baseUrl:', baseUrl, 'apiKey:', apiKey ? 'SET' : 'DEFAULT');
 
-  // 3. Built-in config — always works
-  console.log('[AI] Using built-in config');
   return {
-    baseUrl: 'https://internal-api.z.ai/v1',
-    apiKey: 'Z.ai',
-    chatId: 'chat-43918972-0013-4774-b4f8-d105cb76fb8d',
-    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZjBlZmIxY2UtYWViZS00YmVhLTgwYzQtMTBhOWI2ZDNiMjZlIiwiY2hhdF9pZCI6ImNoYXQtNDM5MTg5NzItMDAxMy00Nzc0LWI0ZjgtZDEwNWNiNzZmYjhkIiwicGxhdGZvcm0iOiJ6YWkifQ.xZyIVt_Rh0MOf-habJkydAt-lCm4fSiQ-f42Oc4FhNU',
-    userId: 'f0efb1ce-aebe-4bea-80c4-10a9b6d3b26e',
+    baseUrl,
+    apiKey,
+    chatId,
+    token,
+    userId,
   };
 }
 
