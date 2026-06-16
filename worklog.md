@@ -229,3 +229,47 @@ Stage Summary:
 - Shared JournalEntriesDialog component ensures consistent UI/behavior across PnLTable and CompanyMoM
 - All clickable items show "قيود" badge and chevron icon with violet hover effect
 - Dialog auto-selects the company whose row was clicked (via initialCompany prop)
+
+---
+Task ID: 8
+Agent: Main Agent
+Task: Add permanent database storage (حفظ دائم) feature
+
+Work Log:
+- Updated Prisma schema (prisma/schema.prisma) to add SavedDataset model:
+  - id, name, description
+  - companiesJson, journalEntriesJson, notesJson (JSON strings for SQLite)
+  - companyCount, periodCount, datasetCount (cached stats)
+  - createdAt, updatedAt
+- Ran `npx prisma db push` to sync schema with SQLite DB (db/custom.db)
+- Ran `npx prisma generate` to regenerate Prisma client
+- Created API routes:
+  - GET  /api/pnl/save         → list all saved datasets (summary only, no payloads)
+  - POST /api/pnl/save         → create or update (upsert by name) a dataset
+  - GET  /api/pnl/save/[id]    → load full dataset by ID (companies + journalEntries + notes)
+  - DELETE /api/pnl/save/[id]  → delete dataset by ID
+- Created SaveManager component (src/components/pnl/SaveManager.tsx):
+  - Modern dialog with gradient violet/purple header matching site style
+  - Two modes: "المحفوظات" (list) and "حفظ جديد" (save form)
+  - List mode: shows all saved datasets with name, description, badges (companies/periods/datasets), updated date, load & delete buttons
+  - Save mode: shows current data summary card + form with name/description, warns if name already exists (will update)
+  - Loading and error states with toast notifications
+  - Refresh button to reload the list
+  - Empty state with helpful messaging
+  - Replaces current data on load (clearAll + addCompanies + addJournalEntries + restore notes)
+- Integrated SaveManager into main page header:
+  - Added "حفظ دائم" button with HardDrive icon, styled with violet gradient to stand out
+  - Placed between ThemeToggle and "مسح الكل" button
+  - Button is always visible (even before data is loaded) — user can browse saved datasets anytime
+  - SaveManager dialog rendered at end of page
+- Updated footer text to mention "حفظ دائم" feature
+- Build passed successfully — new API routes appear in build output
+
+Stage Summary:
+- Permanent storage now available via SQLite database (db/custom.db)
+- User can save current P&L data with a name + description → stays even after browser data is cleared
+- Same name = updates existing dataset (no duplicates)
+- Loading a dataset replaces current state with the saved one
+- All saved datasets are listed in a modern dialog with stats and timestamps
+- Delete button with confirmation prompt prevents accidental loss
+- Toast notifications provide feedback for all operations

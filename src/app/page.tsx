@@ -8,7 +8,7 @@ import {
   Sparkles, Calculator, FileText, TrendingUp, Database, Clock,
   CalendarDays, BookOpen, StickyNote, Layers, Download, Brain,
   Sun, Moon, AlertTriangle, ArrowUpDown, LineChart, ScrollText,
-  Zap,
+  Zap, HardDrive,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -31,6 +31,7 @@ import { VarianceAnalysis } from '@/components/pnl/VarianceAnalysis';
 import { Forecasting } from '@/components/pnl/Forecasting';
 import { LineItemExplorer } from '@/components/pnl/LineItemExplorer';
 import { AccountLedgerExplorer } from '@/components/pnl/AccountLedger';
+import { SaveManager } from '@/components/pnl/SaveManager';
 
 function ThemeToggle() {
   const { theme, setTheme } = useTheme();
@@ -64,6 +65,7 @@ export default function Home() {
   const hasData = companies.length > 0;
   const companyCount = new Set(companies.map((c) => c.companyName)).size;
   const periodCount = new Set(companies.map((c) => c.period)).size;
+  const [saveManagerOpen, setSaveManagerOpen] = React.useState(false);
 
   const tabs = [
     { value: 'summary', icon: FileText, label: 'الملخص التنفيذي', short: 'ملخص' },
@@ -146,6 +148,16 @@ export default function Home() {
                 </>
               )}
               <ThemeToggle />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs gap-1.5 h-9 rounded-xl font-medium bg-gradient-to-l from-violet-500/10 to-purple-500/10 border border-violet-500/20 text-violet-700 dark:text-violet-400 hover:from-violet-500/20 hover:to-purple-500/20"
+                onClick={() => setSaveManagerOpen(true)}
+                title="حفظ دائم في قاعدة البيانات"
+              >
+                <HardDrive className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">حفظ دائم</span>
+              </Button>
               {hasData && (
                 <Button
                   variant="ghost"
@@ -310,10 +322,13 @@ export default function Home() {
           <span className="text-sm text-muted-foreground">لوحة مقارنة الأرباح والخسائر — P&L Comparison Dashboard</span>
           <p className="mt-2 text-[11px] text-muted-foreground/60 flex items-center justify-center gap-1.5">
             <Database className="h-3 w-3" />
-            البيانات محفوظة تلقائياً في المتصفح — لا تُرسل لأي خادم خارجي
+            البيانات محفوظة تلقائياً في المتصفح — استخدم "حفظ دائم" لحفظها في قاعدة البيانات
           </p>
         </div>
       </footer>
+
+      {/* ─── Save Manager Dialog ──────────────────────────────────── */}
+      <SaveManager isOpen={saveManagerOpen} onClose={() => setSaveManagerOpen(false)} />
     </div>
   );
 }

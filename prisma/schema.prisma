@@ -30,3 +30,22 @@ model Post {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+// ─── Permanent PnL Storage ────────────────────────────────────────────────
+// A named snapshot of all P&L data the user wants to save permanently.
+model SavedDataset {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  // JSON-encoded arrays for flexibility (SQLite has no native JSON type)
+  companiesJson    String // CompanyPnL[]
+  journalEntriesJson String // JournalEntry[]
+  notesJson   String  // Record<string, string>
+  companyCount Int
+  periodCount  Int
+  datasetCount Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([createdAt])
+}
