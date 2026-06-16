@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -14,21 +14,38 @@ import {
 } from '@/components/ui/table';
 import {
   ArrowUpRight, ArrowDownRight, Minus, TrendingUp, Building2, Info,
+  BookOpen, ChevronLeft,
 } from 'lucide-react';
 import { usePnLStore } from '@/lib/pnl-store';
 import {
   PNL_LINE_ITEMS,
+  getAllLineItems,
   getLineItemKey,
   COMPANY_COLORS,
   groupByCompany,
   formatNumber,
   periodToArabic,
   CompanyGroup,
+  PnLLineItem,
 } from '@/lib/pnl-types';
 import { InfoTooltip } from '@/components/pnl/InfoTooltip';
+import { JournalEntriesDialog } from '@/components/pnl/JournalEntriesDialog';
 
-function CompanyMoMTable({ group, color }: { group: CompanyGroup; color: string }) {
+function CompanyMoMTable({ group, color, onRowClick }: { group: CompanyGroup; color: string; onRowClick: (item: PnLLineItem, companyName: string) => void }) {
   const datasets = group.datasets;
+  const { companies } = usePnLStore();
+  const allLineItems = useMemo(() => getAllLineItems(companies), [companies]);
+
+  // Determine which accounts have data (for the indicator)
+  const accountsWithData = useMemo(() => {
+    const keys = new Set<string>();
+    companies.forEach((ds) => {
+      Object.entries(ds.data).forEach(([key, val]) => {
+        if (val !== 0) keys.add(key);
+      });
+    });
+    return keys;
+  }, [companies]);
 
   if (datasets.length === 0) {
     return (
@@ -45,12 +62,36 @@ function CompanyMoMTable({ group, color }: { group: CompanyGroup; color: string 
         <Info className="h-3 w-3 mt-0.5 shrink-0" />
         <div className="space-y-0.5">
           <p>التغير % = ((قيمة الشهر الحالي - الشهر السابق) ÷ |الشهر السابق|) × 100</p>
-          <p>🟢 ارتفاع إيجابي — 🔴 انخفاض سلبي — القيم السالبة بالأحمر</p>
+          <p>اضغط على أي بند مصروف أو إيراد لعرض القيود المحاسبية المحسوبة تلقائياً</p>
           <p>النسبة % = قيمة البند ÷ الإيرادات × 100</p>
         </div>
       </div>
     </div>
   );
+
+  // Helper: render clickable line item name
+  const renderLineItemName = (item: PnLLineItem) => {
+    const key = item.isCustom ? item.name : getLineItemKey(item.name);
+    const isSummary = item.isSubtotal || item.isTotal;
+    const hasData = accountsWithData.has(key);
+    const isClickable = !isSummary && (item.category === 'expense' || item.category === 'revenue') && hasData;
+
+    return (
+      <span style={{ paddingRight: `${(item.indent || 0) * 20}px` }}
+        className="flex items-center gap-1.5"
+      >
+        {item.nameAr}
+        {item.description && <InfoTooltip text={item.description} side="left" />}
+        {isClickable && (
+          <span className="inline-flex items-center gap-0.5 text-[9px] text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/30 px-1.5 py-0.5 rounded-full ring-1 ring-violet-500/20"
+            title="اضغط لعرض القيود المحاسبية">
+            <BookOpen className="h-2.5 w-2.5" />
+            قيود
+          </span>
+        )}
+      </span>
+    );
+  };
 
   if (datasets.length === 1) {
     return (
@@ -74,22 +115,29 @@ function CompanyMoMTable({ group, color }: { group: CompanyGroup; color: string 
               </TableRow>
             </TableHeader>
             <TableBody>
-              {PNL_LINE_ITEMS.map((item) => {
-                const key = getLineItemKey(item.name);
+              {allLineItems.map((item) => {
+                const key = item.isCustom ? item.name : getLineItemKey(item.name);
                 const isSummary = item.isSubtotal || item.isTotal;
                 const value = datasets[0].data[key] || 0;
                 const revenue = datasets[0].data['revenue'] || 0;
                 const pct = key === 'revenue'
                   ? (revenue !== 0 ? '100.0%' : '—')
                   : (revenue !== 0 ? `${((value / revenue) * 100).toFixed(1)}%` : '—');
+                const isClickable = !isSummary && (item.category === 'expense' || item.category === 'revenue') && accountsWithData.has(key);
 
                 return (
-                  <TableRow key={key} className={`${isSummary ? 'bg-muted/20 font-bold' : ''} hover:bg-muted/5`}>
+                  <TableRow
+                    key={key}
+                    className={`${isSummary ? 'bg-muted/20 font-bold' : ''} ${
+                      isClickable ? 'cursor-pointer hover:bg-violet-50/30 dark:hover:bg-violet-950/20' : 'hover:bg-muted/5'
+                    } transition-colors`}
+                    onClick={isClickable ? () => onRowClick(item, datasets[0].companyName) : undefined}
+                  >
                     <TableCell className={`text-sm ${isSummary ? 'font-bold' : 'text-muted-foreground'}`}>
-                      <span style={{ paddingRight: `${(item.indent || 0) * 20}px` }}>
-                        {item.nameAr}
-                        {item.description && <InfoTooltip text={item.description} side="left" />}
-                      </span>
+                      {renderLineItemName(item)}
+                      {isClickable && (
+                        <ChevronLeft className="h-3 w-3 text-violet-500/40 inline mr-1" />
+                      )}
                     </TableCell>
                     <TableCell className={`text-center tabular-nums text-sm ${value < 0 ? 'text-red-600' : isSummary ? 'font-bold' : ''}`}>
                       {formatNumber(value, datasets[0].currency)}
@@ -118,6 +166,7 @@ function CompanyMoMTable({ group, color }: { group: CompanyGroup; color: string 
         <span>💰 القيمة = المبلغ بالعملة</span>
         <span>📊 النسبة % = البند ÷ الإيرادات × 100</span>
         <span>📈 التغير % = التغير عن الشهر السابق</span>
+        <span className="text-violet-600 dark:text-violet-400 font-medium">📌 اضغط على البند لعرض القيود</span>
       </div>
       <div className="overflow-x-auto">
       <Table>
@@ -150,18 +199,25 @@ function CompanyMoMTable({ group, color }: { group: CompanyGroup; color: string 
           </TableRow>
         </TableHeader>
         <TableBody>
-          {PNL_LINE_ITEMS.map((item) => {
-            const key = getLineItemKey(item.name);
+          {allLineItems.map((item) => {
+            const key = item.isCustom ? item.name : getLineItemKey(item.name);
             const isSummary = item.isSubtotal || item.isTotal;
             const revenue = datasets[0].data['revenue'] || 0;
+            const isClickable = !isSummary && (item.category === 'expense' || item.category === 'revenue') && accountsWithData.has(key);
 
             return (
-              <TableRow key={key} className={`${isSummary ? 'bg-muted/15 font-bold' : ''} hover:bg-muted/5 transition-colors`}>
+              <TableRow
+                key={key}
+                className={`${isSummary ? 'bg-muted/15 font-bold' : ''} ${
+                  isClickable ? 'cursor-pointer hover:bg-violet-50/30 dark:hover:bg-violet-950/20' : 'hover:bg-muted/5'
+                } transition-colors`}
+                onClick={isClickable ? () => onRowClick(item, datasets[0].companyName) : undefined}
+              >
                 <TableCell className={`text-sm sticky right-0 bg-background z-10 border-l ${isSummary ? 'font-bold' : 'text-muted-foreground'}`}>
-                  <span style={{ paddingRight: `${(item.indent || 0) * 20}px` }}>
-                    {item.nameAr}
-                    {item.description && <InfoTooltip text={item.description} side="left" />}
-                  </span>
+                  {renderLineItemName(item)}
+                  {isClickable && (
+                    <ChevronLeft className="h-3 w-3 text-violet-500/40 inline mr-1" />
+                  )}
                 </TableCell>
                 {/* First period value */}
                 {(() => {
@@ -219,6 +275,22 @@ export function CompanyMoM() {
   const selected = getFiltered();
   const groups = groupByCompany(selected);
 
+  // Dialog state
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedLineItem, setSelectedLineItem] = useState<PnLLineItem | null>(null);
+  const [selectedAccountKey, setSelectedAccountKey] = useState<string | null>(null);
+  const [dialogCompany, setDialogCompany] = useState<string | null>(null);
+
+  // Handle row click
+  const handleRowClick = (item: PnLLineItem, companyName: string) => {
+    if (item.isSubtotal || item.isTotal) return;
+    const key = item.isCustom ? item.name : getLineItemKey(item.name);
+    setSelectedLineItem(item);
+    setSelectedAccountKey(key);
+    setDialogCompany(companyName);
+    setDialogOpen(true);
+  };
+
   if (selected.length === 0) {
     return (
       <Card>
@@ -233,59 +305,79 @@ export function CompanyMoM() {
   if (groups.length === 1) {
     const color = COMPANY_COLORS[0 % COMPANY_COLORS.length];
     return (
-      <Card className="shadow-sm overflow-hidden">
-        <CardHeader className="pb-3" style={{ backgroundColor: `${color}08` }}>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <span className="h-3 w-3 rounded-full" style={{ backgroundColor: color }} />
-            <span style={{ color }}>{groups[0].name}</span>
-            <Badge variant="outline" className="text-xs">مقارنة شهرية</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <CompanyMoMTable group={groups[0]} color={color} />
-        </CardContent>
-      </Card>
+      <>
+        <Card className="shadow-sm overflow-hidden">
+          <CardHeader className="pb-3" style={{ backgroundColor: `${color}08` }}>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <span className="h-3 w-3 rounded-full" style={{ backgroundColor: color }} />
+              <span style={{ color }}>{groups[0].name}</span>
+              <Badge variant="outline" className="text-xs">مقارنة شهرية</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <CompanyMoMTable group={groups[0]} color={color} onRowClick={handleRowClick} />
+          </CardContent>
+        </Card>
+
+        <JournalEntriesDialog
+          isOpen={dialogOpen}
+          onClose={() => setDialogOpen(false)}
+          lineItem={selectedLineItem}
+          accountKey={selectedAccountKey}
+          initialCompany={dialogCompany}
+        />
+      </>
     );
   }
 
   // Multiple companies: tabs
   return (
-    <Card className="shadow-sm overflow-hidden">
-      <Tabs defaultValue={groups[0].name}>
-        <TabsList className="w-full justify-start gap-1 rounded-none border-b bg-muted/30 p-1 overflow-x-auto flex-nowrap">
+    <>
+      <Card className="shadow-sm overflow-hidden">
+        <Tabs defaultValue={groups[0].name}>
+          <TabsList className="w-full justify-start gap-1 rounded-none border-b bg-muted/30 p-1 overflow-x-auto flex-nowrap">
+            {groups.map((group, gIdx) => {
+              const color = COMPANY_COLORS[gIdx % COMPANY_COLORS.length];
+              return (
+                <TabsTrigger
+                  key={group.name}
+                  value={group.name}
+                  className="gap-1.5 rounded-lg text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm shrink-0"
+                >
+                  <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                  <span className="max-w-[100px] truncate">{group.name}</span>
+                  <span className="text-[10px] opacity-50">({group.periods.length})</span>
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+
           {groups.map((group, gIdx) => {
             const color = COMPANY_COLORS[gIdx % COMPANY_COLORS.length];
             return (
-              <TabsTrigger
-                key={group.name}
-                value={group.name}
-                className="gap-1.5 rounded-lg text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm shrink-0"
-              >
-                <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                <span className="max-w-[100px] truncate">{group.name}</span>
-                <span className="text-[10px] opacity-50">({group.periods.length})</span>
-              </TabsTrigger>
+              <TabsContent key={group.name} value={group.name} className="m-0">
+                <div className="px-4 py-3 flex items-center gap-2 border-b" style={{ backgroundColor: `${color}06` }}>
+                  <span className="h-3 w-3 rounded-full" style={{ backgroundColor: color }} />
+                  <h3 className="text-sm font-bold" style={{ color }}>{group.name}</h3>
+                  <Badge variant="outline" className="text-[10px]">مقارنة شهرية (Month-over-Month)</Badge>
+                  <span className="text-[10px] text-muted-foreground">
+                    {group.datasets.length} {group.datasets.length === 1 ? 'فترة' : 'فترات'}
+                  </span>
+                </div>
+                <CompanyMoMTable group={group} color={color} onRowClick={handleRowClick} />
+              </TabsContent>
             );
           })}
-        </TabsList>
+        </Tabs>
+      </Card>
 
-        {groups.map((group, gIdx) => {
-          const color = COMPANY_COLORS[gIdx % COMPANY_COLORS.length];
-          return (
-            <TabsContent key={group.name} value={group.name} className="m-0">
-              <div className="px-4 py-3 flex items-center gap-2 border-b" style={{ backgroundColor: `${color}06` }}>
-                <span className="h-3 w-3 rounded-full" style={{ backgroundColor: color }} />
-                <h3 className="text-sm font-bold" style={{ color }}>{group.name}</h3>
-                <Badge variant="outline" className="text-[10px]">مقارنة شهرية (Month-over-Month)</Badge>
-                <span className="text-[10px] text-muted-foreground">
-                  {group.datasets.length} {group.datasets.length === 1 ? 'فترة' : 'فترات'}
-                </span>
-              </div>
-              <CompanyMoMTable group={group} color={color} />
-            </TabsContent>
-          );
-        })}
-      </Tabs>
-    </Card>
+      <JournalEntriesDialog
+        isOpen={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        lineItem={selectedLineItem}
+        accountKey={selectedAccountKey}
+        initialCompany={dialogCompany}
+      />
+    </>
   );
 }

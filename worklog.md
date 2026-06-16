@@ -192,3 +192,40 @@ Stage Summary:
 - Professional UI with gradient headers, colored summary cards, and clean table design
 - Both PnLTable dialog and AccountLedger tab use the same auto-generation
 - Build passes successfully
+
+---
+Task ID: 7
+Agent: Main Agent
+Task: Make monthly comparison navigate to journal entries + make journal entries dialog bigger/wider
+
+Work Log:
+- Extracted the JournalEntriesDialog component from PnLTable.tsx to a new shared file: src/components/pnl/JournalEntriesDialog.tsx
+- Made the dialog BIGGER and WIDER:
+  - Changed from max-w-5xl to !max-w-[95vw] lg:!max-w-[90vw] xl:!max-w-[1400px] w-[95vw]
+  - Increased header padding (px-8 py-6) and icon sizes (h-14 w-14, h-7 w-7)
+  - Title increased to text-2xl
+  - Stats cards padding increased (p-5) and font sizes increased (text-2xl for amounts)
+  - Table columns widened (120px, 140px, 1fr, 140px, 140px, 150px, 140px) with px-6 padding
+  - Close button increased to h-9 w-9
+  - Max height adjusted to max-h-[94vh]
+- Added initialCompany prop so the dialog opens with the correct pre-selected company when clicked from a specific company's data
+- Added JournalEntriesDialog to CompanyMoM (Monthly Comparison) component:
+  - Made expense/revenue line items clickable in both single-period and multi-period views
+  - Added "قيود" badge indicators on clickable items (matching PnLTable style)
+  - Added hover effects (cursor-pointer, hover:bg-violet-50/30) with chevron icons
+  - Pre-selects the company from whose table the row was clicked
+  - Updated methodology note to mention clicking for journal entries
+  - Added column explanation hint "📌 اضغط على البند لعرض القيود"
+- Refactored PnLTable.tsx:
+  - Removed all the inline JournalEntriesDialog code (~360 lines)
+  - Now imports the shared JournalEntriesDialog component
+  - Passes initialCompany prop for company pre-selection
+- Updated both single-period and multi-period MoM tables to support clickable rows
+- Build passed successfully with no new TypeScript errors
+
+Stage Summary:
+- Monthly Comparison (المقارنة الشهرية) now navigates to journal entries when clicking on any revenue/expense line item
+- Journal entries dialog is now significantly wider (up to 1400px on xl screens, 95vw on smaller)
+- Shared JournalEntriesDialog component ensures consistent UI/behavior across PnLTable and CompanyMoM
+- All clickable items show "قيود" badge and chevron icon with violet hover effect
+- Dialog auto-selects the company whose row was clicked (via initialCompany prop)

@@ -1,0 +1,676 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useMemo } from 'react';
+     4→import { Badge } from '@/components/ui/badge';
+     5→import { Button } from '@/components/ui/button';
+     6→import { ScrollArea } from '@/components/ui/scroll-area';
+     7→import {
+     8→  Building2, BookOpen, ArrowUpRight, ArrowDownRight,
+     9→  Search, Download, Sparkles, TrendingUp, TrendingDown,
+    10→  Calendar, FileText, BarChart3, ChevronRight,
+    11→  Layers, Hash, Receipt, Wallet, ArrowLeftRight,
+    12→  CircleDot, MoveRight, SparklesIcon,
+    13→} from 'lucide-react';
+    14→import { usePnLStore } from '@/lib/pnl-store';
+    15→import {
+    16→  PNL_LINE_ITEMS,
+    17→  getAllLineItems,
+    18→  getLineItemKey,
+    19→  COMPANY_COLORS,
+    20→  formatNumber,
+    21→  formatCompact,
+    22→  PnLLineItem,
+    23→  CompanyPnL,
+    24→} from '@/lib/pnl-types';
+    25→
+    26→// ─── Auto-generate journal entries from P&L data ──────────────────────────
+    27→interface AutoJournalEntry {
+    28→  id: string;
+    29→  companyName: string;
+    30→  period: string;
+    31→  date: string;
+    32→  entryNumber: string;
+    33→  accountKey: string;
+    34→  accountNameAr: string;
+    35→  accountNameEn: string;
+    36→  description: string;
+    37→  debit: number;
+    38→  credit: number;
+    39→  reference: string;
+    40→  currency: string;
+    41→  category: 'revenue' | 'expense';
+    42→}
+    43→
+    44→const ARABIC_MONTHS_MAP: Record<string, string> = {
+    45→  'Jan': 'يناير', 'Feb': 'فبراير', 'Mar': 'مارس', 'Apr': 'أبريل',
+    46→  'May': 'مايو', 'Jun': 'يونيو', 'Jul': 'يوليو', 'Aug': 'أغسطس',
+    47→  'Sep': 'سبتمبر', 'Oct': 'أكتوبر', 'Nov': 'نوفمبر', 'Dec': 'ديسمبر',
+    48→};
+    49→
+    50→const MONTH_NUM: Record<string, number> = {
+    51→  'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
+    52→  'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12,
+    53→};
+    54→
+    55→function parsePeriodComponents(period: string): { year: number; month: number; monthAr: string } | null {
+    56→  const parts = period.trim().split(/[\s\-]+/);
+    57→  if (parts.length < 2) return null;
+    58→  const monthStr = parts[0];
+    59→  const year = parseInt(parts[parts.length - 1], 10);
+    60→  const month = MONTH_NUM[monthStr];
+    61→  const monthAr = ARABIC_MONTHS_MAP[monthStr];
+    62→  if (!month || isNaN(year) || !monthAr) return null;
+    63→  return { year, month, monthAr };
+    64→}
+    65→
+    66→function splitAmount(total: number, parts: number): number[] {
+    67→  if (parts <= 1) return [total];
+    68→  const result: number[] = [];
+    69→  let remaining = total;
+    70→  for (let i = 0; i < parts - 1; i++) {
+    71→    const pct = 0.25 + Math.random() * 0.20;
+    72→    const part = Math.round(remaining * pct);
+    73→    result.push(part);
+    74→    remaining -= part;
+    75→  }
+    76→  result.push(remaining);
+    77→  return result;
+    78→}
+    79→
+    80→function generateAutoJournalEntries(
+    81→  companies: CompanyPnL[],
+    82→  lineItems: PnLLineItem[],
+    83→): AutoJournalEntry[] {
+    84→  const entries: AutoJournalEntry[] = [];
+    85→  let entryCounter = 1;
+    86→
+    87→  for (const ds of companies) {
+    88→    const periodInfo = parsePeriodComponents(ds.period);
+    89→    if (!periodInfo) continue;
+    90→    const { year, month, monthAr } = periodInfo;
+    91→    const periodAr = `${monthAr} ${year}`;
+    92→
+    93→    for (const item of lineItems) {
+    94→      if (item.isSubtotal || item.isTotal) continue;
+    95→      if (item.category === 'profit') continue;
+    96→
+    97→      const key = item.isCustom ? item.name : getLineItemKey(item.name);
+    98→      const value = ds.data[key] || 0;
+    99→      if (value === 0) continue;
+   100→
+   101→      const category = item.category as 'revenue' | 'expense';
+   102→      const numEntries = value > 500000 ? 3 : value > 100000 ? 2 : 1;
+   103→      const amounts = splitAmount(value, numEntries);
+   104→
+   105→      amounts.forEach((amt, idx) => {
+   106→        const day = String(Math.min(28, 5 + idx * 10)).padStart(2, '0');
+   107→        const date = `${year}-${String(month).padStart(2, '0')}-${day}`;
+   108→        const entryNum = `JV-${year}${String(month).padStart(2, '0')}-${String(entryCounter).padStart(4, '0')}`;
+   109→        entryCounter++;
+   110→
+   111→        const desc = category === 'revenue'
+   112→          ? `إثبات إيراد ${item.nameAr} — ${periodAr}`
+   113→          : `تسجيل مصروف ${item.nameAr} — ${periodAr}`;
+   114→
+   115→        const refPrefix = category === 'revenue' ? 'REV' : 'EXP';
+   116→        const reference = `${refPrefix}-${year}${String(month).padStart(2, '0')}-${String(idx + 1).padStart(3, '0')}`;
+   117→
+   118→        entries.push({
+   119→          id: `aje_${ds.companyName}_${key}_${ds.period}_${idx}`,
+   120→          companyName: ds.companyName,
+   121→          period: ds.period,
+   122→          date,
+   123→          entryNumber: entryNum,
+   124→          accountKey: key,
+   125→          accountNameAr: item.nameAr,
+   126→          accountNameEn: item.name,
+   127→          description: desc,
+   128→          debit: category === 'expense' ? amt : 0,
+   129→          credit: category === 'revenue' ? amt : 0,
+   130→          reference,
+   131→          currency: ds.currency,
+   132→          category,
+   133→        });
+   134→      });
+   135→    }
+   136→  }
+   137→  return entries;
+   138→}
+   139→
+   140→function computeRunningBalance(entries: AutoJournalEntry[]): { entry: AutoJournalEntry; runningBalance: number }[] {
+   141→  let balance = 0;
+   142→  return entries.map((entry) => {
+   143→    balance += entry.debit - entry.credit;
+   144→    return { entry, runningBalance: balance };
+   145→  });
+   146→}
+   147→
+   148→// ─── Category filter options ────────────────────────────────────────────────
+   149→type CategoryFilter = 'all' | 'revenue' | 'expense' | 'profit';
+   150→
+   151→const CATEGORY_LABELS: Record<CategoryFilter, string> = {
+   152→  all: 'الكل',
+   153→  revenue: 'الإيرادات',
+   154→  expense: 'المصروفات',
+   155→  profit: 'الأرباح',
+   156→};
+   157→
+   158→// ─── Modern Account Ledger View ────────────────────────────────────────────
+   159→function AccountLedgerView({ entries, accountNameAr, accountNameEn, accountKey }: {
+   160→  entries: AutoJournalEntry[];
+   161→  accountNameAr: string;
+   162→  accountNameEn: string;
+   163→  accountKey: string;
+   164→}) {
+   165→  const withBalance = computeRunningBalance(entries);
+   166→  const currency = entries[0]?.currency || 'SAR';
+   167→  const totalDebit = entries.reduce((s, e) => s + e.debit, 0);
+   168→  const totalCredit = entries.reduce((s, e) => s + e.credit, 0);
+   169→  const netBalance = totalDebit - totalCredit;
+   170→  const isExpense = entries[0]?.category === 'expense';
+   171→
+   172→  const exportToExcel = async () => {
+   173→    const XLSX = await import('xlsx');
+   174→    const wb = XLSX.utils.book_new();
+   175→    const header = ['التاريخ', 'رقم القيد', 'البيان', 'مدين', 'دائن', 'الرصيد', 'م/د', 'المرجع'];
+   176→    const rows = withBalance.map(({ entry, runningBalance }) => [
+   177→      entry.date, entry.entryNumber, entry.description,
+   178→      entry.debit || '', entry.credit || '',
+   179→      Math.abs(runningBalance),
+   180→      runningBalance > 0 ? 'مدين' : runningBalance < 0 ? 'دائن' : '',
+   181→      entry.reference,
+   182→    ]);
+   183→    rows.push(['الإجمالي', '', '', totalDebit, totalCredit, Math.abs(netBalance), netBalance > 0 ? 'مدين' : netBalance < 0 ? 'دائن' : '', '']);
+   184→    const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+   185→    ws['!cols'] = [{ wch: 14 }, { wch: 16 }, { wch: 45 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 8 }, { wch: 18 }];
+   186→    XLSX.utils.book_append_sheet(wb, ws, accountNameAr.substring(0, 31));
+   187→    XLSX.writeFile(wb, `دفتر_أستاذ_${accountNameAr.replace(/\s+/g, '_')}.xlsx`);
+   188→  };
+   189→
+   190→  return (
+   191→    <div className="space-y-5">
+   192→      {/* ─── Modern Stats Strip ────────────────────────────────── */}
+   193→      <div className="grid grid-cols-3 gap-3">
+   194→        <div className="group relative overflow-hidden rounded-2xl border border-white/10 dark:border-white/5 bg-gradient-to-br from-red-500/10 via-red-500/5 to-transparent dark:from-red-500/20 dark:via-red-500/10 p-4 transition-all hover:shadow-lg hover:shadow-red-500/5">
+   195→          <div className="absolute -top-6 -left-6 h-20 w-20 rounded-full bg-red-500/10 blur-2xl group-hover:bg-red-500/20 transition-colors" />
+   196→          <div className="relative flex items-center justify-between mb-2">
+   197→            <div className="flex items-center gap-2">
+   198→              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/15">
+   199→                <TrendingUp className="h-4 w-4 text-red-500" />
+   200→              </div>
+   201→              <span className="text-[11px] font-semibold uppercase tracking-wider text-red-600/80 dark:text-red-400/80">مدين</span>
+   202→            </div>
+   203→          </div>
+   204→          <p className="relative text-xl font-bold tabular-nums text-red-700 dark:text-red-300 tracking-tight">
+   205→            {formatNumber(totalDebit, currency, false)}
+   206→          </p>
+   207→        </div>
+   208→
+   209→        <div className="group relative overflow-hidden rounded-2xl border border-white/10 dark:border-white/5 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent dark:from-emerald-500/20 dark:via-emerald-500/10 p-4 transition-all hover:shadow-lg hover:shadow-emerald-500/5">
+   210→          <div className="absolute -top-6 -left-6 h-20 w-20 rounded-full bg-emerald-500/10 blur-2xl group-hover:bg-emerald-500/20 transition-colors" />
+   211→          <div className="relative flex items-center justify-between mb-2">
+   212→            <div className="flex items-center gap-2">
+   213→              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15">
+   214→                <TrendingDown className="h-4 w-4 text-emerald-500" />
+   215→              </div>
+   216→              <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600/80 dark:text-emerald-400/80">دائن</span>
+   217→            </div>
+   218→          </div>
+   219→          <p className="relative text-xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300 tracking-tight">
+   220→            {formatNumber(totalCredit, currency, false)}
+   221→          </p>
+   222→        </div>
+   223→
+   224→        <div className={`group relative overflow-hidden rounded-2xl border border-white/10 dark:border-white/5 p-4 transition-all hover:shadow-lg ${
+   225→          isExpense
+   226→            ? 'bg-gradient-to-br from-violet-500/10 via-violet-500/5 to-transparent dark:from-violet-500/20 dark:via-violet-500/10 hover:shadow-violet-500/5'
+   227→            : 'bg-gradient-to-br from-sky-500/10 via-sky-500/5 to-transparent dark:from-sky-500/20 dark:via-sky-500/10 hover:shadow-sky-500/5'
+   228→        }`}>
+   229→          <div className={`absolute -top-6 -left-6 h-20 w-20 rounded-full blur-2xl transition-colors ${
+   230→            isExpense ? 'bg-violet-500/10 group-hover:bg-violet-500/20' : 'bg-sky-500/10 group-hover:bg-sky-500/20'
+   231→          }`} />
+   232→          <div className="relative flex items-center justify-between mb-2">
+   233→            <div className="flex items-center gap-2">
+   234→              <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+   235→                isExpense ? 'bg-violet-500/15' : 'bg-sky-500/15'
+   236→              }`}>
+   237→                <BarChart3 className={`h-4 w-4 ${isExpense ? 'text-violet-500' : 'text-sky-500'}`} />
+   238→              </div>
+   239→              <span className={`text-[11px] font-semibold uppercase tracking-wider ${
+   240→                isExpense ? 'text-violet-600/80 dark:text-violet-400/80' : 'text-sky-600/80 dark:text-sky-400/80'
+   241→              }`}>صافي الرصيد</span>
+   242→            </div>
+   243→            <Badge className={`text-[9px] h-5 px-1.5 border-0 ${
+   244→              isExpense
+   245→                ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300'
+   246→                : 'bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300'
+   247→            }`}>
+   248→              {isExpense ? 'مدين' : 'دائن'}
+   249→            </Badge>
+   250→          </div>
+   251→          <p className={`relative text-xl font-bold tabular-nums tracking-tight ${
+   252→            isExpense ? 'text-violet-700 dark:text-violet-300' : 'text-sky-700 dark:text-sky-300'
+   253→          }`}>
+   254→            {formatNumber(Math.abs(netBalance), currency, false)}
+   255→          </p>
+   256→        </div>
+   257→      </div>
+   258→
+   259→      {/* ─── Timeline View ─────────────────────────────────────── */}
+   260→      <div className="rounded-2xl border border-border/50 dark:border-border/30 overflow-hidden">
+   261→        {/* Table Header */}
+   262→        <div className="bg-muted/30 dark:bg-muted/20 border-b border-border/50">
+   263→          <div className="grid grid-cols-[100px_110px_1fr_110px_110px_120px_110px] gap-0 px-5 py-3">
+   264→            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">التاريخ</span>
+   265→            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">رقم القيد</span>
+   266→            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">البيان</span>
+   267→            <span className="text-[10px] font-bold uppercase tracking-widest text-red-500/70 text-center">مدين</span>
+   268→            <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500/70 text-center">دائن</span>
+   269→            <span className="text-[10px] font-bold uppercase tracking-widest text-amber-500/70 text-center">الرصيد</span>
+   270→            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">المرجع</span>
+   271→          </div>
+   272→        </div>
+   273→
+   274→        {/* Table Body - Timeline Style */}
+   275→        <div className="divide-y divide-border/30">
+   276→          {withBalance.map(({ entry, runningBalance }, idx) => (
+   277→            <div
+   278→              key={entry.id}
+   279→              className={`group grid grid-cols-[100px_110px_1fr_110px_110px_120px_110px] gap-0 px-5 py-3.5 items-center transition-colors hover:bg-muted/20 ${
+   280→                idx % 2 !== 0 ? 'bg-muted/5' : ''
+   281→              }`}
+   282→            >
+   283→              {/* Date */}
+   284→              <div className="flex items-center gap-2">
+   285→                <div className={`h-2 w-2 rounded-full ring-2 ring-background ${
+   286→                  entry.debit > 0 ? 'bg-red-400' : 'bg-emerald-400'
+   287→                }`} />
+   288→                <span className="text-xs tabular-nums font-medium text-foreground/80">
+   289→                  {entry.date ? new Date(entry.date).toLocaleDateString('ar-SA', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}
+   290→                </span>
+   291→              </div>
+   292→
+   293→              {/* Entry Number */}
+   294→              <span className="text-[11px] font-mono text-muted-foreground tracking-tight">{entry.entryNumber}</span>
+   295→
+   296→              {/* Description */}
+   297→              <span className="text-xs text-foreground/90 leading-relaxed">{entry.description}</span>
+   298→
+   299→              {/* Debit */}
+   300→              <div className="text-center">
+   301→                {entry.debit > 0 ? (
+   302→                  <span className="inline-flex items-center justify-center rounded-md bg-red-500/8 dark:bg-red-500/15 px-2 py-0.5 text-xs font-semibold text-red-600 dark:text-red-400 tabular-nums">
+   303→                    {formatNumber(entry.debit, currency, false)}
+   304→                  </span>
+   305→                ) : <span className="text-muted-foreground/30">—</span>}
+   306→              </div>
+   307→
+   308→              {/* Credit */}
+   309→              <div className="text-center">
+   310→                {entry.credit > 0 ? (
+   311→                  <span className="inline-flex items-center justify-center rounded-md bg-emerald-500/8 dark:bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+   312→                    {formatNumber(entry.credit, currency, false)}
+   313→                  </span>
+   314→                ) : <span className="text-muted-foreground/30">—</span>}
+   315→              </div>
+   316→
+   317→              {/* Running Balance */}
+   318→              <div className="text-center">
+   319→                <span className={`text-xs font-bold tabular-nums ${
+   320→                  runningBalance > 0 ? 'text-amber-600 dark:text-amber-400' : runningBalance < 0 ? 'text-sky-600 dark:text-sky-400' : 'text-muted-foreground'
+   321→                }`}>
+   322→                  {formatCompact(Math.abs(runningBalance))}
+   323→                  <span className="text-[9px] mr-0.5 opacity-60">{runningBalance > 0 ? 'م' : runningBalance < 0 ? 'د' : ''}</span>
+   324→                </span>
+   325→              </div>
+   326→
+   327→              {/* Reference */}
+   328→              <span className="text-[10px] font-mono text-muted-foreground/60">{entry.reference}</span>
+   329→            </div>
+   330→          ))}
+   331→
+   332→          {/* Totals Row */}
+   333→          <div className="grid grid-cols-[100px_110px_1fr_110px_110px_120px_110px] gap-0 px-5 py-4 bg-muted/20 border-t-2 border-border/50">
+   334→            <span className="col-span-3 text-xs font-bold text-foreground/80">الإجمالي</span>
+   335→            <div className="text-center">
+   336→              <span className="text-xs font-bold text-red-600 dark:text-red-400 tabular-nums">{formatNumber(totalDebit, currency, false)}</span>
+   337→            </div>
+   338→            <div className="text-center">
+   339→              <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">{formatNumber(totalCredit, currency, false)}</span>
+   340→            </div>
+   341→            <div className="text-center">
+   342→              <span className={`text-xs font-bold tabular-nums ${netBalance > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-sky-600 dark:text-sky-400'}`}>
+   343→                {formatNumber(Math.abs(netBalance), currency, false)}
+   344→                <span className="text-[9px] mr-0.5 opacity-60">{netBalance > 0 ? ' مدين' : netBalance < 0 ? ' دائن' : ''}</span>
+   345→              </span>
+   346→            </div>
+   347→            <span />
+   348→          </div>
+   349→        </div>
+   350→      </div>
+   351→
+   352→      {/* Footer */}
+   353→      <div className="flex items-center justify-between">
+   354→        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+   355→          <Sparkles className="h-3 w-3 shrink-0 text-violet-500" />
+   356→          القيود محسوبة تلقائياً من بيانات قائمة الأرباح والخسائر
+   357→        </div>
+   358→        <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 rounded-xl border-dashed hover:border-solid transition-all" onClick={exportToExcel}>
+   359→          <Download className="h-3.5 w-3.5" />
+   360→          تصدير Excel
+   361→        </Button>
+   362→      </div>
+   363→    </div>
+   364→  );
+   365→}
+   366→
+   367→// ─── Main Component ──────────────────────────────────────────────────────────
+   368→export function AccountLedgerExplorer() {
+   369→  const { companies, selectedCompanyNames, selectedPeriods } = usePnLStore();
+   370→  const allLineItems = useMemo(() => getAllLineItems(companies), [companies]);
+   371→
+   372→  const filteredCompanies = useMemo(() =>
+   373→    companies.filter((c) => selectedCompanyNames.includes(c.companyName) && selectedPeriods.includes(c.period)),
+   374→    [companies, selectedCompanyNames, selectedPeriods]
+   375→  );
+   376→
+   377→  const allAutoEntries = useMemo(() =>
+   378→    generateAutoJournalEntries(filteredCompanies, allLineItems),
+   379→    [filteredCompanies, allLineItems]
+   380→  );
+   381→
+   382→  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
+   383→  const [selectedAccountKey, setSelectedAccountKey] = useState<string | null>(null);
+   384→  const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
+   385→  const [searchText, setSearchText] = useState('');
+   386→
+   387→  const accountsWithEntries = useMemo(() => {
+   388→    const accountKeys = new Set(allAutoEntries.map((e) => e.accountKey));
+   389→    return allLineItems.filter((item) => {
+   390→      if (item.isSubtotal || item.isTotal) return false;
+   391→      const key = item.isCustom ? item.name : getLineItemKey(item.name);
+   392→      return accountKeys.has(key) && (item.category === 'revenue' || item.category === 'expense');
+   393→    });
+   394→  }, [allAutoEntries, allLineItems]);
+   395→
+   396→  const filteredAccounts = useMemo(() => {
+   397→    let items = accountsWithEntries;
+   398→    if (categoryFilter !== 'all') {
+   399→      items = items.filter((item) => item.category === categoryFilter);
+   400→    }
+   401→    if (searchText.trim()) {
+   402→      const search = searchText.trim().toLowerCase();
+   403→      items = items.filter(
+   404→        (item) =>
+   405→          item.nameAr.includes(searchText.trim()) ||
+   406→          item.name.toLowerCase().includes(search) ||
+   407→          getLineItemKey(item.name).includes(search)
+   408→      );
+   409→    }
+   410→    return items;
+   411→  }, [accountsWithEntries, categoryFilter, searchText]);
+   412→
+   413→  const companyNames = useMemo(
+   414→    () => [...new Set(allAutoEntries.map((e) => e.companyName))],
+   415→    [allAutoEntries]
+   416→  );
+   417→
+   418→  React.useEffect(() => {
+   419→    if (!selectedAccountKey && filteredAccounts.length > 0) {
+   420→      const firstKey = filteredAccounts[0].isCustom
+   421→        ? filteredAccounts[0].name
+   422→        : getLineItemKey(filteredAccounts[0].name);
+   423→      setSelectedAccountKey(firstKey);
+   424→    }
+   425→  }, [filteredAccounts, selectedAccountKey]);
+   426→
+   427→  React.useEffect(() => {
+   428→    if (!selectedCompany && companyNames.length > 0) {
+   429→      setSelectedCompany(companyNames[0]);
+   430→    }
+   431→  }, [companyNames, selectedCompany]);
+   432→
+   433→  const categoryCounts = useMemo(() => {
+   434→    const counts = { all: 0, revenue: 0, expense: 0, profit: 0 };
+   435→    accountsWithEntries.forEach((item) => {
+   436→      counts.all++;
+   437→      counts[item.category]++;
+   438→    });
+   439→    return counts;
+   440→  }, [accountsWithEntries]);
+   441→
+   442→  const selectedLedgerEntries = useMemo(() => {
+   443→    if (!selectedAccountKey || !selectedCompany) return [];
+   444→    return allAutoEntries
+   445→      .filter((e) => e.accountKey === selectedAccountKey && e.companyName === selectedCompany)
+   446→      .sort((a, b) => a.date.localeCompare(b.date));
+   447→  }, [allAutoEntries, selectedAccountKey, selectedCompany]);
+   448→
+   449→  const selectedItem = useMemo(() => {
+   450→    return allLineItems.find((item) => {
+   451→      const key = item.isCustom ? item.name : getLineItemKey(item.name);
+   452→      return key === selectedAccountKey;
+   453→    });
+   454→  }, [allLineItems, selectedAccountKey]);
+   455→
+   456→  const allAccountSummaries = useMemo(() => {
+   457→    if (!selectedCompany) return [];
+   458→    const companyEntries = allAutoEntries.filter((e) => e.companyName === selectedCompany);
+   459→    const accountMap = new Map<string, { entries: AutoJournalEntry[]; totalDebit: number; totalCredit: number }>();
+   460→    companyEntries.forEach((e) => {
+   461→      const existing = accountMap.get(e.accountKey) || { entries: [], totalDebit: 0, totalCredit: 0 };
+   462→      existing.entries.push(e);
+   463→      existing.totalDebit += e.debit;
+   464→      existing.totalCredit += e.credit;
+   465→      accountMap.set(e.accountKey, existing);
+   466→    });
+   467→    return Array.from(accountMap.entries()).map(([key, data]) => {
+   468→      const item = allLineItems.find((li) => {
+   469→        const liKey = li.isCustom ? li.name : getLineItemKey(li.name);
+   470→        return liKey === key;
+   471→      });
+   472→      return {
+   473→        accountKey: key,
+   474→        accountNameAr: item?.nameAr || data.entries[0]?.accountNameAr || key,
+   475→        accountNameEn: item?.name || data.entries[0]?.accountNameEn || key,
+   476→        category: item?.category || 'expense',
+   477→        ...data,
+   478→      };
+   479→    });
+   480→  }, [allAutoEntries, selectedCompany, allLineItems]);
+   481→
+   482→  if (filteredCompanies.length === 0) {
+   483→    return (
+   484→      <div className="flex flex-col items-center justify-center py-24 text-center">
+   485→        <div className="relative mb-6">
+   486→          <div className="h-20 w-20 rounded-3xl bg-gradient-to-br from-violet-500/10 to-sky-500/10 dark:from-violet-500/20 dark:to-sky-500/20 flex items-center justify-center">
+   487→            <BookOpen className="h-10 w-10 text-violet-500/40" />
+   488→          </div>
+   489→        </div>
+   490→        <h3 className="text-lg font-bold text-foreground/70">لا توجد بيانات لعرض القيود</h3>
+   491→        <p className="mt-2 text-sm text-muted-foreground max-w-md">
+   492→          اختر شركة وفترة من الفلاتر لعرض القيود المحاسبية المحسوبة تلقائياً من بيانات الأرباح والخسائر
+   493→        </p>
+   494→      </div>
+   495→    );
+   496→  }
+   497→
+   498→  return (
+   499→    <div className="space-y-5">
+   500→      {/* ─── Modern Toolbar ────────────────────────────────────── */}
+   501→      <div className="rounded-2xl border border-border/50 dark:border-border/30 bg-card/50 backdrop-blur-sm overflow-hidden">
+   502→        {/* Search Row */}
+   503→        <div className="p-4 pb-3">
+   504→          <div className="flex flex-wrap items-center gap-3">
+   505→            {/* Search */}
+   506→            <div className="relative flex-1 min-w-[220px]">
+   507→              <Search className="absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
+   508→              <input
+   509→                type="text"
+   510→                placeholder="ابحث عن حساب..."
+   511→                value={searchText}
+   512→                onChange={(e) => setSearchText(e.target.value)}
+   513→                className="w-full rounded-xl border border-border/50 bg-background/50 px-4 py-2.5 pr-10 text-sm outline-none transition-all focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500/50 placeholder:text-muted-foreground/40"
+   514→              />
+   515→            </div>
+   516→
+   517→            {/* Category Pills */}
+   518→            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-muted/30">
+   519→              {(['all', 'revenue', 'expense'] as CategoryFilter[]).map((cat) => (
+   520→                <button
+   521→                  key={cat}
+   522→                  onClick={() => setCategoryFilter(cat)}
+   523→                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+   524→                    categoryFilter === cat
+   525→                      ? cat === 'revenue' ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25'
+   526→                        : cat === 'expense' ? 'bg-red-500 text-white shadow-md shadow-red-500/25'
+   527→                          : 'bg-foreground text-background shadow-md'
+   528→                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+   529→                  }`}
+   530→                >
+   531→                  {CATEGORY_LABELS[cat]}
+   532→                  <span className={`text-[10px] ${categoryFilter === cat ? 'opacity-70' : 'opacity-40'}`}>
+   533→                    {categoryCounts[cat]}
+   534→                  </span>
+   535→                </button>
+   536→              ))}
+   537→            </div>
+   538→          </div>
+   539→        </div>
+   540→
+   541→        {/* Selectors Row */}
+   542→        <div className="px-4 pb-4">
+   543→          <div className="flex flex-wrap items-center gap-3">
+   544→            {/* Account Selector */}
+   545→            <div className="flex items-center gap-2 flex-1 min-w-[250px]">
+   546→              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-500/10">
+   547→                <Wallet className="h-3.5 w-3.5 text-violet-500" />
+   548→              </div>
+   549→              <select
+   550→                value={selectedAccountKey || ''}
+   551→                onChange={(e) => setSelectedAccountKey(e.target.value)}
+   552→                className="flex-1 rounded-xl border border-border/50 bg-background/50 px-3 py-2 text-sm outline-none transition-all focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500/50"
+   553→              >
+   554→                <option value="" disabled>اختر حساباً</option>
+   555→                {filteredAccounts.map((item) => {
+   556→                  const key = item.isCustom ? item.name : getLineItemKey(item.name);
+   557→                  return (
+   558→                    <option key={key} value={key}>
+   559→                      {item.nameAr} — {item.name}
+   560→                    </option>
+   561→                  );
+   562→                })}
+   563→              </select>
+   564→            </div>
+   565→
+   566→            {/* Company Selector */}
+   567→            <div className="flex items-center gap-2">
+   568→              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-sky-500/10">
+   569→                <Building2 className="h-3.5 w-3.5 text-sky-500" />
+   570→              </div>
+   571→              <select
+   572→                value={selectedCompany || ''}
+   573→                onChange={(e) => setSelectedCompany(e.target.value)}
+   574→                className="rounded-xl border border-border/50 bg-background/50 px-3 py-2 text-sm outline-none transition-all focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500/50 min-w-[160px]"
+   575→              >
+   576→                <option value="" disabled>اختر شركة</option>
+   577→                {companyNames.map((name) => (
+   578→                  <option key={name} value={name}>{name}</option>
+   579→                ))}
+   580→              </select>
+   581→            </div>
+   582→          </div>
+   583→        </div>
+   584→      </div>
+   585→
+   586→      {/* ─── Account Header ────────────────────────────────────── */}
+   587→      {selectedItem && selectedLedgerEntries.length > 0 && (
+   588→        <div className="flex items-center gap-4">
+   589→          <div className={`flex h-11 w-11 items-center justify-center rounded-2xl ${
+   590→            selectedItem.category === 'expense'
+   591→              ? 'bg-gradient-to-br from-red-500 to-rose-600 shadow-lg shadow-red-500/20'
+   592→              : 'bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/20'
+   593→          }`}>
+   594→            {selectedItem.category === 'expense'
+   595→              ? <ArrowUpRight className="h-5 w-5 text-white" />
+   596→              : <ArrowDownRight className="h-5 w-5 text-white" />
+   597→            }
+   598→          </div>
+   599→          <div className="flex-1">
+   600→            <div className="flex items-center gap-2">
+   601→              <h3 className="text-lg font-bold text-foreground">{selectedItem.nameAr}</h3>
+   602→              <Badge variant="outline" className="text-[10px] border-violet-500/30 text-violet-600 dark:text-violet-400">
+   603→                <Sparkles className="h-2.5 w-2.5 ml-0.5" />
+   604→                محسوب تلقائياً
+   605→              </Badge>
+   606→              <Badge variant="outline" className="text-[10px]">
+   607→                {selectedLedgerEntries.length} قيد
+   608→              </Badge>
+   609→            </div>
+   610→            <p className="text-sm text-muted-foreground mt-0.5">{selectedItem.name}</p>
+   611→          </div>
+   612→        </div>
+   613→      )}
+   614→
+   615→      {/* ─── Account Ledger ───────────────────────────────────── */}
+   616→      {selectedLedgerEntries.length > 0 && selectedItem && (
+   617→        <AccountLedgerView
+   618→          entries={selectedLedgerEntries}
+   619→          accountNameAr={selectedItem.nameAr}
+   620→          accountNameEn={selectedItem.name}
+   621→          accountKey={selectedAccountKey || ''}
+   622→        />
+   623→      )}
+   624→
+   625→      {/* ─── Account Cards Grid ────────────────────────────────── */}
+   626→      <div>
+   627→        <div className="flex items-center gap-2 mb-4">
+   628→          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/10">
+   629→            <Layers className="h-3.5 w-3.5 text-indigo-500" />
+   630→          </div>
+   631→          <h3 className="text-sm font-bold text-foreground">جميع الحسابات</h3>
+   632→          <Badge variant="outline" className="text-[10px]">{allAccountSummaries.length} حساب</Badge>
+   633→        </div>
+   634→        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+   635→          {allAccountSummaries.map((acc) => {
+   636→            const isSelected = acc.accountKey === selectedAccountKey;
+   637→            const net = acc.totalDebit - acc.totalCredit;
+   638→            const isExp = acc.category === 'expense';
+   639→            return (
+   640→              <button
+   641→                key={acc.accountKey}
+   642→                onClick={() => setSelectedAccountKey(acc.accountKey)}
+   643→                className={`group text-right rounded-2xl border p-4 transition-all duration-200 ${
+   644→                  isSelected
+   645→                    ? 'border-violet-400/60 bg-violet-50/50 dark:bg-violet-950/20 ring-1 ring-violet-400/20 shadow-lg shadow-violet-500/5'
+   646→                    : 'border-border/40 bg-card/50 hover:border-border/80 hover:shadow-md hover:bg-card/80'
+   647→                }`}
+   648→              >
+   649→                <div className="flex items-start justify-between gap-2 mb-3">
+   650→                  <div className="flex items-center gap-2 min-w-0">
+   651→                    <div className={`h-2.5 w-2.5 rounded-full shrink-0 transition-transform group-hover:scale-125 ${
+   652→                      isExp ? 'bg-red-400' : 'bg-emerald-500'
+   653→                    }`} />
+   654→                    <span className="text-sm font-semibold truncate">{acc.accountNameAr}</span>
+   655→                  </div>
+   656→                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/30 shrink-0 transition-transform group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5" />
+   657→                </div>
+   658→                <p className="text-[10px] text-muted-foreground/60 mb-3 truncate">{acc.accountNameEn}</p>
+   659→                <div className="flex items-center gap-3 text-[11px]">
+   660→                  <span className="text-red-500/80 tabular-nums">م {formatCompact(acc.totalDebit)}</span>
+   661→                  <span className="text-muted-foreground/20">|</span>
+   662→                  <span className="text-emerald-500/80 tabular-nums">د {formatCompact(acc.totalCredit)}</span>
+   663→                </div>
+   664→                <div className={`mt-2 text-sm font-bold tabular-nums ${isExp ? 'text-violet-700 dark:text-violet-400' : 'text-sky-700 dark:text-sky-400'}`}>
+   665→                  {formatCompact(Math.abs(net))}
+   666→                  <span className="text-[9px] font-normal opacity-50">{net > 0 ? ' مدين' : net < 0 ? ' دائن' : ''}</span>
+   667→                </div>
+   668→              </button>
+   669→            );
+   670→          })}
+   671→        </div>
+   672→      </div>
+   673→    </div>
+   674→  );
+   675→}
+   676→
