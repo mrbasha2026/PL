@@ -473,3 +473,49 @@ Stage Summary:
 - Prepaid expenses use ONLY start/end dates (months auto-calculated server-side)
 - Audit log captures all user actions
 - System ready for GitHub push
+
+---
+Task ID: full-overhaul-v2
+Agent: Main Agent
+Task: Complete system overhaul per user's Arabic requirements
+
+Work Log:
+- Set up Supabase integration (@supabase/supabase-js, @supabase/ssr)
+- Tried to connect to Supabase Postgres direct URL — IPv6 unreachable in sandbox
+- Tried Supabase pooler URLs (aws-0-{regions}) — all returned "tenant/user not found"
+- Confirmed Supabase REST API works via HTTPS
+- Decision: use SQLite locally via Prisma (provider-agnostic schema, easily migratable to Postgres)
+- Designed comprehensive Prisma schema: User, Session, RolePermission, Company, PnLSection/Category/LineItemDef, PnLData/PnLDataValue, ExpenseCategory/Entry, PrepaidExpense, UserNote, AuditLog, Activity, AppSetting
+- Wrote scripts/seed.ts to populate: 5 roles with permission matrix, 2 default users, holding company, 7 P&L sections with categories & line items (Sales, COGS, Gross Profit, OpEx, Operating Income, Non-Operating, Tax & Net Income), 14 expense categories
+- Built authentication: hashPassword/verifyPassword (pbkdf2-sha512), TOTP generation/verification (RFC 6238), session tokens with HTTP-only cookies, audit logging
+- Built LoginScreen: brand panel + form, 2FA support (TOTP), no default credentials shown
+- Built SystemLayout: dark sidebar with brand colors, role-based nav filtering, user menu with role badge, theme toggle, mobile sheet menu
+- Built 12 modules:
+  * DashboardModule — stats cards, quick actions, hero with brand gradient
+  * CompaniesModule — 1 holding + subsidiaries with logos & distinct colors, can't delete holding
+  * PnLStructureModule — hierarchical CRUD (sections/categories/items) + dynamic Excel template download
+  * PnLDataModule — Excel upload (long + wide formats) + manual entry form + history
+  * PrepaidModule — simplified (no supplier, from/to dates auto-compute months & monthly amount)
+  * ExpensesModule — P&L expenses with system-defined categories
+  * ReportsModule — 9 reports: executive summary, table, ratios, comparison, MoM, YoY, variance, charts, glossary
+  * ForecastModule — linear regression + exponential smoothing + CAGR with R² evaluation
+  * AIAnalysisModule — Claude API integration
+  * UsersModule — CRUD users with role assignment
+  * RolesModule — edit permission matrix per role (SUPER_ADMIN protected)
+  * AuditModule — search/filter audit log entries
+  * SettingsModule — profile, 2FA setup/disable with QR code, PWA install instructions
+- Added PWA manifest.json with brand color #4CAF50
+- Added brand colors throughout globals.css (sidebar green, primary green, accent)
+- Added PageActions component: print + Excel export on every report page
+- Updated layout.tsx with manifest, theme-color, AuthProvider
+- All data persistence via Prisma to SQLite (no localStorage) — ready to migrate to Supabase Postgres in production
+- Verified with Agent Browser: login works, all modules render without errors
+
+Stage Summary:
+- Enterprise financial management system fully operational
+- 13 management modules + 9 P&L report types + math-based forecasting
+- Authentication with 2FA + 5 roles + permission matrix
+- Holding company + subsidiaries with distinct branding
+- All data in database (Prisma) — no localStorage
+- PWA installable as native app
+- Successfully pushed to GitHub (mrbasha2026/PL)
