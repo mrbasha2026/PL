@@ -18,17 +18,17 @@ const KEY_METRICS = [
   { key: 'revenue', labelAr: 'الإيرادات', labelEn: 'Revenue' },
   { key: 'gross_profit', labelAr: 'إجمالي الربح', labelEn: 'Gross Profit' },
   { key: 'operating_income_ebit', labelAr: 'الدخل التشغيلي', labelEn: 'EBIT' },
-  { key: 'income_before_tax', labelAr: 'الدخل قبل الضريبة', labelEn: 'Pre-Tax Income' },
+  { key: 'income_before_zakat', labelAr: 'الدخل قبل الزكاة', labelEn: 'Pre-Zakat Income' },
   { key: 'net_income', labelAr: 'صافي الدخل', labelEn: 'Net Income' },
 ];
 
 const EXPENSE_BREAKDOWN = [
   { key: 'cost_of_goods_sold', labelAr: 'تكلفة البضاعة المباعة', labelEn: 'COGS' },
-  { key: 'selling_expenses', labelAr: 'مصروفات البيع', labelEn: 'Selling' },
-  { key: 'general_administrative', labelAr: 'مصروفات إدارية', labelEn: 'G&A' },
-  { key: 'depreciation_amortization', labelAr: 'الإهلاك', labelEn: 'D&A' },
-  { key: 'interest_expense', labelAr: 'مصروفات الفوائد', labelEn: 'Interest' },
-  { key: 'income_tax_expense', labelAr: 'الضرائب', labelEn: 'Tax' },
+  { key: 'selling_expenses', labelAr: 'مصروفات البيع والتسويق', labelEn: 'Selling & Marketing' },
+  { key: 'general_administrative', labelAr: 'المصروفات الإدارية والعمومية', labelEn: 'G&A' },
+  { key: 'depreciation_amortization', labelAr: 'الإهلاك والاستنفاد', labelEn: 'D&A' },
+  { key: 'finance_cost', labelAr: 'تكلفة التمويل', labelEn: 'Finance Cost' },
+  { key: 'zakat_expense', labelAr: 'مصروف الزكاة', labelEn: 'Zakat' },
 ];
 
 const PIE_COLORS = ['#0d9488', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#ea580c'];

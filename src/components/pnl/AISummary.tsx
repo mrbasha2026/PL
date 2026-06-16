@@ -146,11 +146,12 @@ export function AISummary() {
       const sellingExp = latest.data['selling_expenses'] || 0;
       const gaExp = latest.data['general_administrative'] || 0;
       const daExp = latest.data['depreciation_amortization'] || 0;
-      const interestIncome = latest.data['interest_income'] || 0;
-      const interestExpense = latest.data['interest_expense'] || 0;
-      const otherIncome = latest.data['other_income_expense'] || 0;
-      const incomeBeforeTax = latest.data['income_before_tax'] || 0;
-      const taxExpense = latest.data['income_tax_expense'] || 0;
+      const investmentIncome = latest.data['interest_income'] || 0;
+      const financeCost = latest.data['finance_cost'] || 0;
+      const otherIncome = latest.data['other_income'] || 0;
+      const otherExpenses = latest.data['other_expenses'] || 0;
+      const incomeBeforeZakat = latest.data['income_before_zakat'] || 0;
+      const zakatExpense = latest.data['zakat_expense'] || 0;
 
       const grossMargin = revenue ? (grossProfit / revenue) * 100 : 0;
       const operatingMargin = revenue ? (ebit / revenue) * 100 : 0;
@@ -160,8 +161,8 @@ export function AISummary() {
       const sellingRatio = revenue ? (sellingExp / revenue) * 100 : 0;
       const gaRatio = revenue ? (gaExp / revenue) * 100 : 0;
       const daRatio = revenue ? (daExp / revenue) * 100 : 0;
-      const effectiveTaxRate = incomeBeforeTax ? (taxExpense / incomeBeforeTax) * 100 : 0;
-      const interestCoverage = interestExpense ? ebit / interestExpense : null;
+      const effectiveZakatRate = incomeBeforeZakat ? (zakatExpense / incomeBeforeZakat) * 100 : 0;
+      const financeCoverage = financeCost ? ebit / financeCost : null;
 
       prompt += `══════ الشركة: ${group.name} ══════\n`;
       prompt += `الفترة: ${latest.period}\n`;
@@ -172,20 +173,21 @@ export function AISummary() {
       prompt += `  الإيرادات: ${formatNumber(revenue, latest.currency, false)}\n`;
       prompt += `  تكلفة البضاعة المباعة: ${formatNumber(cogs, latest.currency, false)} (${cogsRatio.toFixed(1)}% من الإيرادات)\n`;
       prompt += `  إجمالي الربح: ${formatNumber(grossProfit, latest.currency, false)} (هامش ${grossMargin.toFixed(1)}%)\n`;
-      prompt += `  مصروفات البيع: ${formatNumber(sellingExp, latest.currency, false)} (${sellingRatio.toFixed(1)}%)\n`;
+      prompt += `  مصروفات البيع والتسويق: ${formatNumber(sellingExp, latest.currency, false)} (${sellingRatio.toFixed(1)}%)\n`;
       prompt += `  مصروفات إدارية وعمومية: ${formatNumber(gaExp, latest.currency, false)} (${gaRatio.toFixed(1)}%)\n`;
       prompt += `  الإهلاك والاستنفاد: ${formatNumber(daExp, latest.currency, false)} (${daRatio.toFixed(1)}%)\n`;
       prompt += `  إجمالي المصروفات التشغيلية: ${formatNumber(opex, latest.currency, false)} (${opexRatio.toFixed(1)}%)\n`;
       prompt += `  الدخل التشغيلي (EBIT): ${formatNumber(ebit, latest.currency, false)} (هامش ${operatingMargin.toFixed(1)}%)\n`;
-      prompt += `  إيرادات الفوائد: ${formatNumber(interestIncome, latest.currency, false)}\n`;
-      prompt += `  مصروفات الفوائد: ${formatNumber(interestExpense, latest.currency, false)}\n`;
-      prompt += `  إيرادات/مصروفات أخرى: ${formatNumber(otherIncome, latest.currency, false)}\n`;
-      prompt += `  الدخل قبل الضريبة: ${formatNumber(incomeBeforeTax, latest.currency, false)}\n`;
-      prompt += `  مصروف ضريبة الدخل: ${formatNumber(taxExpense, latest.currency, false)}\n`;
+      prompt += `  إيرادات الاستثمارات: ${formatNumber(investmentIncome, latest.currency, false)}\n`;
+      prompt += `  تكلفة التمويل: ${formatNumber(financeCost, latest.currency, false)}\n`;
+      prompt += `  إيرادات أخرى: ${formatNumber(otherIncome, latest.currency, false)}\n`;
+      prompt += `  مصروفات أخرى: ${formatNumber(otherExpenses, latest.currency, false)}\n`;
+      prompt += `  الدخل قبل الزكاة: ${formatNumber(incomeBeforeZakat, latest.currency, false)}\n`;
+      prompt += `  مصروف الزكاة: ${formatNumber(zakatExpense, latest.currency, false)}\n`;
       prompt += `  صافي الدخل: ${formatNumber(netIncome, latest.currency, false)} (هامش ${netMargin.toFixed(1)}%)\n`;
-      prompt += `  معدل الضريبة الفعلي: ${effectiveTaxRate.toFixed(1)}%\n`;
-      if (interestCoverage !== null) {
-        prompt += `  نسبة تغطية الفوائد: ${interestCoverage.toFixed(2)}x\n`;
+      prompt += `  معدل الزكاة الفعلي: ${effectiveZakatRate.toFixed(1)}%\n`;
+      if (financeCoverage !== null) {
+        prompt += `  نسبة تغطية التمويل: ${financeCoverage.toFixed(2)}x\n`;
       }
 
       // Custom line items from Excel
