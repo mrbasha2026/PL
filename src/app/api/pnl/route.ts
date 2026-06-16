@@ -232,6 +232,44 @@ export async function POST(request: Request) {
 
     const journalEntries: JournalEntry[] = [];
 
+    // ─── First pass: collect P&L company sheet names for matching ──────────
+    const pnlSheetNames: string[] = [];
+    wb.SheetNames.forEach((sheetName) => {
+      if (sheetName.includes('Instructions') || sheetName.includes('تعليمات')) return;
+      if (sheetName.includes('قيود') || sheetName.toLowerCase().includes('journal') || sheetName.includes('حركات')) return;
+      pnlSheetNames.push(sheetName);
+    });
+
+    // Helper: match journal entry sheet name to P&L company name
+    function matchCompanyName(jeSheetName: string): string {
+      // Strip journal keywords from sheet name
+      const stripped = jeSheetName
+        .replace(/قيود/i, '')
+        .replace(/حركات/i, '')
+        .replace(/journal/i, '')
+        .replace(/entries/i, '')
+        .trim();
+
+      // 1. Exact match with any P&L sheet name
+      if (pnlSheetNames.includes(stripped)) return stripped;
+
+      // 2. P&L sheet name contains the stripped name (e.g., "النخبة" → "النخبة التجارية")
+      for (const pName of pnlSheetNames) {
+        if (pName.includes(stripped) || stripped.includes(pName)) return pName;
+      }
+
+      // 3. Fuzzy: check if significant words overlap
+      const stripWords = stripped.split(/\s+/).filter(w => w.length > 1);
+      for (const pName of pnlSheetNames) {
+        const pWords = pName.split(/\s+/).filter(w => w.length > 1);
+        const overlap = stripWords.filter(w => pWords.some(pw => pw.includes(w) || w.includes(pw)));
+        if (overlap.length > 0) return pName;
+      }
+
+      // 4. Return stripped name as-is
+      return stripped;
+    }
+
     wb.SheetNames.forEach((sheetName) => {
       if (sheetName.includes('Instructions') || sheetName.includes('تعليمات')) return;
 
@@ -347,13 +385,8 @@ export async function POST(request: Request) {
             accountKey = getLineItemKey(accountName || accountNameAr);
           }
 
-          // Extract company name from sheet name (e.g., "قيود النخبة" → "النخبة التجارية")
-          let companyName = sheetName
-            .replace(/قيود/i, '')
-            .replace(/حركات/i, '')
-            .replace(/journal/i, '')
-            .replace(/entries/i, '')
-            .trim();
+          // Match company name from journal sheet to P&L company name
+          const companyName = matchCompanyName(sheetName);
 
           journalEntries.push({
             id: `je_${Date.now()}_${r}_${Math.random().toString(36).substr(2, 9)}`,

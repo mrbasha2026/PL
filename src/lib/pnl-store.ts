@@ -169,9 +169,18 @@ export const usePnLStore = create<PnLStore>()(
 
       getFilteredJournalEntries: () => {
         const state = get();
-        return state.journalEntries.filter(
-          (e) => state.selectedCompanyNames.includes(e.companyName) && state.selectedPeriods.includes(e.period)
-        );
+        if (state.selectedCompanyNames.length === 0 && state.selectedPeriods.length === 0) {
+          return state.journalEntries;
+        }
+        return state.journalEntries.filter((e) => {
+          const companyMatch = state.selectedCompanyNames.length === 0 ||
+            state.selectedCompanyNames.some(
+              (sel) => sel === e.companyName || sel.includes(e.companyName) || e.companyName.includes(sel)
+            );
+          const periodMatch = state.selectedPeriods.length === 0 ||
+            state.selectedPeriods.includes(e.period);
+          return companyMatch && periodMatch;
+        });
       },
 
       getAggregatedFiltered: () => {
