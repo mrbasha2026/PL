@@ -1,52 +1,49 @@
-// Try all Supabase pooler regions to find the right one
+// Try with proper Supavisor username format: postgres.<project-ref>
 const { Client } = require('pg');
 
-const PASSWORD = 'Ckia52762622827';
-const REF = 'lzwspnhvqimaojtdecwt';
+const projectRef = 'lzwspnhvqimaojtdecwt';
+const password = 'Ckia52762622827';
 
 const regions = [
-  'aws-0-eu-central-1',
-  'aws-0-us-east-1',
-  'aws-0-us-west-1',
-  'aws-0-ap-southeast-1',
-  'aws-0-ap-northeast-1',
-  'aws-0-ap-south-1',
-  'aws-0-eu-west-1',
-  'aws-0-eu-west-2',
-  'aws-0-ca-central-1',
-  'aws-0-sa-east-1',
+  'aws-0-us-east-1', 'aws-0-us-west-1', 'aws-0-us-east-2',
+  'aws-0-eu-west-1', 'aws-0-eu-west-2', 'aws-0-eu-central-1',
+  'aws-0-ap-southeast-1', 'aws-0-ap-northeast-1', 'aws-0-ap-south-1',
 ];
 
-async function tryRegion(region, port) {
-  const connStr = `postgresql://postgres.${REF}:${PASSWORD}@${region}.pooler.supabase.com:${port}/postgres`;
+async function tryRegion(region) {
+  const host = `${region}.pooler.supabase.com`;
+  const username = `postgres.${projectRef}`;
+  const connectionString = `postgresql://${username}:${password}@${host}:6543/postgres`;
   const client = new Client({
-    connectionString: connStr,
-    ssl: { rejectUnauthorized: false },
-    connectionTimeoutMillis: 5000,
+    connectionString,
+    ssl: { rejectUnauthorized: false, servername: host },
+    connectionTimeoutMillis: 8000,
   });
   try {
     await client.connect();
-    const r = await client.query('SELECT current_database() as db, now() as t');
+    const { rows } = await client.query('SELECT current_database() as db');
     await client.end();
-    return { ok: true, region, port, db: r.rows[0].db };
+    return { ok: true, db: rows[0].db };
   } catch (e) {
-    return { ok: false, region, port, err: e.message };
+    return { ok: false, err: e.message.slice(0, 150) };
   }
 }
 
-(async () => {
-  console.log('Trying all Supabase pooler regions...');
+async function main() {
   for (const region of regions) {
-    for (const port of [6543, 5432]) {
-      const r = await tryRegion(region, port);
-      if (r.ok) {
-        console.log(`✓ FOUND: ${r.region} port ${r.port} — db=${r.db}`);
-        process.exit(0);
-      } else {
-        console.log(`✗ ${r.region}:${r.port} — ${r.err.substring(0, 80)}`);
-      }
+    process.stdout.write(`Trying ${region}... `);
+    const r = await tryRegion(region);
+    if (r.ok) {
+      console.log(`✓ OK — db: ${r.db}`);
+      console.log(`\n✅ WORKING REGION: ${region}`);
+      console.log(`   Pooler URL: postgresql://postgres.${projectRef}:****@${region}.pooler.supabase.com:6543/postgres`);
+      return region;
+    } else {
+      console.log(`✗ ${r.err}`);
     }
   }
-  console.log('No region worked');
-  process.exit(1);
-})();
+  console.log('\n❌ No working region found');
+  return null;
+}
+
+main();

@@ -892,3 +892,198 @@ export const AccessRepo = {
     if (error) throw error;
   },
 };
+
+// ─── Roles Config (stored as JSON in HoldingGroup.description) ──────────────
+// Since we can't easily add a new table via REST, custom roles and role overrides
+// are stored as a JSON blob in the single holding group's `description` field.
+// The format is: { "description": "<text>", "rolesConfig": { "overrides": [...], "customRoles": [...] } }
+
+export interface RoleOverride {
+  name: string;
+  permissions?: string[];
+  nameAr?: string;
+  color?: string;
+  description?: string;
+}
+
+export interface CustomRole {
+  id: string;
+  name: string;
+  nameAr: string;
+  description: string;
+  color: string;
+  permissions: string[];
+  isSystem: false;
+}
+
+export interface RolesConfig {
+  overrides: RoleOverride[];
+  customRoles: CustomRole[];
+}
+
+export const RolesConfigRepo = {
+  async load(): Promise<RolesConfig> {
+    const groups = await HoldingGroupRepo.list();
+    if (groups.length === 0) return { overrides: [], customRoles: [] };
+    const desc = groups[0].description;
+    if (!desc) return { overrides: [], customRoles: [] };
+    try {
+      const parsed = JSON.parse(desc);
+      if (parsed && typeof parsed === 'object' && parsed.rolesConfig) {
+        return {
+          overrides: parsed.rolesConfig.overrides || [],
+          customRoles: parsed.rolesConfig.customRoles || [],
+        };
+      }
+    } catch { /* not JSON */ }
+    return { overrides: [], customRoles: [] };
+  },
+
+  async save(config: RolesConfig): Promise<void> {
+    const groups = await HoldingGroupRepo.list();
+    if (groups.length === 0) {
+      // Create holding group with roles config
+      await HoldingGroupRepo.create({
+        name: 'Holding Company',
+        description: JSON.stringify({ description: '', rolesConfig: config }),
+      });
+      return;
+    }
+    // Preserve existing description text (if it's not JSON), otherwise overwrite
+    const existing = groups[0];
+    let descText = '';
+    try {
+      const parsed = JSON.parse(existing.description || '');
+      if (parsed && typeof parsed === 'object' && parsed.description) {
+        descText = parsed.description;
+      }
+    } catch { /* not JSON, preserve */ }
+    const newDescription = JSON.stringify({ description: descText, rolesConfig: config });
+    await HoldingGroupRepo.update(existing.id, { description: newDescription });
+  },
+
+  async addCustomRole(role: CustomRole): Promise<void> {
+    const config = await this.load();
+    if (config.customRoles.some((r) => r.id === role.id || r.name === role.name)) {
+      throw new Error('يوجد دور بنفس الاسم أو المعرف');
+    }
+    config.customRoles.push(role);
+    await this.save(config);
+  },
+
+  async updateCustomRole(id: string, patch: Partial<CustomRole>): Promise<void> {
+    const config = await this.load();
+    const idx = config.customRoles.findIndex((r) => r.id === id);
+    if (idx === -1) throw new Error('الدور غير موجود');
+    config.customRoles[idx] = { ...config.customRoles[idx], ...patch };
+    await this.save(config);
+  },
+
+  async deleteCustomRole(id: string): Promise<void> {
+    const config = await this.load();
+    config.customRoles = config.customRoles.filter((r) => r.id !== id);
+    await this.save(config);
+  },
+
+  async setOverride(override: RoleOverride): Promise<void> {
+    const config = await this.load();
+    const idx = config.overrides.findIndex((o) => o.name === override.name);
+    if (idx === -1) {
+      config.overrides.push(override);
+    } else {
+      config.overrides[idx] = { ...config.overrides[idx], ...override };
+    }
+    await this.save(config);
+  },
+
+  async clearOverride(name: string): Promise<void> {
+    const config = await this.load();
+    config.overrides = config.overrides.filter((o) => o.name !== name);
+    await this.save(config);
+  },
+};
+
+// ─── Two-Factor Auth (TOTP secrets stored in HoldingGroup.description JSON) ──
+// Same JSON blob approach as RolesConfigRepo — we extend the JSON structure to
+// also include `totpSecrets: { [userId]: secret }`.
+
+export const TwoFactorRepo = {
+  async _loadRaw(): Promise<any> {
+    const groups = await HoldingGroupRepo.list();
+    if (groups.length === 0) return {};
+    const desc = groups[0].description;
+    if (!desc) return {};
+    try {
+      const parsed = JSON.parse(desc);
+      if (parsed && typeof parsed === 'object') return parsed;
+    } catch { /* not JSON */ }
+    return {};
+  },
+
+  async _saveRaw(data: any): Promise<void> {
+    const groups = await HoldingGroupRepo.list();
+    if (groups.length === 0) {
+      await HoldingGroupRepo.create({
+        name: 'Holding Company',
+        description: JSON.stringify(data),
+      });
+      return;
+    }
+    const existing = groups[0];
+    let descText = '';
+    try {
+      const parsed = JSON.parse(existing.description || '');
+      if (parsed && typeof parsed === 'object' && parsed.description) {
+        descText = parsed.description;
+      }
+    } catch { /* not JSON, preserve */ }
+    await HoldingGroupRepo.update(existing.id, {
+      description: JSON.stringify({ ...data, description: descText }),
+    });
+  },
+
+  async getSecret(userId: string): Promise<string | null> {
+    const raw = await this._loadRaw();
+    return raw.totpSecrets?.[userId] || null;
+  },
+
+  async setSecret(userId: string, secret: string): Promise<void> {
+    const raw = await this._loadRaw();
+    if (!raw.totpSecrets) raw.totpSecrets = {};
+    raw.totpSecrets[userId] = secret;
+    await this._saveRaw(raw);
+  },
+
+  async clearSecret(userId: string): Promise<void> {
+    const raw = await this._loadRaw();
+    if (raw.totpSecrets) {
+      delete raw.totpSecrets[userId];
+      await this._saveRaw(raw);
+    }
+  },
+
+  async isEnabled(userId: string): Promise<boolean> {
+    const secret = await this.getSecret(userId);
+    return !!secret;
+  },
+};
+
+// ─── Unified session helper (replaces getServerSession from NextAuth) ───────
+// Reads the `session_token` cookie set by /api/auth?action=login
+// Returns the same shape as NextAuth's session for compatibility.
+// NOTE: The actual implementation is in src/lib/session.ts to avoid circular imports.
+
+export interface SessionUser {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  roleNameAr?: string;
+  roleColor?: string;
+  permissions: string[];
+  status: string;
+}
+
+export interface Session {
+  user: SessionUser;
+}

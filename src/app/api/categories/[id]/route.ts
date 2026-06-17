@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getSession } from '@/lib/session';
 import { CategoryRepo, logAudit } from '@/lib/db-repo';
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getSession(req);
     if (!session) return NextResponse.json({ error: 'غير مصرّح' }, { status: 401 });
     if (!session.user.permissions.includes('expenses.categories')) {
       return NextResponse.json({ error: 'لا تملك صلاحية' }, { status: 403 });
@@ -30,7 +29,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getSession(req);
     if (!session) return NextResponse.json({ error: 'غير مصرّح' }, { status: 401 });
     if (!session.user.permissions.includes('expenses.categories')) {
       return NextResponse.json({ error: 'لا تملك صلاحية' }, { status: 403 });

@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getSession } from '@/lib/session';
 import { DEFAULT_ROLES } from '@/lib/permissions';
 import { logAudit } from '@/lib/db-repo';
 
 // GET /api/admin/settings
 // System settings are not stored in DB (no SystemSetting table).
 // They are read from env / config defaults. We expose them as read-only here.
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getSession(req);
     if (!session) return NextResponse.json({ error: 'غير مصرّح' }, { status: 401 });
     if (!session.user.permissions.includes('system.settings')) {
       return NextResponse.json({ error: 'لا تملك صلاحية' }, { status: 403 });
@@ -39,7 +38,7 @@ export async function GET() {
 // PATCH /api/admin/settings — currently read-only (no DB backing)
 export async function PATCH(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getSession(req);
     if (!session) return NextResponse.json({ error: 'غير مصرّح' }, { status: 401 });
     if (!session.user.permissions.includes('system.settings')) {
       return NextResponse.json({ error: 'لا تملك صلاحية' }, { status: 403 });

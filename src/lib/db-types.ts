@@ -39,10 +39,57 @@ export interface Company {
   currency: string | null;
   industry: string | null;
   registrationNo: string | null;
+  // Branding fields — stored as JSON in `registrationNo` until SQL migration is run.
+  // Once `color` and `logoUrl` columns exist, these are populated directly.
+  color?: string | null;
+  logoUrl?: string | null;
   isActive: boolean;
   ownership: number | null;
   createdAt: string;
   updatedAt: string;
+}
+
+// Parse branding from company row (handles both native columns and JSON fallback)
+export function getCompanyColor(c: Company): string {
+  if (c.color) return c.color;
+  // Try parsing from registrationNo JSON
+  if (c.registrationNo) {
+    try {
+      const parsed = JSON.parse(c.registrationNo);
+      if (parsed && typeof parsed.color === 'string') return parsed.color;
+    } catch { /* not JSON */ }
+  }
+  // Default palette based on company name hash
+  const palette = ['#0d9488', '#4CAF50', '#D97706', '#7C3AED', '#DC2626', '#0891B2', '#EA580C', '#DB2777'];
+  const hash = (c.name || '').split('').reduce((s, ch) => s + ch.charCodeAt(0), 0);
+  return palette[hash % palette.length];
+}
+
+export function getCompanyLogo(c: Company): string | null {
+  if (c.logoUrl) return c.logoUrl;
+  if (c.registrationNo) {
+    try {
+      const parsed = JSON.parse(c.registrationNo);
+      if (parsed && typeof parsed.logoUrl === 'string') return parsed.logoUrl;
+    } catch { /* not JSON */ }
+  }
+  return null;
+}
+
+// Encode branding into registrationNo (if native columns not available)
+export function encodeBranding(opts: { color?: string; logoUrl?: string | null; regNo?: string | null }): string | null {
+  const hasColor = !!opts.color;
+  const hasLogo = !!opts.logoUrl;
+  const hasRegNo = !!opts.regNo;
+  if (!hasColor && !hasLogo && !hasRegNo) return null;
+  // If only regNo, store as plain string
+  if (hasRegNo && !hasColor && !hasLogo) return opts.regNo || null;
+  // Otherwise store as JSON
+  return JSON.stringify({
+    regNo: opts.regNo || null,
+    color: opts.color || null,
+    logoUrl: opts.logoUrl || null,
+  });
 }
 
 export interface ExpenseCategory {

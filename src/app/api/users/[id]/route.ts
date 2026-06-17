@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getSession } from '@/lib/session';
 import { UserRepo, logAudit } from '@/lib/db-repo';
 import { DEFAULT_ROLES } from '@/lib/permissions';
 
 // GET /api/users/[id]
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getSession(req);
     if (!session) return NextResponse.json({ error: 'غير مصرّح' }, { status: 401 });
     const { id } = await params;
 
@@ -41,7 +40,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 // PATCH /api/users/[id] — update user
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getSession(req);
     if (!session) return NextResponse.json({ error: 'غير مصرّح' }, { status: 401 });
     const { id } = await params;
 
@@ -109,7 +108,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 // DELETE /api/users/[id]
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getSession(req);
     if (!session) return NextResponse.json({ error: 'غير مصرّح' }, { status: 401 });
     if (!session.user.permissions.includes('users.delete')) {
       return NextResponse.json({ error: 'لا تملك صلاحية حذف المستخدمين' }, { status: 403 });

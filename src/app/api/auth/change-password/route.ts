@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getSession } from '@/lib/session';
 import { UserRepo, logAudit } from '@/lib/db-repo';
 
 // POST /api/auth/change-password
 // Body: { currentPassword, newPassword }
 export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getSession(req);
     if (!session) {
       return NextResponse.json({ error: 'يجب تسجيل الدخول' }, { status: 401 });
     }

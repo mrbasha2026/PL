@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getSession } from '@/lib/session';
 import { UserRepo, logAudit } from '@/lib/db-repo';
 import { DEFAULT_ROLES } from '@/lib/permissions';
 
 // GET /api/users — list all users (requires users.view)
 export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getSession(req);
     if (!session) return NextResponse.json({ error: 'غير مصرّح' }, { status: 401 });
     if (!session.user.permissions.includes('users.view')) {
       return NextResponse.json({ error: 'لا تملك صلاحية عرض المستخدمين' }, { status: 403 });
@@ -50,7 +49,7 @@ export async function GET(req: NextRequest) {
 // POST /api/users — admin creates user (requires users.create)
 export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getSession(req);
     if (!session) return NextResponse.json({ error: 'غير مصرّح' }, { status: 401 });
     if (!session.user.permissions.includes('users.create')) {
       return NextResponse.json({ error: 'لا تملك صلاحية إنشاء مستخدمين' }, { status: 403 });

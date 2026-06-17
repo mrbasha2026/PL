@@ -187,6 +187,55 @@ export function getRoleColor(name: string): string {
   return getRoleDef(name)?.color ?? '#64748b';
 }
 
+// ─── Merged roles (DEFAULT_ROLES + DB overrides + DB custom roles) ─────────
+// These functions are used by the auth system to compute effective permissions
+// for a given role name. They accept an optional `dbConfig` parameter that
+// contains overrides and custom roles loaded from the database.
+
+import type { RolesConfig, RoleOverride, CustomRole } from './db-repo';
+
+export function getMergedRoles(dbConfig?: RolesConfig | null): RoleDef[] {
+  const base = DEFAULT_ROLES.map((r) => ({ ...r }));
+  if (!dbConfig) return base;
+  // Apply overrides
+  for (const override of dbConfig.overrides) {
+    const idx = base.findIndex((r) => r.name === override.name);
+    if (idx !== -1) {
+      if (override.permissions) base[idx].permissions = override.permissions;
+      if (override.nameAr) base[idx].nameAr = override.nameAr;
+      if (override.color) base[idx].color = override.color;
+      if (override.description) base[idx].description = override.description;
+    }
+  }
+  // Add custom roles
+  for (const custom of dbConfig.customRoles) {
+    base.push({
+      name: custom.name,
+      nameAr: custom.nameAr,
+      description: custom.description,
+      color: custom.color,
+      isSystem: false,
+      permissions: custom.permissions,
+    });
+  }
+  return base;
+}
+
+export function getMergedRolePermissions(name: string, dbConfig?: RolesConfig | null): string[] {
+  const merged = getMergedRoles(dbConfig);
+  return merged.find((r) => r.name === name)?.permissions ?? [];
+}
+
+export function getMergedRoleNameAr(name: string, dbConfig?: RolesConfig | null): string {
+  const merged = getMergedRoles(dbConfig);
+  return merged.find((r) => r.name === name)?.nameAr ?? name;
+}
+
+export function getMergedRoleColor(name: string, dbConfig?: RolesConfig | null): string {
+  const merged = getMergedRoles(dbConfig);
+  return merged.find((r) => r.name === name)?.color ?? '#64748b';
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────
 export function getPermissionDef(key: string): PermissionDef | undefined {
   return PERMISSIONS.find((p) => p.key === key);

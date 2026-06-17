@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getSession } from '@/lib/session';
 import { CategoryRepo, logAudit } from '@/lib/db-repo';
 
 // GET /api/categories
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getSession(req);
     if (!session) return NextResponse.json({ error: 'غير مصرّح' }, { status: 401 });
     const categories = await CategoryRepo.list();
     return NextResponse.json({ categories });
@@ -18,7 +17,7 @@ export async function GET() {
 // POST /api/categories
 export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getSession(req);
     if (!session) return NextResponse.json({ error: 'غير مصرّح' }, { status: 401 });
     if (!session.user.permissions.includes('expenses.categories')) {
       return NextResponse.json({ error: 'لا تملك صلاحية إدارة التصنيفات' }, { status: 403 });

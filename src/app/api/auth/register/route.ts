@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getSession } from '@/lib/session';
 import { UserRepo, logAudit } from '@/lib/db-repo';
 import { DEFAULT_ROLES } from '@/lib/permissions';
 
@@ -21,7 +20,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' }, { status: 400 });
     }
 
-    const session = await getServerSession(authOptions);
+    const session = await getSession(req);
 
     // If no session → check if it's the first user being created (bootstrap admin)
     // First user becomes admin automatically.

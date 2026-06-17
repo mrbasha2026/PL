@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getSession } from '@/lib/session';
 import { AuditRepo, UserRepo } from '@/lib/db-repo';
 
 // GET /api/admin/audit — paginated audit log (requires system.audit)
 export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getSession(req);
     if (!session) return NextResponse.json({ error: 'غير مصرّح' }, { status: 401 });
     if (!session.user.permissions.includes('system.audit')) {
       return NextResponse.json({ error: 'لا تملك صلاحية عرض سجل التدقيق' }, { status: 403 });

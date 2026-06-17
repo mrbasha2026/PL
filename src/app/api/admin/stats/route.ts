@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { NextRequest } from 'next/server';
+import { getSession } from '@/lib/session';
 import {
   UserRepo, CompanyRepo, ExpenseRepo, PrepaidRepo, PnLRepo,
   AuditRepo, CategoryRepo, BudgetRepo, ForecastRepo,
@@ -8,9 +8,9 @@ import {
 import { DEFAULT_ROLES } from '@/lib/permissions';
 
 // GET /api/admin/stats
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getSession(req);
     if (!session) return NextResponse.json({ error: 'غير مصرّح' }, { status: 401 });
     const canViewUsers = session.user.permissions.includes('users.view');
 

@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getSession } from '@/lib/session';
 import { ExpenseRepo, logAudit } from '@/lib/db-repo';
 
 // GET /api/expenses
 export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getSession(req);
     if (!session) return NextResponse.json({ error: 'غير مصرّح' }, { status: 401 });
     if (!session.user.permissions.includes('expenses.view')) {
       return NextResponse.json({ error: 'لا تملك صلاحية' }, { status: 403 });
@@ -28,7 +27,7 @@ export async function GET(req: NextRequest) {
 // POST /api/expenses
 export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getSession(req);
     if (!session) return NextResponse.json({ error: 'غير مصرّح' }, { status: 401 });
     if (!session.user.permissions.includes('expenses.create')) {
       return NextResponse.json({ error: 'لا تملك صلاحية' }, { status: 403 });

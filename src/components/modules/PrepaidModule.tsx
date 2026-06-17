@@ -39,7 +39,7 @@ interface Prepaid {
   months?: number | null;
   monthlyAmount?: number | null;
   allocations?: string | null; // JSON: { endDate, schedule: [{period, amount, cumulative, remaining}] }
-  vendor?: string | null;
+  vendor?: string | null; // legacy field — no longer used in UI
   description?: string | null;
   isFullyRecognized?: boolean | null;
   createdAt: string;
@@ -83,7 +83,7 @@ export function PrepaidModule() {
   const filtered = prepaids.filter((p) => {
     if (search) {
       const q = search.toLowerCase();
-      if (!p.name.toLowerCase().includes(q) && !p.nameAr?.toLowerCase().includes(q) && !p.vendor?.toLowerCase().includes(q)) return false;
+      if (!p.name.toLowerCase().includes(q) && !p.nameAr?.toLowerCase().includes(q)) return false;
     }
     return true;
   });
@@ -368,7 +368,7 @@ function PrepaidFormDialog({
     name: '', nameAr: '', totalAmount: '', currency: 'SAR',
     startDate: new Date().toISOString().slice(0, 10),
     endDate: '', companyId: '', categoryId: '',
-    vendor: '', description: '',
+    description: '',
   });
   const [saving, setSaving] = React.useState(false);
   const [preview, setPreview] = React.useState<{ months: number; monthly: number; schedule: any[] } | null>(null);
@@ -392,15 +392,13 @@ function PrepaidFormDialog({
         endDate,
         companyId: editing.companyId || '',
         categoryId: editing.categoryId || '',
-        vendor: editing.vendor || '',
-        description: editing.description || '',
       });
     } else {
       setForm({
         name: '', nameAr: '', totalAmount: '', currency: 'SAR',
         startDate: new Date().toISOString().slice(0, 10),
         endDate: '', companyId: '', categoryId: '',
-        vendor: '', description: '',
+        description: '',
       });
     }
     setPreview(null);
@@ -466,7 +464,7 @@ function PrepaidFormDialog({
         endDate: new Date(form.endDate).toISOString(),
         companyId: form.companyId || null,
         categoryId: form.categoryId || null,
-        vendor: form.vendor.trim() || null,
+        // vendor removed per user request — no longer sent
         description: form.description.trim() || null,
       };
       const url = editing ? `/api/prepaids/${editing.id}` : '/api/prepaids';
@@ -576,14 +574,6 @@ function PrepaidFormDialog({
               <option value="">— بدون —</option>
               {categories.map((c) => <option key={c.id} value={c.id}>{c.nameAr || c.name}</option>)}
             </select>
-          </div>
-          <div className="space-y-2">
-            <Label className="text-xs">المورد</Label>
-            <Input
-              value={form.vendor}
-              onChange={(e) => setForm({ ...form, vendor: e.target.value })}
-              placeholder="اسم المورد"
-            />
           </div>
           <div className="space-y-2 sm:col-span-2">
             <Label className="text-xs">الوصف</Label>

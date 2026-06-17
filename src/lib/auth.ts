@@ -1,8 +1,9 @@
 import type { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
-import { UserRepo, logAudit } from './db-repo';
-import { getRolePermissions, getRoleNameAr, getRoleColor, PERMISSION_KEYS } from './permissions';
+import { UserRepo, logAudit, RolesConfigRepo, TwoFactorRepo } from './db-repo';
+import { getMergedRolePermissions, getMergedRoleNameAr, getMergedRoleColor, PERMISSION_KEYS } from './permissions';
+import { verifyTOTP } from './auth-utils';
 
 // Extend NextAuth types
 declare module 'next-auth' {
@@ -70,11 +71,28 @@ export const authOptions: NextAuthOptions = {
           throw new Error('بيانات الدخول غير صحيحة');
         }
 
+        // Check 2FA — if user has a TOTP secret (active, not pending), require a code
+        const totpSecret = await TwoFactorRepo.getSecret(user.id).catch(() => null);
+        const has2FA = !!totpSecret && !totpSecret.startsWith('pending:');
+        if (has2FA) {
+          const totpCode = (credentials as any).totp as string | undefined;
+          if (!totpCode) {
+            // Tell the client that 2FA is required
+            throw new Error('REQUIRES_2FA');
+          }
+          if (!verifyTOTP(totpSecret!, totpCode)) {
+            throw new Error('رمز المصادقة الثنائية غير صحيح');
+          }
+        }
+
         // Touch login timestamp
         await UserRepo.touchLogin(user.id);
 
-        // Compute permissions from role catalog (filter to known keys)
-        const perms = getRolePermissions(user.role).filter((p) => PERMISSION_KEYS.includes(p));
+        // Load DB roles config (overrides + custom roles) so permissions are computed correctly
+        const dbRolesConfig = await RolesConfigRepo.load().catch(() => null);
+
+        // Compute permissions from merged role catalog (filter to known keys)
+        const perms = getMergedRolePermissions(user.role, dbRolesConfig).filter((p) => PERMISSION_KEYS.includes(p));
 
         // Audit log
         const ip =
@@ -97,8 +115,8 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           name: user.name || user.nameAr,
           role: user.role,
-          roleNameAr: getRoleNameAr(user.role),
-          roleColor: getRoleColor(user.role),
+          roleNameAr: getMergedRoleNameAr(user.role, dbRolesConfig),
+          roleColor: getMergedRoleColor(user.role, dbRolesConfig),
           permissions: perms,
           status: user.isActive ? 'active' : 'suspended',
         };

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getSession } from '@/lib/session';
 import { PnLRepo, CompanyRepo, logAudit } from '@/lib/db-repo';
 import type { PnLDatasetData, PnLLineItem } from '@/lib/db-types';
 
@@ -9,7 +8,7 @@ import type { PnLDatasetData, PnLLineItem } from '@/lib/db-types';
 // Stores P&L data into the PnLDataset table (one row per company×period).
 export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getSession(req);
     if (!session) return NextResponse.json({ error: 'غير مصرّح' }, { status: 401 });
     if (!session.user.permissions.includes('pnl.upload')) {
       return NextResponse.json({ error: 'لا تملك صلاحية رفع بيانات P&L' }, { status: 403 });
@@ -87,9 +86,9 @@ export async function POST(req: NextRequest) {
 }
 
 // GET /api/pnl/save-batch — list all stored P&L datasets
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getSession(req);
     if (!session) return NextResponse.json({ error: 'غير مصرّح' }, { status: 401 });
     if (!session.user.permissions.includes('pnl.view')) {
       return NextResponse.json({ error: 'لا تملك صلاحية' }, { status: 403 });

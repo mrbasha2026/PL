@@ -8,6 +8,16 @@ import { Building2, FileSpreadsheet, Wallet, Users, TrendingUp, TrendingDown, Ac
 import { PageActions } from '@/components/system/PageActions';
 import { View } from '@/components/system/SystemLayout';
 
+interface Company {
+  id: string;
+  name: string;
+  nameAr?: string | null;
+  color?: string | null;
+  logoUrl?: string | null;
+  industry?: string | null;
+  isActive: boolean;
+}
+
 interface Stats {
   companies: number;
   subsidiaries: number;
@@ -16,6 +26,7 @@ interface Stats {
   totalPrepaid: number;
   totalMonthly: number;
   users: number;
+  companiesList: Company[];
   recentActivities: { id: string; type: string; message: string; createdAt: string; company?: { name: string; color: string } | null }[];
 }
 
@@ -32,16 +43,17 @@ export function DashboardModule({ onNavigate }: { onNavigate: (v: View) => void 
           fetch('/api/prepaid').then(r => r.json()),
           fetch('/api/users').then(r => r.json()).catch(() => ({ users: [] })),
         ]);
-        const companies = c.companies || [];
+        const companies: Company[] = c.companies || [];
         const prepaidItems = prepaid.items || [];
         setStats({
           companies: companies.length,
-          subsidiaries: companies.filter((c: any) => c.type === 'SUBSIDIARY').length,
+          subsidiaries: companies.filter((c) => c.type === 'SUBSIDIARY' || c.type === 'subsidiary').length,
           pnlRecords: (p.data || []).length,
           prepaidItems: prepaidItems.length,
           totalPrepaid: prepaidItems.reduce((s: number, i: any) => s + i.amount, 0),
           totalMonthly: prepaidItems.reduce((s: number, i: any) => s + i.monthlyAmount, 0),
           users: (users.users || []).length,
+          companiesList: companies,
           recentActivities: [],
         });
       } catch (e) {
@@ -151,6 +163,54 @@ export function DashboardModule({ onNavigate }: { onNavigate: (v: View) => void 
           </CardContent>
         </Card>
       </div>
+
+      {/* Companies overview with brand colors */}
+      {stats.companiesList.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-[#4CAF50]" />
+              الشركات الفرعية — بألوانها المميزة
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              {stats.companiesList.map((company) => {
+                const color = company.color || '#0d9488';
+                return (
+                  <button
+                    key={company.id}
+                    onClick={() => onNavigate('companies')}
+                    className="group flex flex-col items-center p-4 rounded-xl border-2 transition hover:shadow-md"
+                    style={{ borderColor: `${color}30`, background: `${color}08` }}
+                  >
+                    <div
+                      className="h-14 w-14 rounded-xl flex items-center justify-center text-white font-bold text-lg mb-2 overflow-hidden"
+                      style={{ background: color }}
+                    >
+                      {company.logoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={company.logoUrl} alt={company.name} className="h-full w-full object-cover" />
+                      ) : (
+                        (company.nameAr || company.name).charAt(0)
+                      )}
+                    </div>
+                    <div className="text-sm font-medium text-center truncate w-full">{company.nameAr || company.name}</div>
+                    {company.nameAr && (
+                      <div className="text-[10px] text-muted-foreground truncate w-full text-center">{company.name}</div>
+                    )}
+                    {company.industry && (
+                      <div className="text-[10px] mt-1 px-2 py-0.5 rounded-full" style={{ background: `${color}15`, color }}>
+                        {company.industry}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
