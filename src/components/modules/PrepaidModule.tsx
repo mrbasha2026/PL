@@ -25,6 +25,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 
+import { PageActions } from '@/components/system/PageActions';
 interface Company { id: string; name: string; }
 interface Category { id: string; name: string; nameAr?: string | null; color?: string | null; }
 interface Prepaid {
@@ -130,6 +131,12 @@ export function PrepaidModule() {
 
   return (
     <div className="space-y-5">
+      <div className="flex items-center justify-between flex-wrap gap-3 no-print">
+        <div className="text-sm text-muted-foreground">
+          المصروفات المقدمة
+        </div>
+        <PageActions onRefresh={load} />
+      </div>
       {/* Summary */}
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
         <SummaryCard label="إجمالي المصروفات المقدمة" value={`${totalAmount.toLocaleString('ar-SA')}`} subValue="ر.س" icon={Wallet} color="#d97706" />

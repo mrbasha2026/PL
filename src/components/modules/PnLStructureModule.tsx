@@ -133,20 +133,26 @@ export function PnLStructureModule() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2"><FolderTree className="w-4 h-4 text-[#4CAF50]" /> البنية الكاملة</CardTitle>
+          <CardTitle className="text-base flex items-center gap-2"><FolderTree className="w-4 h-4 text-[#4CAF50]" /> الشجرة الهرمية للبنود</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           {sections.map(s => (
-            <div key={s.id} className="border rounded-lg overflow-hidden">
-              {/* Section header */}
-              <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800">
+            <div key={s.id} className="tree-section">
+              {/* Section header — root level */}
+              <div className="flex items-center justify-between p-3 rounded-lg bg-gradient-to-l from-[#4CAF50]/10 to-transparent border-r-4 border-[#4CAF50] hover:from-[#4CAF50]/20 transition">
                 <button onClick={() => toggle(s.id)} className="flex items-center gap-2 flex-1 text-right">
-                  {expanded[s.id] ? <ChevronDown className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-                  <FolderTree className="w-4 h-4 text-[#4CAF50]" />
-                  <span className="font-semibold">{s.nameAr}</span>
-                  <span className="text-xs text-muted-foreground">({s.name})</span>
-                  <Badge className={`text-[10px] ${sectionTypeColors[s.type]}`}>{sectionTypeLabels[s.type]}</Badge>
-                  <Badge variant="outline" className="text-[10px]">ترتيب: {s.order}</Badge>
+                  {expanded[s.id] ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronLeft className="w-4 h-4 text-muted-foreground" />}
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#4CAF50]/15 text-[#4CAF50]">
+                    <FolderTree className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-semibold flex items-center gap-2 flex-wrap">
+                      {s.nameAr}
+                      <Badge className={`text-[10px] ${sectionTypeColors[s.type]}`}>{sectionTypeLabels[s.type]}</Badge>
+                      <Badge variant="outline" className="text-[10px]">قسم رئيسي</Badge>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground font-mono">{s.name} · ترتيب {s.order}</div>
+                  </div>
                 </button>
                 <div className="flex gap-1 no-print">
                   <CategoryDialog sectionId={s.id} onAdd={(data) => handleCreate('category', { sectionId: s.id, ...data })} />
@@ -161,19 +167,35 @@ export function PnLStructureModule() {
                 </div>
               </div>
 
-              {/* Categories */}
+              {/* Categories — children of section, with tree connector lines */}
               {expanded[s.id] && (
-                <div className="pr-6 border-r-2 border-slate-100 dark:border-slate-800 mr-4 ml-4 mt-1 mb-2 space-y-1">
+                <div className="relative mr-5 mt-1 space-y-1">
+                  {/* Vertical connector line */}
+                  <div className="absolute right-4 top-0 bottom-4 w-px bg-border" />
+                  {s.categories.length === 0 && (
+                    <div className="text-xs text-muted-foreground py-2 pr-8 italic">
+                      لا توجد فئات — أضف فئة مثل "إيرادات عامة" أو "رواتب"
+                    </div>
+                  )}
                   {s.categories.map(c => (
-                    <div key={c.id} className="border rounded-lg overflow-hidden">
-                      <div className="flex items-center justify-between p-2.5 bg-slate-50/50 dark:bg-slate-900/50">
-                        <button onClick={() => toggle(c.id)} className="flex items-center gap-2 flex-1 text-right">
-                          {expanded[c.id] ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
-                          <ListTree className="w-3.5 h-3.5 text-[#0D9488]" />
-                          <span className="font-medium text-sm">{c.nameAr}</span>
-                          <span className="text-[10px] text-muted-foreground">({c.name})</span>
-                          {c.isSubtotal && <Badge variant="secondary" className="text-[10px]">إجمالي فرعي</Badge>}
-                        </button>
+                    <div key={c.id} className="relative">
+                      {/* Horizontal connector to vertical line */}
+                      <div className="absolute right-0 top-5 w-4 h-px bg-border" />
+                      <div className="mr-8">
+                        <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#0D9488]/5 border-r-2 border-[#0D9488] hover:bg-[#0D9488]/10 transition">
+                          <button onClick={() => toggle(c.id)} className="flex items-center gap-2 flex-1 text-right">
+                            {expanded[c.id] ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronLeft className="w-3.5 h-3.5 text-muted-foreground" />}
+                            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[#0D9488]/15 text-[#0D9488]">
+                              <ListTree className="w-3.5 h-3.5" />
+                            </div>
+                            <div>
+                              <div className="font-medium text-sm flex items-center gap-2 flex-wrap">
+                                {c.nameAr}
+                                {c.isSubtotal && <Badge variant="secondary" className="text-[10px]">إجمالي فرعي</Badge>}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground font-mono">{c.name}</div>
+                            </div>
+                          </button>
                         <div className="flex gap-1 no-print">
                           <ItemDialog categoryId={c.id} onAdd={(data) => handleCreate('item', { categoryId: c.id, ...data })} />
                           <EditDialog
@@ -189,16 +211,30 @@ export function PnLStructureModule() {
                       </div>
 
                       {expanded[c.id] && (
-                        <div className="pr-6 border-r-2 border-slate-100 dark:border-slate-800 mr-3 ml-3 mb-1 mt-1 space-y-0.5">
+                        <div className="relative mr-5 mt-1 space-y-0.5">
+                          <div className="absolute right-4 top-0 bottom-3 w-px bg-border" />
+                          {c.lineItems.length === 0 && (
+                            <div className="text-xs text-muted-foreground py-1.5 pr-8 italic">
+                              لا توجد بنود — أضف بنداً مثل "إيرادات المبيعات"
+                            </div>
+                          )}
                           {c.lineItems.map(li => (
-                            <div key={li.id} className="flex items-center justify-between p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded">
-                              <div className="flex items-center gap-2">
-                                <FileText className="w-3 h-3 text-muted-foreground" />
-                                <span className="text-sm">{li.nameAr}</span>
-                                <span className="text-[10px] text-muted-foreground font-mono">{li.key}</span>
-                                {li.isTotal && <Badge className="bg-[#4CAF50] text-[10px]">إجمالي</Badge>}
-                                {li.isSubtotal && <Badge variant="secondary" className="text-[10px]">فرعي</Badge>}
-                              </div>
+                            <div key={li.id} className="relative">
+                              <div className="absolute right-0 top-4 w-4 h-px bg-border" />
+                              <div className="mr-8 flex items-center justify-between p-2 rounded hover:bg-muted/40 transition">
+                                <div className="flex items-center gap-2">
+                                  <div className="flex h-6 w-6 items-center justify-center rounded bg-muted text-muted-foreground">
+                                    <FileText className="w-3 h-3" />
+                                  </div>
+                                  <div>
+                                    <div className="text-sm flex items-center gap-2 flex-wrap">
+                                      {li.nameAr}
+                                      {li.isTotal && <Badge className="bg-[#4CAF50] text-[10px]">إجمالي</Badge>}
+                                      {li.isSubtotal && <Badge variant="secondary" className="text-[10px]">فرعي</Badge>}
+                                    </div>
+                                    <div className="text-[10px] text-muted-foreground font-mono">{li.key} · {li.name}</div>
+                                  </div>
+                                </div>
                               <div className="flex gap-1 no-print">
                                 <EditDialog
                                   title="تعديل البند"
@@ -210,14 +246,14 @@ export function PnLStructureModule() {
                                   <Trash2 className="w-3 h-3" />
                                 </Button>
                               </div>
+                              </div>
                             </div>
                           ))}
-                          {c.lineItems.length === 0 && <div className="text-xs text-muted-foreground p-2">لا توجد بنود</div>}
                         </div>
                       )}
+                      </div>
                     </div>
                   ))}
-                  {s.categories.length === 0 && <div className="text-xs text-muted-foreground p-2">لا توجد فئات</div>}
                 </div>
               )}
             </div>
@@ -225,7 +261,7 @@ export function PnLStructureModule() {
           {sections.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
               <FileSpreadsheet className="w-10 h-10 mx-auto mb-2 opacity-40" />
-              لا توجد أقسام بعد. ابدأ بإضافة قسم.
+              لا توجد أقسام بعد. ابدأ بإضافة قسم رئيسي مثل "المبيعات".
             </div>
           )}
         </CardContent>

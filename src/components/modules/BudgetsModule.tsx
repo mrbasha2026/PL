@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 
+import { PageActions } from '@/components/system/PageActions';
 interface Company { id: string; name: string; }
 interface Budget {
   id: string;
@@ -59,6 +60,12 @@ export function BudgetsModule() {
 
   return (
     <div className="space-y-5">
+      <div className="flex items-center justify-between flex-wrap gap-3 no-print">
+        <div className="text-sm text-muted-foreground">
+          الميزانيات
+        </div>
+        <PageActions onRefresh={load} />
+      </div>
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
         <SummaryCard label="إجمالي الميزانيات" value={budgets.length} icon={Wallet} color="#dc2626" />
         <SummaryCard label="معتمدة" value={budgets.filter(b => b.isApproved).length} icon={TrendingUp} color="#059669" />

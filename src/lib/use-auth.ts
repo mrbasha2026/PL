@@ -1,38 +1,39 @@
 'use client';
 
-import { useSession } from 'next-auth/react';
+import { useAuth as useAuthContext } from './auth-context';
 
 /**
  * Convenience hook for client-side permission checks.
- * Returns the session plus helper functions.
+ * Wraps the auth-context provider with permission helpers.
+ * This replaces the old NextAuth useSession-based hook.
  */
 export function useAuth() {
-  const { data: session, status, update } = useSession();
+  const { user, loading } = useAuthContext();
 
   const hasPermission = (perm: string): boolean => {
-    if (!session?.user?.permissions) return false;
-    return session.user.permissions.includes(perm);
+    if (!user?.permissions) return false;
+    return user.permissions.includes(perm);
   };
 
   const hasAnyPermission = (perms: string[]): boolean => {
-    if (!session?.user?.permissions) return false;
-    return perms.some((p) => session.user.permissions.includes(p));
+    if (!user?.permissions) return false;
+    return perms.some((p) => user.permissions.includes(p));
   };
 
   const hasAllPermissions = (perms: string[]): boolean => {
-    if (!session?.user?.permissions) return false;
-    return perms.every((p) => session.user.permissions.includes(p));
+    if (!user?.permissions) return false;
+    return perms.every((p) => user.permissions.includes(p));
   };
 
-  const isAdmin = session?.user?.role === 'admin';
+  const isAdmin = user?.role === 'admin';
 
   return {
-    session,
-    status, // 'loading' | 'authenticated' | 'unauthenticated'
-    update,
-    user: session?.user,
-    isAuthenticated: status === 'authenticated',
-    isLoading: status === 'loading',
+    session: user ? { user } : null,
+    status: loading ? 'loading' : (user ? 'authenticated' : 'unauthenticated'),
+    update: async () => {},
+    user,
+    isAuthenticated: !!user,
+    isLoading: loading,
     hasPermission,
     hasAnyPermission,
     hasAllPermissions,

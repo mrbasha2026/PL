@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { signOut } from 'next-auth/react';
+import { useAuth } from '@/lib/auth-context';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuLabel,
@@ -14,14 +14,13 @@ import {
   Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/lib/use-auth';
 import {
   ChevronDown, LogOut, User as UserIcon, KeyRound, Shield,
   Circle, Settings,
 } from 'lucide-react';
 
 export function UserMenu({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
-  const { user, isAuthenticated } = useAuth();
+  const { user, logout } = useAuth();
   const { toast } = useToast();
   const [pwdDialogOpen, setPwdDialogOpen] = useState(false);
   const [curPwd, setCurPwd] = useState('');
@@ -29,10 +28,11 @@ export function UserMenu({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
   const [confirmPwd, setConfirmPwd] = useState('');
   const [loading, setLoading] = useState(false);
 
-  if (!isAuthenticated || !user) return null;
+  if (!user) return null;
 
-  const handleLogout = () => {
-    signOut({ callbackUrl: '/' });
+  const handleLogout = async () => {
+    await logout();
+    window.location.href = '/';
   };
 
   const handleChangePassword = async () => {

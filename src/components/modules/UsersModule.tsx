@@ -23,6 +23,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { DEFAULT_ROLES } from '@/lib/permissions';
 
+import { PageActions } from '@/components/system/PageActions';
 interface UserRow {
   id: string;
   email: string;
@@ -69,6 +70,12 @@ export function UsersModule() {
 
   return (
     <div className="space-y-5">
+      <div className="flex items-center justify-between flex-wrap gap-3 no-print">
+        <div className="text-sm text-muted-foreground">
+          إدارة المستخدمين
+        </div>
+        <PageActions onRefresh={load} />
+      </div>
       {/* Summary */}
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
         <SummaryCard label="إجمالي المستخدمين" value={users.length} icon={UsersIcon} color="#0d9488" />

@@ -1,27 +1,26 @@
 'use client';
 
 import React, { useState } from 'react';
-import { signIn } from 'next-auth/react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import {
-  Dialog, DialogContent, DialogTitle, DialogDescription,
-} from '@/components/ui/dialog';
+import { useAuth } from '@/lib/auth-context';
 import {
   Building2, Lock, Mail, Eye, EyeOff, LogIn, Shield, Zap,
-  TrendingUp, BarChart3, Users, ArrowLeft,
+  TrendingUp, BarChart3, Users, Fingerprint,
 } from 'lucide-react';
 
 export function LoginPage() {
   const { toast } = useToast();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [totp, setTotp] = useState('');
+  const [requires2FA, setRequires2FA] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [showHint, setShowHint] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,16 +30,14 @@ export function LoginPage() {
     }
     setLoading(true);
     try {
-      const res = await signIn('credentials', {
-        email: email.toLowerCase().trim(),
-        password,
-        redirect: false,
-      });
-      if (res?.error) {
-        toast({ variant: 'destructive', title: 'فشل الدخول', description: res.error });
-      } else if (res?.ok) {
+      const result = await login(email.toLowerCase().trim(), password, totp || undefined);
+      if (result.error) {
+        toast({ variant: 'destructive', title: 'فشل الدخول', description: result.error });
+      } else if (result.requires2FA) {
+        setRequires2FA(true);
+        toast({ title: 'مطلوب مصادقة ثنائية', description: 'أدخل رمز التحقق من تطبيق المصادقة' });
+      } else {
         toast({ title: 'مرحباً بك', description: 'تم تسجيل الدخول بنجاح' });
-        // Force full reload to refresh session
         window.location.reload();
       }
     } catch (e: any) {
@@ -149,6 +146,7 @@ export function LoginPage() {
                   className="rounded-xl pr-10 pl-10 h-11"
                   autoComplete="current-password"
                   dir="ltr"
+                  disabled={requires2FA}
                 />
                 <button
                   type="button"
@@ -160,6 +158,29 @@ export function LoginPage() {
                 </button>
               </div>
             </div>
+
+            {requires2FA && (
+              <div className="space-y-1.5">
+                <Label htmlFor="totp" className="text-xs font-semibold flex items-center gap-1.5">
+                  <Fingerprint className="h-3.5 w-3.5 text-primary" />
+                  رمز المصادقة الثنائية (6 أرقام)
+                </Label>
+                <Input
+                  id="totp"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  value={totp}
+                  onChange={(e) => setTotp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="000000"
+                  className="rounded-xl h-11 text-center text-lg tracking-[0.5em] font-mono"
+                  autoComplete="one-time-code"
+                  autoFocus
+                  dir="ltr"
+                />
+              </div>
+            )}
 
             <Button
               type="submit"
@@ -181,45 +202,18 @@ export function LoginPage() {
             </Button>
           </form>
 
-          {/* Demo credentials hint */}
-          <div className="mt-6 rounded-2xl border border-dashed border-border/60 bg-muted/20 p-4">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                <Shield className="h-3.5 w-3.5" />
-                بيانات الدخول التجريبية
-              </p>
-              <button
-                type="button"
-                onClick={() => setShowHint((s) => !s)}
-                className="text-[10px] text-primary hover:underline"
-              >
-                {showHint ? 'إخفاء' : 'عرض'}
-              </button>
-            </div>
-            {showHint && (
-              <div className="space-y-1 text-xs">
-                <div className="flex items-center justify-between rounded-md bg-background/60 px-2.5 py-1.5">
-                  <span className="text-muted-foreground">البريد:</span>
-                  <code className="font-mono">admin@dealztree.com</code>
-                </div>
-                <div className="flex items-center justify-between rounded-md bg-background/60 px-2.5 py-1.5">
-                  <span className="text-muted-foreground">كلمة المرور:</span>
-                  <code className="font-mono">admin123</code>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail('admin@dealztree.com');
-                    setPassword('admin123');
-                  }}
-                  className="mt-2 inline-flex items-center gap-1 text-[10px] text-primary hover:underline"
-                >
-                  <ArrowLeft className="h-3 w-3" />
-                  تعبئة تلقائية
-                </button>
+          {/* 2FA notice (only shown when 2FA is required) */}
+          {requires2FA && (
+            <div className="mt-4 rounded-2xl border border-primary/30 bg-primary/5 p-4 flex items-start gap-3">
+              <Fingerprint className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+              <div className="text-xs">
+                <div className="font-semibold text-primary mb-1">المصادقة الثنائية مطلوبة</div>
+                <p className="text-muted-foreground leading-relaxed">
+                  أدخل رمز التحقق المكوّن من 6 أرقام من تطبيق المصادقة في حقل "رمز المصادقة" أعلاه ثم اضغط "دخول".
+                </p>
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           <p className="mt-6 text-center text-[11px] text-muted-foreground/70">
             © {new Date().getFullYear()} ديلز تري — جميع الحقوق محفوظة

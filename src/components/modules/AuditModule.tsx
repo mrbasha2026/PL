@@ -7,6 +7,7 @@ import {
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { PageActions } from '@/components/system/PageActions';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -56,14 +57,20 @@ export function AuditModule() {
   const [search, setSearch] = React.useState('');
   const [actionFilter, setActionFilter] = React.useState('all');
 
-  React.useEffect(() => {
-    fetch('/api/admin/audit?limit=200')
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.logs) setLogs(data.logs);
-      })
-      .finally(() => setLoading(false));
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/audit?limit=200');
+      const data = await res.json();
+      if (data.logs) setLogs(data.logs);
+    } catch (e) {
+      console.error('Failed to load audit logs:', e);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  React.useEffect(() => { load(); }, [load]);
 
   const filtered = logs.filter((l) => {
     if (search) {
@@ -78,6 +85,12 @@ export function AuditModule() {
 
   return (
     <div className="space-y-5">
+      <div className="flex items-center justify-between flex-wrap gap-3 no-print">
+        <div className="text-sm text-muted-foreground">
+          سجل التدقيق
+        </div>
+        <PageActions onRefresh={load} />
+      </div>
       {/* Summary */}
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
         <SummaryCard label="إجمالي السجلات" value={logs.length} icon={ScrollText} color="#0d9488" />

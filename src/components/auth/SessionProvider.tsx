@@ -1,8 +1,12 @@
 'use client';
 
 import React from 'react';
-import { SessionProvider as NextAuthSessionProvider } from 'next-auth/react';
+import { AuthProvider } from '@/lib/auth-context';
 
+/**
+ * Wraps the app with our custom AuthProvider (replaces NextAuth SessionProvider).
+ * Auth state is fetched from /api/auth?action=me on mount and held in context.
+ */
 export function SessionProvider({ children }: { children: React.ReactNode }) {
-  return <NextAuthSessionProvider>{children}</NextAuthSessionProvider>;
+  return <AuthProvider>{children}</AuthProvider>;
 }

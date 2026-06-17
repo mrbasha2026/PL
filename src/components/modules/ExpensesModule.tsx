@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 
+import { PageActions } from '@/components/system/PageActions';
 interface Company {
   id: string; name: string;
 }
@@ -107,6 +108,12 @@ export function ExpensesModule() {
 
   return (
     <div className="space-y-5">
+      <div className="flex items-center justify-between flex-wrap gap-3 no-print">
+        <div className="text-sm text-muted-foreground">
+          المصروفات
+        </div>
+        <PageActions onRefresh={load} />
+      </div>
       {/* Summary cards */}
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
         <SummaryCard label="إجمالي المصروفات" value={`${total.toLocaleString('ar-SA')} ر.س`} icon={Receipt} color="#7c3aed" />

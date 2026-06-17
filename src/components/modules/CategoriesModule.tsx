@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 
+import { PageActions } from '@/components/system/PageActions';
 interface Category {
   id: string;
   name: string;
@@ -193,6 +194,12 @@ export function CategoriesModule() {
 
   return (
     <div className="space-y-5">
+      <div className="flex items-center justify-between flex-wrap gap-3 no-print">
+        <div className="text-sm text-muted-foreground">
+          التصنيفات
+        </div>
+        <PageActions onRefresh={load} />
+      </div>
       {/* Summary */}
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
         <SummaryCard label="إجمالي التصنيفات" value={categories.length} icon={Tag} color="#0d9488" />
